@@ -22,6 +22,13 @@ async function github(path) {
 const comparison = await github(`/repos/${owner}/${repo}/compare/${BASE_SHA}...${HEAD_SHA}`);
 const pullRequests = new Map();
 const commitsWithoutFeaturePr = [];
+const failures = [];
+
+if (comparison.total_commits > comparison.commits.length) {
+  failures.push(
+    `The release contains ${comparison.total_commits} commits, but GitHub returned only ${comparison.commits.length}. Create a smaller release snapshot so every commit can be verified.`,
+  );
+}
 
 for (const commit of comparison.commits) {
   const associated = await github(`/repos/${owner}/${repo}/commits/${commit.sha}/pulls`);
@@ -37,7 +44,6 @@ for (const commit of comparison.commits) {
   }
 }
 
-const failures = [];
 if (commitsWithoutFeaturePr.length > 0) {
   failures.push(
     `Commits without a merged feature PR to dev: ${commitsWithoutFeaturePr.join(", ")}`,
@@ -60,15 +66,32 @@ for (const pullRequest of pullRequests.values()) {
     const comments = await github(
       `/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`,
     );
-    const hasAcceptanceRecord = comments.some((comment) =>
-      comment.body?.includes("<!-- phraseweave-acceptance -->"),
-    );
+    const hasAcceptanceRecord = comments.some((comment) => {
+      const body = comment.body || "";
+      const accepter = body.match(/^验收人:\s*@?[\w-]+\s*$/m);
+      const acceptedAt = body.match(/^验收时间:\s*(\S+)\s*$/m);
+      const previewSha = body.match(/^预览 SHA:\s*([0-9a-f]{40})\s*$/im);
+      const previewUrl = body.match(
+        /^预览地址:\s*https:\/\/reinerlau\.github\.io\/phraseweave\/preview\/?\s*$/m,
+      );
+
+      return Boolean(
+        body.includes("<!-- phraseweave-acceptance -->") &&
+          accepter &&
+          acceptedAt &&
+          !Number.isNaN(Date.parse(acceptedAt[1])) &&
+          previewSha?.[1] === pullRequest.merge_commit_sha &&
+          previewUrl,
+      );
+    });
 
     if (!labels.includes("accepted")) {
       failures.push(`Issue #${issueNumber} is missing the accepted label.`);
     }
     if (!hasAcceptanceRecord) {
-      failures.push(`Issue #${issueNumber} is missing an acceptance record.`);
+      failures.push(
+        `Issue #${issueNumber} needs a complete acceptance record for merged SHA ${pullRequest.merge_commit_sha}.`,
+      );
     }
   }
 }

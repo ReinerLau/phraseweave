@@ -36,7 +36,16 @@ Only the user may issue `验收通过`, and it must be handled in the original r
 
 1. Resolve the Issue and preview SHA being accepted.
 2. Add the `accepted` label.
-3. Add an Issue comment beginning with `<!-- phraseweave-acceptance -->` and containing the accepter, acceptance timestamp, preview SHA, and preview URL.
+3. Add an Issue comment in this exact shape. `预览 SHA` is the full 40-character squash-merge SHA deployed to `dev`:
+
+   ```text
+   <!-- phraseweave-acceptance -->
+   验收人: @github-user
+   验收时间: 2026-09-21T12:00:00+08:00
+   预览 SHA: 0123456789abcdef0123456789abcdef01234567
+   预览地址: https://reinerlau.github.io/phraseweave/preview/
+   ```
+
 4. Move the Project item to `已验收`.
 
 Do not close the Issue yet. Acceptance authorizes inclusion in the next production release; it is not production deployment.
