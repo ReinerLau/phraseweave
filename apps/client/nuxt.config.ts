@@ -1,7 +1,10 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
+import packageJson from "../../package.json";
+
 const appScripts: any = [];
 const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
+const appVersion = packageJson.version;
 const exerciseSyncSignalUrl =
   process.env.EXERCISE_SYNC_SIGNAL_URL ||
   process.env.COURSE_TRANSFER_SIGNAL_URL ||
@@ -52,6 +55,7 @@ export default defineNuxtConfig({
       signInRedirectURI: process.env.LOGTO_SIGN_IN_REDIRECT_URI || "",
       signOutRedirectURI: process.env.LOGTO_SIGN_OUT_REDIRECT_URI || "",
       exerciseSyncSignalUrl,
+      appVersion,
     },
   },
 });
