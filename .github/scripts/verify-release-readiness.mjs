@@ -19,6 +19,19 @@ async function github(path) {
   return response.json();
 }
 
+async function githubPaginated(path) {
+  const records = [];
+  let page = 1;
+
+  while (true) {
+    const separator = path.includes("?") ? "&" : "?";
+    const batch = await github(`${path}${separator}per_page=100&page=${page}`);
+    records.push(...batch);
+    if (batch.length < 100) return records;
+    page += 1;
+  }
+}
+
 const comparison = await github(`/repos/${owner}/${repo}/compare/${BASE_SHA}...${HEAD_SHA}`);
 const pullRequests = new Map();
 const commitsWithoutFeaturePr = [];
@@ -63,8 +76,8 @@ for (const pullRequest of pullRequests.values()) {
   for (const issueNumber of new Set(issueNumbers)) {
     const issue = await github(`/repos/${owner}/${repo}/issues/${issueNumber}`);
     const labels = issue.labels.map((label) => (typeof label === "string" ? label : label.name));
-    const comments = await github(
-      `/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`,
+    const comments = await githubPaginated(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
     );
     const hasAcceptanceRecord = comments.some((comment) => {
       const body = comment.body || "";
