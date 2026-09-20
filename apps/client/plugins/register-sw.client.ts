@@ -9,13 +9,13 @@ export default defineNuxtPlugin(() => {
     import.meta.dev || runtimeConfig.public.deploymentEnvironment === "preview";
 
   if (shouldDisableServiceWorker) {
-    const currentUrl = window.location.href;
+    const previewScope = new URL(baseURL, window.location.origin).href;
     void navigator.serviceWorker
       .getRegistrations()
       .then((registrations) =>
         Promise.all(
           registrations
-            .filter((registration) => currentUrl.startsWith(registration.scope))
+            .filter((registration) => registration.scope === previewScope)
             .map((registration) => registration.unregister()),
         ),
       );
