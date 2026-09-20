@@ -1,13 +1,12 @@
-name: Others
-
-description: Create an issue for phraseweave
+name: 其他事项
+description: 不属于新需求或页面问题的事项
 
 body:
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: Clear and concise description of the issue. Thanks!
-      placeholder: There are some thing I want to ...
+      label: 说明
+      description: 请用自然语言说明目标、背景以及怎样算完成。
+      placeholder: 我希望……；完成时应该能看到……
     validations:
       required: true

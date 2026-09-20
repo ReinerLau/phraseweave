@@ -1,37 +1,38 @@
-name: 🐞 Bug report
-title: "[BUG] - YOUR_ISSUE_TITLE_HERE_REPLACE_ME"
-description: Report an issue with phraseweave
-labels: [bug]
+name: 🐞 页面问题
+title: "[问题] "
+description: 描述实际页面表现与预期表现
+labels: [needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
+        不需要提供代码。请描述可以在页面上重复的问题。
   - type: textarea
     id: bug-description
     attributes:
-      label: Describe the bug
-      description: A clear and concise description of what the bug is. If you intend to submit a PR for this issue, tell us in the description. Thanks!
-      placeholder: Bug description
+      label: 实际发生了什么
+      description: 页面上看到了什么错误或异常行为？
+      placeholder: 实际结果
     validations:
       required: true
   - type: input
     id: reproduction
     attributes:
-      label: Reproduction
-      description: Please provide a link via or a link to a repo that can reproduce the problem you ran into. A [minimal reproduction](https://stackoverflow.com/help/minimal-reproducible-example) is required.
-      placeholder: Reproduction
+      label: 复现步骤
+      description: 从打开哪个页面开始，依次做了什么？
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 看到……
     validations:
       required: false
   - type: checkboxes
     id: checkboxes
     attributes:
-      label: Validations
-      description: Before submitting the issue, please make sure you do the following
+      label: 提交前确认
+      description: 帮助我们准确验收修复
       options:
-        - label: Read the [Contributing Guidelines](https://github.com/ReinerLau/phraseweave/blob/main/CONTRIBUTING.md).
+        - label: 我已经写明期望的正确表现。
           required: true
-        - label: Check that there isn't [already an issue](https://github.com/ReinerLau/phraseweave/issues) that reports the same bug to avoid creating a duplicate.
-          required: true
-        - label: The provided reproduction is a [minimal reproducible example](https://stackoverflow.com/help/minimal-reproducible-example) of the bug.
+        - label: 我确认目前没有重复 Issue。
           required: true

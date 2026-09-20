@@ -110,12 +110,7 @@ CLI 有三个模式：
   "schema_version": 6,
   "sentences": [
     {
-      "unit_prompts": [
-        "鸟鸣",
-        "有益的",
-        "心理健康",
-        "对我们的心理健康有益"
-      ],
+      "unit_prompts": ["鸟鸣", "有益的", "心理健康", "对我们的心理健康有益"],
       "sentence_translation": "鸟鸣有益于我们的心理健康。"
     }
   ]
@@ -149,7 +144,20 @@ Morphy 匹配不使用第 4 条兜底，必须得到词典词性与上下文词�
   "schema_version": 4,
   "content_pos": ["ADJ", "ADV", "NOUN", "NUM", "PROPN", "VERB"],
   "excluded_pos": ["AUX", "CCONJ", "DET", "PART", "PRON", "SCONJ"],
-  "excluded_dependencies": ["agent", "aux", "auxpass", "case", "cc", "cop", "det", "expl", "mark", "neg", "prep", "prt"],
+  "excluded_dependencies": [
+    "agent",
+    "aux",
+    "auxpass",
+    "case",
+    "cc",
+    "cop",
+    "det",
+    "expl",
+    "mark",
+    "neg",
+    "prep",
+    "prt"
+  ],
   "lexical_pos_compatibility": {
     "a": ["ADJ"],
     "n": ["NOUN", "PROPN"],
@@ -159,7 +167,14 @@ Morphy 匹配不使用第 4 条兜底，必须得到词典词性与上下文词�
   },
   "combination_strategy": "nominal_phrase_first_right_fold",
   "nominal_head_pos": ["NOUN", "PROPN"],
-  "nominal_premodifier_dependencies": ["advmod", "amod", "compound", "nummod", "npadvmod", "quantmod"],
+  "nominal_premodifier_dependencies": [
+    "advmod",
+    "amod",
+    "compound",
+    "nummod",
+    "npadvmod",
+    "quantmod"
+  ],
   "verb_particle_head_pos": ["VERB"],
   "verb_particle_dependencies": ["prt"]
 }
@@ -211,13 +226,13 @@ flowchart LR
 
 ## 依赖
 
-| 依赖 | 版本 | 用途 |
-|---|---|---|
-| Wn | `1.1.1` | 读取 WordNet 数据并提供 Morphy |
-| Open English WordNet | `oewn:2025` | 单词和多词表达匹配 |
-| spaCy | `3.8.7` | 固定英语分析 pipeline |
-| en_core_web_sm | `3.8.0` | 上下文词性、依存角色和字符位置 |
-| Click | `8.1.8` | 固定 spaCy 命令依赖的兼容版本 |
+| 依赖                 | 版本        | 用途                           |
+| -------------------- | ----------- | ------------------------------ |
+| Wn                   | `1.1.1`     | 读取 WordNet 数据并提供 Morphy |
+| Open English WordNet | `oewn:2025` | 单词和多词表达匹配             |
+| spaCy                | `3.8.7`     | 固定英语分析 pipeline          |
+| en_core_web_sm       | `3.8.0`     | 上下文词性、依存角色和字符位置 |
+| Click                | `8.1.8`     | 固定 spaCy 命令依赖的兼容版本  |
 
 相同输入、依赖和规则产生相同英文学习单元。模型生成的中文措辞不保证逐字一致。
 

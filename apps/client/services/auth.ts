@@ -14,14 +14,14 @@ export function isAuthEnabled() {
 
 export async function signIn(callback?: string) {
   callback && setSignInCallback(callback);
-  if (isAuthEnabled()) {
-    logto.signIn(runtimeConfig!.public.signInRedirectURI);
+  if (isAuthEnabled() && logto && runtimeConfig) {
+    logto.signIn(runtimeConfig.public.signInRedirectURI);
   }
 }
 
 export function signOut() {
-  if (isAuthEnabled()) {
-    return logto.signOut(runtimeConfig!.public.signOutRedirectURI);
+  if (isAuthEnabled() && logto && runtimeConfig) {
+    return logto.signOut(runtimeConfig.public.signOutRedirectURI);
   }
 }
 

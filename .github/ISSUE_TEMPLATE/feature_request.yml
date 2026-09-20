@@ -1,42 +1,39 @@
-name: 🚀 New feature proposal
-title: "[Feature Request] - YOUR_FEATURE_TITLE_HERE_REPLACE_ME"
-description: Propose a new feature to be added to phraseweave
-labels: [feature request]
+name: 🚀 新需求
+title: "[需求] "
+description: 用自然语言描述希望页面产生的变化
+labels: [needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for your interest in the project and taking the time to fill out this feature report! This issue form is for requesting features only! For example, requesting a new component, behavior ... etc
+        不需要描述代码。请说明谁在什么场景下，希望看到什么结果，以及怎样算完成。
   - type: textarea
     id: feature-description
     attributes:
-      label: Clear and concise description of the problem
-      description: A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+      label: 需求与使用场景
+      description: 谁在什么情况下遇到了什么问题？
     validations:
       required: true
   - type: textarea
     id: suggested-solution
     attributes:
-      label: Suggested solution
-      description: A clear and concise description of what you want to happen.
+      label: 期望的页面行为
+      description: 用户操作后，页面应该出现什么变化？
       placeholder: |
-        As a user, I expected ___ behavior but ___ ...
-
-        Ideal Steps I would like to see:
-        1. Go to '...'
-        2. Click on '....'
-        3. ....
+        1. 打开……
+        2. 点击……
+        3. 应看到……
     validations:
       required: true
   - type: textarea
     validations:
       required: false
     attributes:
-      label: Describe alternatives you've considered
-      description: A clear and concise description of any alternative solutions or features you've considered.
+      label: 不包含的内容
+      description: 明确这次不做什么，避免范围持续扩大。
   - type: textarea
     attributes:
-      label: Screenshots or Videos
+      label: 截图或录屏
       description: |
         If applicable, add screenshots or a video to help explain your problem.
         For more information on the supported file image/file types and the file size limits, please refer
@@ -46,8 +43,10 @@ body:
   - type: textarea
     id: additional-context
     attributes:
-      label: Additional context
-      description: Any additional information or context about the feature request. For example, any related issues, external references, or previous discussions.
-      placeholder: Provide any additional information that might be helpful.
+      label: 验收标准
+      description: 请用可以在测试页面上实际操作、观察的方式描述。
+      placeholder: |
+        - [ ] 当我……时，页面会……
+        - [ ] 刷新页面后……
     validations:
       required: false

@@ -14,7 +14,9 @@ Use a single-context layout with root `CONTEXT.md` and `docs/adr/`. See `docs/ag
 
 ### Release workflow
 
-All changes intended for a release must land on `main` through a pull request. Work on a branch, open a PR, and merge it; treat `main` as protected for release work, including when operating with administrator access.
+Use one GitHub Issue, one Codex conversation, one branch/worktree, and one pull request per requirement. Follow the natural-language delivery commands and gates in `docs/agents/delivery-workflow.md`.
+
+All feature and fix work lands on `dev` through a pull request. Production releases land on `main` through a separate release pull request; treat both branches as protected, including when operating with administrator access.
 
 ### Worktree and local main synchronization
 

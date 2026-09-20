@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -18,37 +18,72 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout production source
         uses: actions/checkout@v4
-
+        with:
+          ref: main
+          path: source-main
+      - name: Checkout preview source
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: source-dev
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-
-      - name: Set up pnpm
-        run: corepack enable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+          node-version: 20.12.2
+          cache: pnpm
+          cache-dependency-path: |
+            source-main/pnpm-lock.yaml
+            source-dev/pnpm-lock.yaml
+      - name: Resolve deployed revisions
+        run: |
+          echo "PRODUCTION_SHA=$(git -C source-main rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "PREVIEW_SHA=$(git -C source-dev rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "DEPLOYED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+      - name: Install production dependencies
+        run: pnpm --dir source-main install --frozen-lockfile
+      - name: Install preview dependencies
+        run: pnpm --dir source-dev install --frozen-lockfile
       - name: Configure Pages
         uses: actions/configure-pages@v5
-
-      - name: Build static client
-        run: pnpm -F client exec nuxt build --preset github_pages
+      - name: Build production
+        run: pnpm --dir source-main build:client
         env:
           NODE_ENV: production
           NUXT_APP_BASE_URL: /phraseweave/
+          DEPLOYMENT_ENVIRONMENT: production
+          BUILD_SHA: ${{ env.PRODUCTION_SHA }}
+          BUILD_TIME: ${{ env.DEPLOYED_AT }}
           BACKEND_ENDPOINT: ""
           LOGTO_ENDPOINT: ""
           LOGTO_APP_ID: ""
           EXERCISE_SYNC_SIGNAL_URL: ${{ vars.EXERCISE_SYNC_SIGNAL_URL }}
-
+      - name: Build preview
+        run: pnpm --dir source-dev build:client
+        env:
+          NODE_ENV: production
+          NUXT_APP_BASE_URL: /phraseweave/preview/
+          DEPLOYMENT_ENVIRONMENT: preview
+          BUILD_SHA: ${{ env.PREVIEW_SHA }}
+          BUILD_TIME: ${{ env.DEPLOYED_AT }}
+          BACKEND_ENDPOINT: ""
+          LOGTO_ENDPOINT: ""
+          LOGTO_APP_ID: ""
+          EXERCISE_SYNC_SIGNAL_URL: ${{ vars.EXERCISE_SYNC_SIGNAL_URL }}
+      - name: Assemble production and preview
+        run: |
+          mkdir -p site/preview
+          cp -R source-main/apps/client/.output/public/. site/
+          cp -R source-dev/apps/client/.output/public/. site/preview/
+          cp source-dev/.github/pages/404.html site/404.html
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: apps/client/.output/public
+          path: site
 
   deploy:
     environment:
