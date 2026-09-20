@@ -1,0 +1,30 @@
+name: Release readiness
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  release-readiness:
+    name: release-readiness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the trusted release guard
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: .github/scripts/verify-release-readiness.mjs
+          sparse-checkout-cone-mode: false
+      - name: Verify every included requirement was accepted
+        run: node .github/scripts/verify-release-readiness.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ACCEPTANCE_ACTORS: ${{ vars.ACCEPTANCE_ACTORS }}
