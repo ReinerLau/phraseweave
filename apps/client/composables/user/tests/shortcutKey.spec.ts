@@ -32,6 +32,25 @@ describe("user defined shortcut key", () => {
 
       expect(shortcutKeys.value).toEqual(storeShortcutKeys);
     });
+
+    it("should migrate legacy navigation shortcuts to arrow keys", () => {
+      const storeShortcutKeys = {
+        sound: "Ctrl+s",
+        previous: "Ctrl+,",
+        answer: "Ctrl+8",
+        skip: "Ctrl+.",
+      };
+
+      localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(storeShortcutKeys));
+      const { shortcutKeys } = useShortcutKeyMode();
+
+      expect(shortcutKeys.value).toEqual({
+        ...storeShortcutKeys,
+        previous: "ArrowLeft",
+        skip: "ArrowRight",
+      });
+      expect(JSON.parse(localStorage.getItem(SHORTCUT_KEYS)!)).toEqual(shortcutKeys.value);
+    });
   });
 
   describe("shortcut dialog", () => {

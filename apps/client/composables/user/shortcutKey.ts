@@ -14,6 +14,11 @@ export const DEFAULT_SHORTCUT_KEYS = {
   previous: "ArrowLeft",
 };
 
+const LEGACY_NAVIGATION_SHORTCUT_KEYS = {
+  skip: "Ctrl+.",
+  previous: "Ctrl+,",
+};
+
 export const KEYBOARD = {
   ESC: "Esc",
   ALT: "Alt",
@@ -65,7 +70,21 @@ export function useShortcutKeyMode() {
   function setShortcutKeys() {
     const localKeys = localStorage.getItem(SHORTCUT_KEYS);
     if (localKeys) {
-      shortcutKeys.value = { ...shortcutKeys.value, ...JSON.parse(localKeys) };
+      const storedKeys = JSON.parse(localKeys);
+      const migratedKeys = { ...storedKeys };
+
+      if (migratedKeys.skip === LEGACY_NAVIGATION_SHORTCUT_KEYS.skip) {
+        migratedKeys.skip = DEFAULT_SHORTCUT_KEYS.skip;
+      }
+      if (migratedKeys.previous === LEGACY_NAVIGATION_SHORTCUT_KEYS.previous) {
+        migratedKeys.previous = DEFAULT_SHORTCUT_KEYS.previous;
+      }
+
+      shortcutKeys.value = { ...shortcutKeys.value, ...migratedKeys };
+
+      if (JSON.stringify(migratedKeys) !== localKeys) {
+        localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(migratedKeys));
+      }
     } else {
       localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(shortcutKeys.value));
     }
