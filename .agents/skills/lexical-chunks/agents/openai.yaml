@@ -1,0 +1,4 @@
+interface:
+  display_name: "教材渐进学习单元"
+  short_description: "按确定性实义核心和组合规则生成中文提示打字练习"
+  default_prompt: "使用 $lexical-chunks 处理我粘贴的英文教材，生成渐进学习单元报告，并只返回报告文件链接。"

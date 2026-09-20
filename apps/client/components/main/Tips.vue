@@ -33,7 +33,7 @@ import { useShortcutKeyMode } from "~/composables/user/shortcutKey";
 import { cancelShortcut, parseShortcutKeys, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const { shortcutKeys } = useShortcutKeyMode();
-const { playSound } = usePlaySound(shortcutKeys.value.sound);
+usePlaySound(shortcutKeys.value.sound);
 const { toggleGameMode } = useShowAnswer(shortcutKeys.value.answer);
 
 const answerTipText = computed(() => {
@@ -64,11 +64,6 @@ const spaceTipText = computed(() => {
 const keybindings = computed(() => {
   return [
     {
-      keys: shortcutKeys.value.sound,
-      text: "播放发音",
-      eventFn: playSound,
-    },
-    {
       keys: shortcutKeys.value.answer,
       text: answerTipText.value,
       eventFn: toggleGameMode,
@@ -96,10 +91,6 @@ function usePlaySound(key: string) {
     e.preventDefault();
     playSound();
   }
-
-  return {
-    playSound,
-  };
 }
 
 function useShowAnswer(key: string) {

@@ -10,8 +10,8 @@ export const SHORTCUT_KEYS = "shortcutKeys";
 export const DEFAULT_SHORTCUT_KEYS = {
   sound: "Ctrl+'",
   answer: "Ctrl+;",
-  skip: "Ctrl+.",
-  previous: "Ctrl+,",
+  skip: "ArrowRight",
+  previous: "ArrowLeft",
 };
 
 export const KEYBOARD = {

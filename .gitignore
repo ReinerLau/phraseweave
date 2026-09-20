@@ -143,3 +143,7 @@ outputs/lexical-chunks/
 
 # docker volumes for dev
 .volumes
+
+# Local scratch notes and Wrangler development state
+.scratch/
+**/.wrangler/

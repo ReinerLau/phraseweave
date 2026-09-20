@@ -34,6 +34,19 @@ describe("keyboardShortcuts", () => {
     expect(command).toBeCalled();
   });
 
+  it("should trigger commands when press left and right arrows", () => {
+    let previousCommand = vi.fn();
+    let nextCommand = vi.fn();
+    registerShortcut("ArrowLeft", previousCommand);
+    registerShortcut("ArrowRight", nextCommand);
+
+    fireEvent.keyDown({ key: "ArrowLeft", code: "ArrowLeft" });
+    fireEvent.keyDown({ key: "ArrowRight", code: "ArrowRight" });
+
+    expect(previousCommand).toBeCalled();
+    expect(nextCommand).toBeCalled();
+  });
+
   it("should trigger command when press Command+; (Mac)", () => {
     let command = vi.fn();
     registerShortcut("Command+;", command);
