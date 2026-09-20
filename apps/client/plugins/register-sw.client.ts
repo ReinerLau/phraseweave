@@ -5,22 +5,16 @@ export default defineNuxtPlugin(() => {
 
   const runtimeConfig = useRuntimeConfig();
   const baseURL = runtimeConfig.app.baseURL;
-  const shouldDisableServiceWorker =
-    import.meta.dev || runtimeConfig.public.deploymentEnvironment === "preview";
-
-  if (shouldDisableServiceWorker) {
-    const previewScope = new URL(baseURL, window.location.origin).href;
+  if (import.meta.dev) {
     void navigator.serviceWorker
       .getRegistrations()
       .then((registrations) =>
-        Promise.all(
-          registrations
-            .filter((registration) => registration.scope === previewScope)
-            .map((registration) => registration.unregister()),
-        ),
+        Promise.all(registrations.map((registration) => registration.unregister())),
       );
     return;
   }
+
+  if (runtimeConfig.public.deploymentEnvironment === "preview") return;
 
   void navigator.serviceWorker.register(`${baseURL}sw.js`, { scope: baseURL });
 });

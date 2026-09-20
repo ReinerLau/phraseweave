@@ -79,7 +79,9 @@ jobs:
           mkdir -p site/preview
           cp -R source-main/apps/client/.output/public/. site/
           cp -R source-dev/apps/client/.output/public/. site/preview/
-          cp source-dev/.github/pages/404.html site/404.html
+          if [ -f source-main/.github/pages/404.html ]; then
+            cp source-main/.github/pages/404.html site/404.html
+          fi
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
