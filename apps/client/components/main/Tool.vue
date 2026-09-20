@@ -18,10 +18,6 @@
       >
         {{ currentCourseInfo }}
       </div>
-      <MainStudyVideoLink
-        class="icon-item ml-1"
-        :course-order="courseStore.currentCourse?.order"
-      />
     </div>
 
     <!-- 右侧 -->
@@ -33,13 +29,6 @@
       >
         <span class="clickable-item icon-item i-ph-arrow-counter-clockwise"></span>
       </div>
-      <div
-        class="tooltip-item mr-1"
-        data-tip="排行榜"
-        @click="rankingStore.showRankModal"
-      >
-        <span class="clickable-item icon-item i-ph-ranking"></span>
-      </div>
     </div>
 
     <MainContents />
@@ -49,7 +38,6 @@
     class="h-6 p-[2px]"
     :percentage="currentPercentage"
   />
-  <RankRankingList />
   <MainMessageBox
     class="mt-[-4vh]"
     v-model:isShowModal="showTipModal"
@@ -65,12 +53,10 @@ import { useQuestionInput } from "~/components/main/QuestionInput/questionInputH
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useGameMode } from "~/composables/main/game";
 import { clearQuestionInput } from "~/composables/main/question";
-import { useRanking } from "~/composables/rank/rankingList";
 import { useExerciseStore } from "~/store/exercise";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 import { useContent } from "./Contents/useContents";
 
-const rankingStore = useRanking();
 const courseStore = useExerciseStore();
 const exerciseCatalogStore = useExerciseCatalogStore();
 const { focusInput } = useQuestionInput();
