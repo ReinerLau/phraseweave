@@ -6,16 +6,9 @@
         <button
           class="btn btn-sm"
           type="button"
-          @click="exportBackup"
-        >
-          导出
-        </button>
-        <button
-          class="btn btn-sm"
-          type="button"
           @click="openImport"
         >
-          导入
+          添加练习
         </button>
       </div>
     </div>
@@ -59,7 +52,7 @@ import { ref } from "vue";
 import type { ExercisesResponse } from "~/api/exercise";
 import ExerciseCard from "~/components/exercises/ExerciseCard.vue";
 import ExerciseSyncDialog from "~/components/exercises/ExerciseSyncDialog.vue";
-import { exportLocalExercises, importLocalExercises } from "~/services/localExerciseDb";
+import { importLocalExercises } from "~/services/localExerciseDb";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 
 const exerciseCatalogStore = useExerciseCatalogStore();
@@ -76,19 +69,6 @@ async function setup() {
     await exerciseCatalogStore.setupExercises();
     isLoading.value = false;
   }
-}
-
-async function exportBackup() {
-  const exercises = await exportLocalExercises();
-  if (exercises.length === 0) return;
-
-  const blob = new Blob([JSON.stringify(exercises)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `phraseweave-courses-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function openImport() {
