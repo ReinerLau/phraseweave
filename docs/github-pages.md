@@ -11,18 +11,20 @@ pnpm --filter signal-worker exec wrangler login
 pnpm --filter signal-worker run deploy
 ```
 
-部署完成后记下 Worker 地址，并补上 `/room`，例如：
+部署完成后记下 Worker 根地址，例如：
 
 ```text
-wss://phraseweave-course-signal.example.workers.dev/room
+https://phraseweave-course-signal.example.workers.dev
 ```
+
+客户端会自动补上 `/room/<房间令牌>`；如果已经配置了带 `/room` 的地址也可以继续使用。
 
 ## 2. 配置 GitHub Actions Variable
 
 在 GitHub 仓库打开 `Settings → Secrets and variables → Actions → Variables`，新增：
 
 ```text
-EXERCISE_SYNC_SIGNAL_URL=wss://phraseweave-course-signal.example.workers.dev/room
+EXERCISE_SYNC_SIGNAL_URL=https://phraseweave-course-signal.example.workers.dev
 ```
 
 这是公开前端配置，不要放在 Secret 里也可以；Worker 不保存练习内容，只负责临时转发 WebRTC 信令。
