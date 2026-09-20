@@ -46,7 +46,7 @@ jobs:
           production_sha=$(git -C source-main rev-parse HEAD)
           preview_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq '.object.sha')
           run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?branch=dev&event=push&status=success&per_page=100" \
-            --jq ".workflow_runs[] | select(.head_sha == \"$preview_sha\") | .id" | head -n 1)
+            --jq "first(.workflow_runs[] | select(.head_sha == \"$preview_sha\")) | .id")
 
           if [ -z "$run_id" ]; then
             echo "No successful CI run found for current dev revision $preview_sha." >&2
