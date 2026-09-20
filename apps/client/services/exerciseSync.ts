@@ -55,7 +55,8 @@ export function getSignalUrl(roomToken: string) {
   }
 
   const url = new URL(configuredUrl, window.location.origin);
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/${roomToken}`;
+  const signalPath = url.pathname.replace(/\/$/, "") || "/room";
+  url.pathname = `${signalPath}/${roomToken}`;
   return url.toString().replace(/^http/, "ws");
 }
 
