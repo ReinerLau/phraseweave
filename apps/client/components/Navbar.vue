@@ -18,30 +18,11 @@
               <h1 class="text-wrap text-2xl font-extrabold leading-normal dark:text-white">
                 PhraseWeave
               </h1>
+              <span class="ml-2 text-xs font-medium text-gray-400 dark:text-gray-500">
+                v{{ appVersion }}
+              </span>
             </div>
           </NuxtLink>
-
-          <nav
-            v-if="route.path === '/' && !isAuthenticated()"
-            aria-label="Global"
-            class="hidden md:block"
-          >
-            <ul class="flex items-center text-base">
-              <template
-                v-for="(optItem, optIndex) in HEADER_OPTIONS"
-                :key="optIndex"
-              >
-                <li class="px-4">
-                  <a
-                    class="text-nowrap hover:text-purple-600 dark:text-white dark:hover:text-purple-400"
-                    :href="`#${optItem.anchor}`"
-                  >
-                    {{ optItem.name }}
-                  </a>
-                </li>
-              </template>
-            </ul>
-          </nav>
         </div>
 
         <div class="flex items-center">
@@ -98,16 +79,13 @@ import { isAuthEnabled, isAuthenticated, signIn, signOut } from "~/services/auth
 import { useUserStore } from "~/store/user";
 
 const route = useRoute();
-const logoPath = `${useRuntimeConfig().app.baseURL}logo.png`;
+const runtimeConfig = useRuntimeConfig();
+const logoPath = `${runtimeConfig.app.baseURL}logo.png`;
+const appVersion = runtimeConfig.public.appVersion;
 const userStore = useUserStore();
 const { darkMode, toggleDarkMode } = useDarkMode();
 
 const isShowModal = ref(false);
-const HEADER_OPTIONS = [
-  { name: "功能", anchor: "features" },
-  { name: "问题", anchor: "faq" },
-  { name: "联系我们", anchor: "contact" },
-];
 
 const isDarkMode = computed(() => darkMode.value === Theme.DARK);
 const isStickyNavBar = computed(() => {
