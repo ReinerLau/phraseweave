@@ -1,0 +1,20 @@
+{
+  "name": "@phraseweave/xingrong-courses",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "upload": "tsx src/seed.ts",
+    "pdf:parse": "tsx src/parsePDF/index.ts"
+  },
+  "dependencies": {
+    "@phraseweave/db": "workspace:^",
+    "@phraseweave/schema": "workspace:^",
+    "inquirer": "^9.2.13",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/pdf-parse": "^1.1.4"
+  }
+}

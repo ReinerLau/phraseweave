@@ -1,0 +1,54 @@
+{
+  "name": "phraseweave",
+  "version": "1.0.0",
+  "description": "",
+  "packageManager": "pnpm@9.0.6",
+  "main": "index.js",
+  "scripts": {
+    "prepare": "simple-git-hooks",
+    "schema:build": "pnpm -F @phraseweave/schema build",
+    "db:init": "pnpm schema:build && pnpm -F @phraseweave/db run init",
+    "db:init:test": "pnpm -F @phraseweave/db run init:test",
+    "db:init:test:ci": "pnpm -F @phraseweave/db run init:ci",
+    "db:studio": "pnpm -F @phraseweave/db db:studio",
+    "db:upload": "pnpm -F @phraseweave/xingrong-courses upload",
+    "dev:serve": "pnpm schema:build && pnpm -F api start:dev",
+    "dev:client": "pnpm -F client dev",
+    "docker:start": "docker-compose -p phraseweave up -d",
+    "docker:stop": "docker-compose -p phraseweave stop",
+    "docker:delete": "docker-compose -p phraseweave down",
+    "docker:down": "docker-compose -p phraseweave down --volumes",
+    "build:serve": "pnpm schema:build && pnpm -F api build",
+    "build:client": "pnpm -F client generate",
+    "prod:serve": "pnpm -F api start:prod:pm",
+    "format": "prettier --write --cache .",
+    "format-check": "prettier --check --cache .",
+    "test": "pnpm -F api test && pnpm -F client test",
+    "test:ci": "pnpm -F api test:unit && pnpm -F client test:unit:ci",
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20.12.2"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "^4.2.1",
+    "@types/node": "^20.12.7",
+    "conventional-changelog-cli": "^4.1.0",
+    "dotenv": "^16.3.1",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "prettier-plugin-tailwindcss": "0.5.13",
+    "simple-git-hooks": "2.11.1",
+    "tsup": "^8.0.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@t3-oss/env-core": "^0.7.1",
+    "drizzle-orm": "^0.30.8",
+    "zod": "^3.22.4"
+  }
+}

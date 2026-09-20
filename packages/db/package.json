@@ -1,0 +1,23 @@
+{
+  "name": "@phraseweave/db",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "init:ci": "tsx src/migrate.ts",
+    "init:test": "drizzle-kit push:pg --config=drizzle.config.test.ts",
+    "init": "drizzle-kit push:pg",
+    "db:studio": "drizzle-kit studio",
+    "generate": "drizzle-kit generate:pg"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "AGPL-3.0-only",
+  "devDependencies": {
+    "drizzle-kit": "^0.20.17",
+    "pg": "^8.11.5"
+  },
+  "dependencies": {
+    "postgres": "^3.4.4"
+  }
+}
