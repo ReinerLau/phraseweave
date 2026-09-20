@@ -146,17 +146,3 @@ jobs:
           "pnpm exec serve $RUNNER_TEMP/phraseweave-smoke --listen 3000 --no-port-switching"
           http://127.0.0.1:3000/phraseweave/preview/
           "pnpm test:smoke --config baseUrl=http://127.0.0.1:3000/phraseweave/preview/"
-
-  release-readiness:
-    name: release-readiness
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify every included requirement was accepted
-        run: node .github/scripts/verify-release-readiness.mjs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          ACCEPTANCE_ACTORS: ${{ vars.ACCEPTANCE_ACTORS }}

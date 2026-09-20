@@ -70,7 +70,8 @@ Treat `正式发布` as a separate release Goal:
 - Auto-merge may be enabled only after the current PR head has no unresolved P0/P1 Codex findings. Unresolved GitHub review conversations block merging.
 - Required CI checks are `format`, `typecheck`, `unit-tests`, `static-build`, and `smoke-test`.
 - A `dev` push produces a tested preview artifact without deployment credentials. Only the Pages workflow stored on `main` may assemble production plus preview and deploy GitHub Pages.
-- PRs to `main` additionally require `release-readiness`, which verifies that every included `dev` PR references accepted Issue(s).
+- A production deployment never waits on the mutable `dev` head. It reuses the newest available successful preview artifact; if none exists, production still deploys independently.
+- PRs to `main` additionally require `release-readiness`, which runs its guard from the protected `main` revision and verifies that every included `dev` PR references accepted Issue(s).
 - A merged PR updates the remote branch. Follow the synchronization rules in the root `AGENTS.md` before using a local checkout as the deployed source.
 
 ## Recovery

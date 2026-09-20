@@ -17,11 +17,13 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout production source
@@ -42,25 +44,46 @@ jobs:
         id: revisions
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PREVIEW_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           production_sha=$(git -C source-main rev-parse HEAD)
-          preview_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq '.object.sha')
-          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?branch=dev&event=push&status=success&per_page=100" \
-            --jq "first(.workflow_runs[] | select(.head_sha == \"$preview_sha\")) | .id")
+          preview_sha=""
+          run_id=""
+          has_preview="false"
 
-          if [ -z "$run_id" ]; then
-            echo "No successful CI run found for current dev revision $preview_sha." >&2
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            preview_sha="$EVENT_PREVIEW_SHA"
+            run_id="$EVENT_RUN_ID"
+          else
+            while IFS=$'\t' read -r candidate_id candidate_sha; do
+              artifact_name="preview-site-$candidate_sha"
+              artifact_count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate_id/artifacts" \
+                --jq "[.artifacts[] | select(.name == \"$artifact_name\" and .expired == false)] | length")
+              if [ "$artifact_count" -gt 0 ]; then
+                run_id="$candidate_id"
+                preview_sha="$candidate_sha"
+                has_preview="true"
+                break
+              fi
+            done < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?branch=dev&event=push&status=success&per_page=100" \
+              --jq '.workflow_runs[] | [.id, .head_sha] | @tsv')
+          fi
+
+          if [ "$EVENT_NAME" = "workflow_run" ] && { [ -z "$run_id" ] || [ -z "$preview_sha" ]; }; then
+            echo "No non-expired, successfully tested preview artifact is available." >&2
             exit 1
           fi
 
-          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.head_sha }}" != "$preview_sha" ]; then
-            echo "Refusing to deploy stale preview ${{ github.event.workflow_run.head_sha }}; current dev is $preview_sha." >&2
-            exit 1
+          if [ -n "$run_id" ] && [ -n "$preview_sha" ]; then
+            has_preview="true"
           fi
 
           echo "production_sha=$production_sha" >> "$GITHUB_OUTPUT"
           echo "preview_sha=$preview_sha" >> "$GITHUB_OUTPUT"
           echo "preview_run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "has_preview=$has_preview" >> "$GITHUB_OUTPUT"
           echo "DEPLOYED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
       - name: Install production dependencies
         run: pnpm --dir source-main install --frozen-lockfile
@@ -79,6 +102,7 @@ jobs:
           LOGTO_APP_ID: ""
           EXERCISE_SYNC_SIGNAL_URL: ${{ vars.EXERCISE_SYNC_SIGNAL_URL }}
       - name: Download tested preview artifact
+        if: steps.revisions.outputs.has_preview == 'true'
         uses: actions/download-artifact@v4
         with:
           name: preview-site-${{ steps.revisions.outputs.preview_sha }}
@@ -86,16 +110,22 @@ jobs:
           github-token: ${{ github.token }}
           run-id: ${{ steps.revisions.outputs.preview_run_id }}
       - name: Reject unsafe preview artifact entries
+        if: steps.revisions.outputs.has_preview == 'true'
         run: |
           if find preview-artifact -type l -print -quit | grep -q .; then
             echo "Preview artifact contains a symbolic link." >&2
             exit 1
           fi
       - name: Assemble production and preview
+        env:
+          HAS_PREVIEW: ${{ steps.revisions.outputs.has_preview }}
         run: |
-          mkdir -p site/preview
+          mkdir -p site
           cp -R source-main/apps/client/.output/public/. site/
-          cp -R preview-artifact/. site/preview/
+          if [ "$HAS_PREVIEW" = "true" ]; then
+            mkdir -p site/preview
+            cp -R preview-artifact/. site/preview/
+          fi
           if [ -f source-main/.github/pages/404.html ]; then
             cp source-main/.github/pages/404.html site/404.html
           fi
