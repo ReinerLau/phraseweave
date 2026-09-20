@@ -1,5 +1,7 @@
 import { ref } from "vue";
 
+import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
+
 export enum Theme {
   DARK = "dark",
   LIGHT = "light",
@@ -18,7 +20,7 @@ export function useDarkMode() {
 
   const isDarkMode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-  const cacheDarkMode = localStorage.getItem(DARK_MODE) as Theme | null;
+  const cacheDarkMode = getLocalStorageItem(DARK_MODE) as Theme | null;
 
   const initDarkMode = () => {
     if (isDarkMode && !cacheDarkMode) {
@@ -74,7 +76,7 @@ export function useDarkMode() {
     document.documentElement.classList.toggle(DARK_THEME_CLASS, state);
     document.documentElement.setAttribute("data-theme", themeClass);
     darkMode.value = themeValue;
-    localStorage.setItem(DARK_MODE, themeValue);
+    setLocalStorageItem(DARK_MODE, themeValue);
   };
 
   return {

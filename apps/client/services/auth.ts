@@ -1,6 +1,12 @@
 import { useLogto } from "@logto/vue";
 import { useRuntimeConfig } from "nuxt/app";
 
+import {
+  getSessionStorageItem,
+  removeSessionStorageItem,
+  setSessionStorageItem,
+} from "~/utils/storageScope";
+
 let logto: ReturnType<typeof useLogto> | undefined;
 let runtimeConfig: ReturnType<typeof useRuntimeConfig> | undefined;
 export async function setupAuth() {
@@ -38,9 +44,9 @@ export async function getToken() {
 }
 
 export function getSignInCallback() {
-  let callback = sessionStorage.getItem("callback");
+  let callback = getSessionStorageItem("callback");
   if (callback) {
-    sessionStorage.removeItem("callback");
+    removeSessionStorageItem("callback");
     return callback;
   } else {
     return "/";
@@ -48,5 +54,5 @@ export function getSignInCallback() {
 }
 
 function setSignInCallback(callback: string) {
-  sessionStorage.setItem("callback", callback);
+  setSessionStorageItem("callback", callback);
 }

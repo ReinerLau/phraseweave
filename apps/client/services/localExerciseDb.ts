@@ -1,4 +1,5 @@
 import type { ExerciseResponse, ExercisesResponse } from "~/api/exercise";
+import { scopedStorageName } from "~/utils/storageScope";
 
 const DATABASE_NAME = "phraseweave-local";
 const DATABASE_VERSION = 1;
@@ -43,7 +44,7 @@ function openDatabase(): Promise<IDBDatabase> {
   }
 
   databasePromise = new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    const request = window.indexedDB.open(scopedStorageName(DATABASE_NAME), DATABASE_VERSION);
 
     request.onerror = () => reject(request.error ?? new Error("Unable to open local database"));
     request.onsuccess = () => resolve(request.result);
