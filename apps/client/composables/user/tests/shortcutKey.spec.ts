@@ -22,9 +22,9 @@ describe("user defined shortcut key", () => {
     it("should be equal to cache data if localStorage has cache", () => {
       const storeShortcutKeys = {
         sound: "Ctrl+s",
-        previous: "Ctrl+,",
+        previous: "ArrowLeft",
         answer: "Ctrl+8",
-        skip: "Ctrl+.",
+        skip: "ArrowRight",
       };
 
       localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(storeShortcutKeys));
@@ -103,7 +103,7 @@ describe("user defined shortcut key", () => {
         [SHORTCUT_KEY_TYPES.SOUND]: "Tab",
       });
       expect(localStorage.getItem(SHORTCUT_KEYS)).toMatchInlineSnapshot(
-        `"{"sound":"Tab","answer":"Ctrl+;","skip":"Ctrl+.","previous":"Ctrl+,"}"`,
+        `"{"sound":"Tab","answer":"Ctrl+;","skip":"ArrowRight","previous":"ArrowLeft"}"`,
       );
     });
 
@@ -126,7 +126,7 @@ describe("user defined shortcut key", () => {
         [SHORTCUT_KEY_TYPES.ANSWER]: "Ctrl+s",
       });
       expect(localStorage.getItem(SHORTCUT_KEYS)).toMatchInlineSnapshot(
-        `"{"sound":"Ctrl+'","answer":"Ctrl+s","skip":"Ctrl+.","previous":"Ctrl+,"}"`,
+        `"{"sound":"Ctrl+'","answer":"Ctrl+s","skip":"ArrowRight","previous":"ArrowLeft"}"`,
       );
     });
     it("should be not set successfully with the same shortcut", () => {
