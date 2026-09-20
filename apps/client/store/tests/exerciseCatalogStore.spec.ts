@@ -1,14 +1,15 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Course } from "../course";
-import type { CoursePackResponse } from "~/api/coursePack";
-import { fetchCourseHistory } from "~/api/courseHistory";
-import { fetchCoursePack } from "~/api/coursePack";
-import { useCoursePackStore } from "../coursePack";
+import type { Course } from "../exercise";
+import type { ExerciseResponse } from "~/api/exercise";
+import { getLocalExercise } from "~/services/localExerciseDb";
+import { useExerciseCatalogStore } from "../exerciseCatalog";
 
-vi.mock("~/api/coursePack");
-vi.mock("~/api/courseHistory");
+vi.mock("~/services/localExerciseDb", () => ({
+  getLocalExercise: vi.fn(),
+  listLocalExercises: vi.fn(),
+}));
 
 describe("course pack store", () => {
   beforeEach(() => {
@@ -16,11 +17,12 @@ describe("course pack store", () => {
   });
 
   it("should ", async () => {
-    const coursePack: CoursePackResponse = {
+    const coursePack: ExerciseResponse = {
       id: "coursePackId",
       title: "课程包1",
       description: "这是一个课程包",
       isFree: true,
+      cover: "",
       courses: [],
     };
 
@@ -52,26 +54,15 @@ describe("course pack store", () => {
 
     coursePack.courses = [firstCourse, secondCourse];
 
-    vi.mocked(fetchCoursePack).mockImplementation(async () => coursePack);
+    vi.mocked(getLocalExercise).mockResolvedValue(coursePack);
 
-    vi.mocked(fetchCourseHistory).mockImplementation(async () => {
-      return [
-        {
-          id: 1,
-          completionCount: 5,
-          courseId: firstCourse.id,
-          coursePackId: coursePack.id,
-        },
-      ];
-    });
+    const exerciseCatalogStore = useExerciseCatalogStore();
 
-    const coursePackStore = useCoursePackStore();
+    await exerciseCatalogStore.setupExercise(coursePack.id);
 
-    await coursePackStore.setupCoursePack(coursePack.id);
+    await exerciseCatalogStore.updateExerciseCompleteCount(coursePack.id);
 
-    await coursePackStore.updateCoursesCompleteCount(coursePack.id);
-
-    expect(coursePackStore.currentCoursePack?.courses[0].completionCount).toBe(5);
-    expect(coursePackStore.currentCoursePack?.courses[1].completionCount).toBe(0);
+    expect(exerciseCatalogStore.currentExercise?.courses[0].completionCount).toBe(0);
+    expect(exerciseCatalogStore.currentExercise?.courses[1].completionCount).toBe(0);
   });
 });

@@ -1,24 +1,20 @@
-import type { CoursePackResponse } from "~/api/coursePack";
-import { isValidTransferRoomToken } from "~/utils/transferQr";
+import { useRuntimeConfig } from "nuxt/app";
 
-export type TransferRole = "sender" | "receiver";
-export type TransferStatus =
-  | "connecting"
-  | "waiting"
-  | "connected"
-  | "transferring"
-  | "completed"
-  | "error";
+import type { ExerciseResponse } from "~/api/exercise";
+import { isValidExerciseSyncRoomToken } from "~/utils/exerciseSyncQr";
 
-export interface TransferUpdate {
-  status: TransferStatus;
+export type SyncRole = "sender" | "receiver";
+export type SyncStatus = "connecting" | "waiting" | "connected" | "syncing" | "completed" | "error";
+
+export interface SyncUpdate {
+  status: SyncStatus;
   progress?: number;
   message?: string;
 }
 
 interface SignalMessage {
   type: "join" | "peer-ready" | "signal" | "error";
-  role?: TransferRole;
+  role?: SyncRole;
   data?: RTCSessionDescriptionInit | RTCIceCandidateInit;
   message?: string;
 }
@@ -40,10 +36,10 @@ export function createRoomToken() {
 }
 
 export function isValidRoomToken(roomToken: string) {
-  return isValidTransferRoomToken(roomToken);
+  return isValidExerciseSyncRoomToken(roomToken);
 }
 
-export function createReceiveUrl(roomToken: string) {
+export function createExerciseSyncUrl(roomToken: string) {
   const config = useRuntimeConfig();
   const baseURL = config.app.baseURL || "/";
   const path = `${baseURL.replace(/\/$/, "")}/receive`;
@@ -53,9 +49,9 @@ export function createReceiveUrl(roomToken: string) {
 }
 
 export function getSignalUrl(roomToken: string) {
-  const configuredUrl = String(useRuntimeConfig().public.courseTransferSignalUrl || "");
+  const configuredUrl = String(useRuntimeConfig().public.exerciseSyncSignalUrl || "");
   if (!configuredUrl) {
-    throw new Error("未配置课程传输信令服务");
+    throw new Error("未配置练习同步服务");
   }
 
   const url = new URL(configuredUrl, window.location.origin);
@@ -65,8 +61,8 @@ export function getSignalUrl(roomToken: string) {
 
 export async function createSenderSession(
   roomToken: string,
-  coursePack: CoursePackResponse,
-  onUpdate: (update: TransferUpdate) => void,
+  coursePack: ExerciseResponse,
+  onUpdate: (update: SyncUpdate) => void,
 ) {
   return createSession("sender", roomToken, onUpdate, async (channel) => {
     const payload = new TextEncoder().encode(JSON.stringify(coursePack));
@@ -85,9 +81,9 @@ export async function createSenderSession(
     for (let index = 0; index < chunks; index += 1) {
       channel.send(payload.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE));
       onUpdate({
-        status: "transferring",
+        status: "syncing",
         progress: Math.round(((index + 1) / chunks) * 100),
-        message: `正在发送课程 ${index + 1}/${chunks}`,
+        message: `正在同步练习 ${index + 1}/${chunks}`,
       });
       await waitForBufferedAmount(channel);
     }
@@ -97,8 +93,8 @@ export async function createSenderSession(
 
 export async function createReceiverSession(
   roomToken: string,
-  onUpdate: (update: TransferUpdate) => void,
-  onCoursePack: (coursePack: CoursePackResponse) => Promise<void>,
+  onUpdate: (update: SyncUpdate) => void,
+  onCoursePack: (coursePack: ExerciseResponse) => Promise<void>,
 ) {
   let metadata: PackageMetadata | undefined;
   const chunks: ArrayBuffer[] = [];
@@ -109,7 +105,7 @@ export async function createReceiverSession(
         const parsed = JSON.parse(event.data) as PackageMetadata;
         if (parsed.type === "package-meta") {
           metadata = parsed;
-          onUpdate({ status: "transferring", progress: 0, message: "正在接收课程" });
+          onUpdate({ status: "syncing", progress: 0, message: "正在同步练习" });
         }
         return false;
       }
@@ -122,31 +118,31 @@ export async function createReceiverSession(
           (chunks.reduce((total, item) => total + item.byteLength, 0) / metadata.size) * 100,
         ),
       );
-      onUpdate({ status: "transferring", progress, message: `正在接收课程 ${progress}%` });
+      onUpdate({ status: "syncing", progress, message: `正在同步练习 ${progress}%` });
 
       if (chunks.length !== metadata.chunks) return false;
 
       const payload = mergeBuffers(chunks, metadata.size);
       if ((await digest(payload)) !== metadata.checksum) {
-        throw new Error("课程传输校验失败");
+        throw new Error("练习同步校验失败");
       }
 
-      const coursePack = JSON.parse(new TextDecoder().decode(payload)) as CoursePackResponse;
+      const coursePack = JSON.parse(new TextDecoder().decode(payload)) as ExerciseResponse;
       await onCoursePack(coursePack);
-      onUpdate({ status: "completed", progress: 100, message: "课程已保存到本机" });
+      onUpdate({ status: "completed", progress: 100, message: "练习已保存到本机" });
       return true;
     },
   });
 }
 
 async function createSession(
-  role: TransferRole,
+  role: SyncRole,
   roomToken: string,
-  onUpdate: (update: TransferUpdate) => void,
+  onUpdate: (update: SyncUpdate) => void,
   onChannelOpen?: (channel: RTCDataChannel) => Promise<void>,
   receiver?: { onMessage: (event: MessageEvent) => Promise<boolean> },
 ) {
-  if (!isValidRoomToken(roomToken)) throw new Error("无效的课程传输二维码");
+  if (!isValidRoomToken(roomToken)) throw new Error("无效的练习同步二维码");
 
   const socket = new WebSocket(getSignalUrl(roomToken));
   const peer = new RTCPeerConnection();
@@ -202,7 +198,7 @@ async function createSession(
         if (closed) return;
         onUpdate({
           status: "error",
-          message: "课程传输连接已断开，请让电脑端重新生成同步链接",
+          message: "练习同步连接已断开，请重新生成同步链接",
         });
         close();
       };
@@ -290,13 +286,13 @@ async function createSession(
   };
 
   socket.onerror = () => {
-    onUpdate({ status: "error", message: "无法连接课程传输服务" });
+    onUpdate({ status: "error", message: "无法连接练习同步服务" });
     close();
   };
   socket.onclose = () => {
     if (!closed) {
       clearConnectionTimeout();
-      onUpdate({ status: "error", message: "课程传输连接已断开，请重新生成同步链接" });
+      onUpdate({ status: "error", message: "练习同步连接已断开，请重新生成同步链接" });
     }
   };
 
@@ -307,7 +303,7 @@ function formatSignalError(message?: string) {
   if (message === "This transfer role is already occupied") {
     return "这条同步链接已被使用，请从电脑端重新生成同步链接";
   }
-  return message || "课程传输服务返回错误";
+  return message || "练习同步服务返回错误";
 }
 
 function isIceCandidate(

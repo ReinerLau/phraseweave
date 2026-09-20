@@ -1,5 +1,5 @@
-import type { CoursePack } from "~/store/coursePack";
-import { type Course } from "~/store/course";
+import type { CoursePack } from "~/store/exerciseCatalog";
+import { type Course } from "~/store/exercise";
 import { http } from "./http";
 
 export async function fetchCourse(coursePackId: CoursePack["id"], courseId: Course["id"]) {

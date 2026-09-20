@@ -21,8 +21,8 @@
 
 <script setup lang="ts">
 import { useAnswerTip } from "~/composables/main/answerTip";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 const { hiddenAnswerTip } = useAnswerTip();
 </script>

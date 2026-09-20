@@ -12,6 +12,9 @@ export enum PronunciationType {
   British = "British",
 }
 
+// 临时关闭有道朗读；恢复功能时改为 true。
+export const YOUDAO_PRONUNCIATION_ENABLED = false;
+
 export const pronunciationLabels: { [key in PronunciationType]: string } = {
   [PronunciationType.American]: "美音",
   [PronunciationType.British]: "英音",

@@ -42,10 +42,10 @@ import { usePlayWordSound } from "~/composables/main/englishSound/audio";
 import { useGameMode } from "~/composables/main/game";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoPronunciation } from "~/composables/user/sound";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 const { handlePlayWordSound } = usePlayWordSound();
 const { handlePlayEnglishSound } = usePlayEnglishSound();
 const { showSummary } = useSummary();

@@ -4,15 +4,18 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
-import type { Course } from "../course";
-import type { CoursePack } from "../coursePack";
-import { fetchCourse } from "~/api/course";
+import type { Course } from "../exercise";
+import type { CoursePack } from "../exerciseCatalog";
 import { isAuthenticated } from "~/services/auth";
-import { useCourseStore } from "../course";
+import { getLocalExercise } from "~/services/localExerciseDb";
+import { useExerciseStore } from "../exercise";
 import { useUserStore } from "../user";
 
-vi.mock("~/api/course");
 vi.mock("~/services/auth");
+vi.mock("~/services/localExerciseDb", () => ({
+  getLocalExercise: vi.fn(),
+  saveLocalExercise: vi.fn(),
+}));
 vi.mock("../statement.ts", () => {
   return {
     useStatement: () => {
@@ -49,8 +52,13 @@ const coursePack: CoursePack = {
   isFree: true,
 };
 
-vi.mocked(fetchCourse).mockImplementation(async (coursePackId, courseId) => {
-  return firstCourse;
+vi.mocked(getLocalExercise).mockResolvedValue({
+  id: coursePack.id,
+  title: coursePack.title,
+  description: coursePack.description,
+  isFree: coursePack.isFree,
+  cover: "",
+  courses: [firstCourse],
 });
 
 describe("course", () => {
@@ -66,7 +74,7 @@ describe("course", () => {
   });
 
   it("initializes with a course", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
 
     await store.setup(coursePack.id, firstCourse.id);
 
@@ -75,7 +83,7 @@ describe("course", () => {
   });
 
   it("navigates to the next statement", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);
 
     store.toNextStatement();
@@ -84,7 +92,7 @@ describe("course", () => {
   });
 
   it("resets statementIndex on doAgain", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);
     store.toNextStatement();
 
@@ -94,7 +102,7 @@ describe("course", () => {
   });
 
   it("checks if all statements are done", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);
 
     expect(store.isAllDone()).toBe(false);
@@ -105,7 +113,7 @@ describe("course", () => {
   });
 
   it("checks if the answer is correct", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);
 
     expect(store.checkCorrect("I")).toBe(true);
@@ -114,14 +122,14 @@ describe("course", () => {
   });
 
   it("the length of the word should be one", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);
 
     expect(store.words.length).toBe(1);
   });
 
   it("the count of first course question should be two", async () => {
-    const store = useCourseStore();
+    const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);
 
     expect(store.totalQuestionsCount).toBe(2);

@@ -12,9 +12,9 @@ import { onMounted, watch } from "vue";
 
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
 import { useAutoPlayEnglish } from "~/composables/user/sound";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 const { playSound } = useCurrentStatementEnglishSound();
 const { isAutoPlayEnglish } = useAutoPlayEnglish();
 

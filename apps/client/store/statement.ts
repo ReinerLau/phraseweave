@@ -3,7 +3,7 @@ import type { Ref } from "vue";
 import { debounce } from "lodash-es";
 import { ref, watch } from "vue";
 
-import type { Course } from "./course";
+import type { Course } from "./exercise";
 import { fetchUpdateCourseProgress } from "~/api/userCourseProgress";
 import { isAuthenticated } from "~/services/auth";
 

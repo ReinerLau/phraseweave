@@ -7,7 +7,7 @@ describe("BackLink", () => {
   test("renders a discoverable mobile-friendly link to the fixed parent page", () => {
     const wrapper = mount(BackLink, {
       props: {
-        label: "返回课程包列表",
+        label: "返回练习列表",
         to: "/course-pack",
       },
       global: {
@@ -23,8 +23,8 @@ describe("BackLink", () => {
     const link = wrapper.get("a");
 
     expect(link.attributes("href")).toBe("/course-pack");
-    expect(link.attributes("aria-label")).toBe("返回课程包列表");
-    expect(link.text()).toContain("返回课程包列表");
+    expect(link.attributes("aria-label")).toBe("返回练习列表");
+    expect(link.text()).toContain("返回练习列表");
     expect(link.classes()).toEqual(
       expect.arrayContaining(["btn", "min-h-11", "px-4", "text-base"]),
     );
@@ -33,7 +33,7 @@ describe("BackLink", () => {
   test("preserves a dynamic course pack detail target for practice pages", () => {
     const wrapper = mount(BackLink, {
       props: {
-        label: "返回课程包",
+        label: "返回练习",
         to: "/course-pack/pack-42",
       },
       global: {
@@ -47,6 +47,6 @@ describe("BackLink", () => {
     });
 
     expect(wrapper.get("a").attributes("href")).toBe("/course-pack/pack-42");
-    expect(wrapper.get("a").text()).toContain("返回课程包");
+    expect(wrapper.get("a").text()).toContain("返回练习");
   });
 });

@@ -28,11 +28,11 @@
 import { useAuthRequire } from "~/composables/main/authRequire";
 import { useGameMode } from "~/composables/main/game";
 import { signIn } from "~/services/auth";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 
 const { authRequireModalState, hideAuthRequireModal } = useAuthRequire();
 const { showQuestion } = useGameMode();
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 
 function handleSignup() {
   hideAuthRequireModal();

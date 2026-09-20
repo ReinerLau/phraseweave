@@ -30,7 +30,7 @@ import { onMounted, onUnmounted } from "vue";
 
 import { useGameMode } from "~/composables/main/game";
 import { useShortcutKeyMode } from "~/composables/user/shortcutKey";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const { shortcutKeys } = useShortcutKeyMode();
@@ -43,7 +43,7 @@ const PREV_BTN_TIP = `上一题（快捷键：${shortcutKeys.value.previous} ）
 const NEXT_BTN_TIP = `下一题（快捷键：${shortcutKeys.value.skip} ）`;
 
 const { showQuestion } = useGameMode();
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 
 // 上一题/下一题
 function usePrevAndNextQuestion(prevKey: string, nextKey: string) {

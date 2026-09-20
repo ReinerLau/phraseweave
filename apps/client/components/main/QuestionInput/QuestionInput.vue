@@ -47,11 +47,11 @@ import { useErrorTip } from "~/composables/user/errorTip";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useShowWordsWidth } from "~/composables/user/words";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 import { getQuestionInputStyle, getWordWidth, useQuestionInput } from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 const questionInputStyle = computed(() => getQuestionInputStyle(courseStore.words));
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();

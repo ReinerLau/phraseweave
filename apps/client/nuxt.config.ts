@@ -2,6 +2,10 @@
 
 const appScripts: any = [];
 const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
+const exerciseSyncSignalUrl =
+  process.env.EXERCISE_SYNC_SIGNAL_URL ||
+  process.env.COURSE_TRANSFER_SIGNAL_URL ||
+  (process.env.NODE_ENV === "development" ? "ws://localhost:8787/room" : "");
 if (process.env.NODE_ENV === "production") {
   addClarity();
 }
@@ -47,7 +51,7 @@ export default defineNuxtConfig({
       backendEndpoint: process.env.BACKEND_ENDPOINT || "",
       signInRedirectURI: process.env.LOGTO_SIGN_IN_REDIRECT_URI || "",
       signOutRedirectURI: process.env.LOGTO_SIGN_OUT_REDIRECT_URI || "",
-      courseTransferSignalUrl: process.env.COURSE_TRANSFER_SIGNAL_URL || "",
+      exerciseSyncSignalUrl,
     },
   },
 });

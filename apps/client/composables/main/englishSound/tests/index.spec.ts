@@ -1,9 +1,9 @@
 import { createTestingPinia } from "@pinia/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 import { play, updateSource } from "../audio";
-import { useCurrentStatementEnglishSound } from "../index";
+import { readOneSentencePerDayAloud, useCurrentStatementEnglishSound } from "../index";
 
 vi.mock("../audio.ts", () => {
   return {
@@ -19,7 +19,7 @@ describe("useCurrentStatementEnglishSound", () => {
       createSpy: vi.fn,
     });
 
-    const courseStore = useCourseStore();
+    const courseStore = useExerciseStore();
     courseStore.currentStatement = {
       id: "1",
       order: 1,
@@ -31,19 +31,26 @@ describe("useCurrentStatementEnglishSound", () => {
     vi.clearAllMocks();
   });
 
-  it("plays sound", async () => {
+  it("does not play sound while Youdao pronunciation is disabled", async () => {
     const { playSound } = useCurrentStatementEnglishSound();
 
     playSound();
 
-    expect(play).toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
   });
 
-  it("should updates audio source", async () => {
+  it("does not read the daily sentence while Youdao pronunciation is disabled", () => {
+    readOneSentencePerDayAloud("Keep going.");
+
+    expect(updateSource).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("does not update audio source while Youdao pronunciation is disabled", async () => {
     useCurrentStatementEnglishSound();
 
     // update english value
-    const courseStore = useCourseStore();
+    const courseStore = useExerciseStore();
     courseStore.currentStatement = {
       id: "2",
       order: 2,
@@ -53,13 +60,13 @@ describe("useCurrentStatementEnglishSound", () => {
     };
     await vi.advanceTimersToNextTimerAsync();
 
-    expect(updateSource).toBeCalledTimes(1);
+    expect(updateSource).not.toHaveBeenCalled();
   });
 
   it("does not update audio source if the word is the same", async () => {
     useCurrentStatementEnglishSound();
 
-    const courseStore = useCourseStore();
+    const courseStore = useExerciseStore();
     courseStore.currentStatement = {
       id: "1",
       order: 1,
@@ -68,6 +75,6 @@ describe("useCurrentStatementEnglishSound", () => {
       chinese: "我",
     };
 
-    expect(updateSource).toHaveBeenCalledTimes(1);
+    expect(updateSource).not.toHaveBeenCalled();
   });
 });

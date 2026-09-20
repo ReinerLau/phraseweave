@@ -59,7 +59,7 @@
             class="btn"
             @click="goToNextCourse"
           >
-            {{ haveNextCourse || !isAuthenticated() ? "开始下一课" : "返回课程列表" }}
+            {{ haveNextCourse ? "开始下一项练习" : "返回练习列表" }}
             <kbd class="kbd"> ↵ </kbd>
           </button>
         </div>
@@ -79,21 +79,20 @@ import { computed, ref, watch } from "vue";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useLearnRecord } from "~/composables/learnRecord";
-import { useAuthRequire } from "~/composables/main/authRequire";
 import { useConfetti } from "~/composables/main/confetti/useConfetti";
 import { readOneSentencePerDayAloud } from "~/composables/main/englishSound";
 import { useGameMode } from "~/composables/main/game";
 import { useShareModal } from "~/composables/main/shareImage/share";
 import { useDailySentence, useSummary } from "~/composables/main/summary";
 import { isAuthenticated } from "~/services/auth";
-import { useCourseStore } from "~/store/course";
-import { useCoursePackStore } from "~/store/coursePack";
+import { useExerciseStore } from "~/store/exercise";
+import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 import { permitSaveStatement, preventSaveStatement } from "~/store/statement";
 import { formatSecondsToTime } from "~/utils/date";
 import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
-const courseStore = useCourseStore();
-const coursePackStore = useCoursePackStore();
+const courseStore = useExerciseStore();
+const exerciseCatalogStore = useExerciseCatalogStore();
 const { goToNextCourse, completeCourse, haveNextCourse } = useCourse();
 const { handleDoAgain } = useDoAgain();
 const { showModal, hideSummary } = useSummary();
@@ -107,7 +106,7 @@ watch(showModal, (val) => {
   if (val) {
     // 阻止包含 statement 完成课程后会自动把用户的进度设置成下一课
     // 这里是为了防止先设置成下一课 后更新了 statement 的进度
-    // 这就会造成获取用户最近的课程包进度出现错误  因为是基于时间来获取的
+    // 这就会造成获取用户最近练习进度出现错误，因为是基于时间来获取的。
     preventSaveStatement();
     // 注册回车键进入下一课
     registerShortcut("enter", goToNextCourse);
@@ -156,29 +155,22 @@ function useCourse() {
   });
 
   async function goToNextCourse() {
-    const { showAuthRequireModal } = useAuthRequire();
-
     // 无论后续如何处理，都需要先隐藏 Summary 页面
     hideSummary();
-    if (!isAuthenticated()) {
-      // 去注册
-      showAuthRequireModal();
-      return;
-    }
 
     if (nextCourseId.value) {
       navigateTo(`/game/${courseStore.currentCourse?.coursePackId}/${nextCourseId.value}`);
     } else {
-      navigateTo(`/course-pack/${courseStore.currentCourse?.coursePackId}`);
+      navigateTo("/course-pack");
     }
   }
 
   async function completeCourse() {
-    if (isAuthenticated() && courseStore.currentCourse) {
+    if (courseStore.currentCourse) {
       const { coursePackId } = courseStore.currentCourse;
       const { nextCourse } = await courseStore.completeCourse();
-      coursePackStore.updateCoursesCompleteCount(coursePackId);
-      updateLearnRecord();
+      exerciseCatalogStore.updateExerciseCompleteCount(coursePackId);
+      if (isAuthenticated()) updateLearnRecord();
 
       if (nextCourse) {
         nextCourseId.value = nextCourse.id;
