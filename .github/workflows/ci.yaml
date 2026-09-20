@@ -118,6 +118,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install Cypress browser
+        run: pnpm -F client exec cypress install
       - name: Build preview
         run: pnpm build:client
         env:
