@@ -35,10 +35,10 @@ import { useVirtualList } from "@vueuse/core";
 import { computed, onMounted } from "vue";
 
 import { useGameMode } from "~/composables/main/game";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 import { useContent } from "./useContents";
 
-const coursesStore = useCourseStore();
+const coursesStore = useExerciseStore();
 const { showQuestion } = useGameMode();
 const { hideContents, isShowContents, watchClickOutside } = useContent();
 

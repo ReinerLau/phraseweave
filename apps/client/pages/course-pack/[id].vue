@@ -7,19 +7,19 @@
     <template v-else>
       <div class="mb-4 flex items-center">
         <CommonBackLink
-          label="返回课程包列表"
+          label="返回练习列表"
           to="/course-pack"
         />
       </div>
       <h2 class="mb-4 border-b py-4 text-center text-3xl dark:border-gray-600">
-        {{ coursePackStore.currentCoursePack?.title }}
+        {{ exerciseCatalogStore.currentExercise?.title }}
       </h2>
       <div class="scrollbar-hide h-full">
         <div
           class="grid h-[79vh] grid-cols-1 justify-start gap-8 overflow-y-auto overflow-x-hidden pb-96 pl-0 pr-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
           <template
-            v-for="course in coursePackStore.currentCoursePack?.courses"
+            v-for="course in exerciseCatalogStore.currentExercise?.courses"
             :key="course.id"
           >
             <CoursesCourseCard
@@ -42,11 +42,11 @@ import { ref } from "vue";
 import { useRoute } from "vue-router";
 
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
-import { useCoursePackStore } from "~/store/coursePack";
+import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 
 const isLoading = ref(false);
 const route = useRoute();
-const coursePackStore = useCoursePackStore();
+const exerciseCatalogStore = useExerciseCatalogStore();
 const coursePackId = route.params.id as string;
 const { updateActiveCourseMap } = useActiveCourseMap();
 
@@ -55,9 +55,9 @@ setup();
 async function setup() {
   // 只在初始化的时候拉取一次数据
   // 后续只更新课程的完成次数数据
-  if (!coursePackStore.currentCoursePack) {
+  if (!exerciseCatalogStore.currentExercise) {
     isLoading.value = true;
-    await coursePackStore.setupCoursePack(coursePackId);
+    await exerciseCatalogStore.setupExercise(coursePackId);
     isLoading.value = false;
   }
 }

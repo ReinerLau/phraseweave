@@ -1,4 +1,4 @@
-import type { CoursePack } from "~/store/coursePack";
+import type { CoursePack } from "~/store/exerciseCatalog";
 import { http } from "./http";
 
 export interface CourseHistoryResponse {

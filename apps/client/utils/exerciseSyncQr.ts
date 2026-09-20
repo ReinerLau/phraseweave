@@ -1,14 +1,17 @@
-export interface TransferQrPayload {
+export interface ExerciseSyncQrPayload {
   roomToken: string;
 }
 
 const ROOM_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
 
-export function isValidTransferRoomToken(roomToken: string) {
+export function isValidExerciseSyncRoomToken(roomToken: string) {
   return ROOM_TOKEN_PATTERN.test(roomToken);
 }
 
-export function parseTransferQr(raw: string, currentOrigin: string): TransferQrPayload | undefined {
+export function parseExerciseSyncQr(
+  raw: string,
+  currentOrigin: string,
+): ExerciseSyncQrPayload | undefined {
   try {
     const url = new URL(raw);
     const origin = new URL(currentOrigin).origin;
@@ -17,7 +20,7 @@ export function parseTransferQr(raw: string, currentOrigin: string): TransferQrP
     if (url.origin !== origin || !path.endsWith("/receive")) return undefined;
 
     const roomToken = url.searchParams.get("room") || "";
-    if (!isValidTransferRoomToken(roomToken)) return undefined;
+    if (!isValidExerciseSyncRoomToken(roomToken)) return undefined;
 
     return { roomToken };
   } catch {

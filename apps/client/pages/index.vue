@@ -1,3 +1,3 @@
 <template>
-  <CoursePackList />
+  <ExerciseList />
 </template>

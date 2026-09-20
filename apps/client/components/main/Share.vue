@@ -68,11 +68,11 @@ import { ref, watch } from "vue";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { convertTitleToNumber } from "~/composables/main/shareImage/convert";
 import { useGenerateShareImage, useShareModal } from "~/composables/main/shareImage/share";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 import { useUserStore } from "~/store/user";
 import { formatSecondsToTime, getToday } from "~/utils/date";
 
-const courseStore = useCourseStore();
+const courseStore = useExerciseStore();
 const userStore = useUserStore();
 const imageContainer = ref<HTMLDivElement>();
 

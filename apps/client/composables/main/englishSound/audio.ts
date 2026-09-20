@@ -1,9 +1,11 @@
-import { usePronunciation } from "~/composables/user/pronunciation";
+import { usePronunciation, YOUDAO_PRONUNCIATION_ENABLED } from "~/composables/user/pronunciation";
 
 // 便于测试
 // 后面不使用 audio 后也可以不破坏业务逻辑
 const audio = new Audio();
 export function updateSource(src: string) {
+  if (!YOUDAO_PRONUNCIATION_ENABLED) return;
+
   audio.src = src;
   audio.load();
 }
@@ -23,6 +25,8 @@ export function usePlayWordSound() {
   };
 
   function handlePlayWordSound(word: string) {
+    if (!YOUDAO_PRONUNCIATION_ENABLED) return;
+
     if (isPlaying && lastWord === word) {
       // skip
       return;
@@ -50,6 +54,8 @@ const DefaultPlayOptions = {
 };
 
 export function play(playOptions?: PlayOptions) {
+  if (!YOUDAO_PRONUNCIATION_ENABLED) return () => {};
+
   const { times, rate, interval } = Object.assign({}, DefaultPlayOptions, playOptions);
 
   audio.playbackRate = rate;

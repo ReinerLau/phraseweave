@@ -43,9 +43,10 @@ jobs:
           BACKEND_ENDPOINT: ""
           LOGTO_ENDPOINT: ""
           LOGTO_APP_ID: ""
+          EXERCISE_SYNC_SIGNAL_URL: ${{ vars.EXERCISE_SYNC_SIGNAL_URL }}
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: apps/client/.output/public
 

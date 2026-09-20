@@ -28,7 +28,7 @@
         <NuxtLink
           href="/course-pack"
           class="btn btn-primary btn-sm mr-2"
-          >更多课程包</NuxtLink
+          >更多练习</NuxtLink
         >
         <!-- <NuxtLink
           class="btn btn-primary btn-sm"

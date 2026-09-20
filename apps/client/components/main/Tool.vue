@@ -5,9 +5,9 @@
     <!-- 左侧 -->
     <div class="flex items-center">
       <NuxtLink
-        :href="`/course-pack/${courseStore.currentCourse?.coursePackId}`"
+        href="/course-pack"
         class="clickable-item tooltip-item"
-        data-tip="课程列表"
+        data-tip="练习列表"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
@@ -66,13 +66,13 @@ import { courseTimer } from "~/composables/courses/courseTimer";
 import { useGameMode } from "~/composables/main/game";
 import { clearQuestionInput } from "~/composables/main/question";
 import { useRanking } from "~/composables/rank/rankingList";
-import { useCourseStore } from "~/store/course";
-import { useCoursePackStore } from "~/store/coursePack";
+import { useExerciseStore } from "~/store/exercise";
+import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 import { useContent } from "./Contents/useContents";
 
 const rankingStore = useRanking();
-const courseStore = useCourseStore();
-const coursePackStore = useCoursePackStore();
+const courseStore = useExerciseStore();
+const exerciseCatalogStore = useExerciseCatalogStore();
 const { focusInput } = useQuestionInput();
 const { toggleContents } = useContent();
 const { showTipModal, handleDoAgain, handleTipConfirm } = useDoAgain();

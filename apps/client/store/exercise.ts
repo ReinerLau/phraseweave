@@ -1,9 +1,9 @@
 import { defineStore } from "pinia";
 import { computed, ref, watchEffect } from "vue";
 
-import type { CoursePack } from "./coursePack";
-import { fetchCompleteCourse, fetchCourse } from "~/api/course";
+import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
+import { getLocalExercise, saveLocalExercise } from "~/services/localExerciseDb";
 import { useStatement } from "./statement";
 
 export interface Statement {
@@ -15,7 +15,7 @@ export interface Statement {
 }
 
 export interface CourseIdentifier {
-  coursePackId: CoursePack["id"];
+  coursePackId: ExerciseCatalogItem["id"];
   courseId: Course["id"];
 }
 
@@ -24,12 +24,12 @@ export interface Course {
   title: string;
   order: number;
   statements: Statement[];
-  coursePackId: CoursePack["id"];
+  coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
   statementIndex: number;
 }
 
-export const useCourseStore = defineStore("course", () => {
+export const useExerciseStore = defineStore("exercise", () => {
   const currentCourse = ref<Course>();
   const currentStatement = ref<Statement>();
   const { statementIndex, setupStatement } = useStatement();
@@ -78,13 +78,25 @@ export const useCourseStore = defineStore("course", () => {
   }
 
   async function completeCourse() {
-    const coursePackId = currentCourse.value?.coursePackId!;
-    const res = await fetchCompleteCourse(coursePackId, currentCourse.value?.id!);
-    return res;
+    const course = currentCourse.value;
+    if (!course) return { nextCourse: undefined };
+
+    const coursePack = await getLocalExercise(course.coursePackId);
+    if (!coursePack) return { nextCourse: undefined };
+
+    const currentIndex = coursePack.courses.findIndex((item) => item.id === course.id);
+    if (currentIndex === -1) return { nextCourse: undefined };
+
+    coursePack.courses[currentIndex].completionCount += 1;
+    await saveLocalExercise(coursePack);
+
+    return { nextCourse: coursePack.courses[currentIndex + 1] };
   }
 
   async function setup(coursePackId: string, courseId: string) {
-    let course = await fetchCourse(coursePackId, courseId);
+    const coursePack = await getLocalExercise(coursePackId);
+    const course = coursePack?.courses.find((item) => item.id === courseId);
+    if (!course) throw new Error("本地找不到该课程");
     currentCourse.value = course;
     setupStatement(currentCourse);
   }

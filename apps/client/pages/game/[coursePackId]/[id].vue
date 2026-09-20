@@ -6,8 +6,8 @@
     <template v-else>
       <div class="mb-4 flex items-center">
         <CommonBackLink
-          :to="`/course-pack/${route.params.coursePackId}`"
-          label="返回课程包"
+          to="/course-pack"
+          label="返回练习列表"
         />
       </div>
       <MainTool />
@@ -21,11 +21,11 @@ import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 
 import { useGameMode } from "~/composables/main/game";
-import { useCourseStore } from "~/store/course";
+import { useExerciseStore } from "~/store/exercise";
 
 const isLoading = ref(true);
 const route = useRoute();
-const coursesStore = useCourseStore();
+const coursesStore = useExerciseStore();
 const { showQuestion } = useGameMode();
 
 showQuestion();

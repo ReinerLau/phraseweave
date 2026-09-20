@@ -1,6 +1,6 @@
 <template>
   <div class="border-1 w-full rounded-xl px-4 md:px-0">
-    <h2 class="my-10 text-2xl font-bold">最近玩过课程包</h2>
+    <h2 class="my-10 text-2xl font-bold">最近练习</h2>
     <div
       class="flex min-h-[350px] w-full flex-wrap items-center justify-center gap-4"
       v-if="isLoading"
@@ -33,7 +33,7 @@
               class="btn btn-primary btn-sm"
               @click="handleGotoCourseList(coursePack.coursePackId)"
             >
-              课程列表
+              练习列表
             </button>
             <button
               class="btn btn-primary btn-secondary btn-sm"
@@ -54,7 +54,7 @@ import { ref } from "vue";
 
 import { useRecentCoursePack } from "./helper";
 
-const { coursePacks, fetchCoursePacks } = useRecentCoursePack();
+const { coursePacks, fetchExercises } = useRecentCoursePack();
 
 const isLoading = ref(false);
 
@@ -63,10 +63,10 @@ setup();
 async function setup() {
   if (coursePacks.value.length === 0) {
     isLoading.value = true;
-    await fetchCoursePacks();
+    await fetchExercises();
     isLoading.value = false;
   } else {
-    await fetchCoursePacks();
+    await fetchExercises();
   }
 }
 

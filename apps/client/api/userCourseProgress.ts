@@ -10,7 +10,7 @@ interface UserProgressUpdate {
   statementIndex: number;
 }
 
-export interface UserRecentCoursePackResponse {
+export interface UserRecentExerciseResponse {
   id: number;
   coursePackId: string;
   courseId: string;
@@ -27,7 +27,7 @@ export async function fetchUpdateCourseProgress(userProgressUpdate: UserProgress
 }
 
 export async function fetchUserRecentCoursePacks() {
-  return await http.get<UserRecentCoursePackResponse[], UserRecentCoursePackResponse[]>(
+  return await http.get<UserRecentExerciseResponse[], UserRecentExerciseResponse[]>(
     `/user-course-progress/recent-course-packs`,
   );
 }

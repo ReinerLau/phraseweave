@@ -1,17 +1,17 @@
 import { ref } from "vue";
 
-import type { UserRecentCoursePackResponse } from "~/api/userCourseProgress";
+import type { UserRecentExerciseResponse } from "~/api/userCourseProgress";
 import { fetchUserRecentCoursePacks } from "~/api/userCourseProgress";
 
-const coursePacks = ref<UserRecentCoursePackResponse[]>([]);
+const coursePacks = ref<UserRecentExerciseResponse[]>([]);
 
 export function useRecentCoursePack() {
-  async function fetchCoursePacks() {
+  async function fetchExercises() {
     coursePacks.value = await fetchUserRecentCoursePacks();
   }
 
   return {
-    fetchCoursePacks,
+    fetchExercises,
     coursePacks,
   };
 }
