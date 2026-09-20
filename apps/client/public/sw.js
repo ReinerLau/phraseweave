@@ -9,7 +9,14 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin)
+  const requestUrl = new URL(event.request.url);
+  const scopePath = new URL(self.registration.scope).pathname;
+  const previewPath = `${scopePath}preview/`;
+  if (
+    event.request.method !== "GET" ||
+    requestUrl.origin !== self.location.origin ||
+    requestUrl.pathname.startsWith(previewPath)
+  )
     return;
 
   if (event.request.mode === "navigate" || event.request.destination === "document") {

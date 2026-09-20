@@ -7,8 +7,11 @@ describe("deployed preview", () => {
     cy.window().then(async (window) => {
       const registrations = await window.navigator.serviceWorker.getRegistrations();
       const previewScope = new URL("./", Cypress.config("baseUrl") as string).href;
+      const controllingScopes = registrations
+        .map((registration) => registration.scope)
+        .filter((scope) => previewScope.startsWith(scope));
 
-      expect(registrations.map((registration) => registration.scope)).not.to.include(previewScope);
+      expect(controllingScopes).to.be.empty;
     });
   });
 });
