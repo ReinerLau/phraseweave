@@ -104,6 +104,14 @@ jobs:
           DEPLOYMENT_ENVIRONMENT: preview
           BUILD_SHA: ${{ github.sha }}
           BUILD_TIME: ${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
+      - name: Upload preview artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-site-${{ github.sha }}
+          path: apps/client/.output/public
+          if-no-files-found: error
+          retention-days: 90
 
   smoke-test:
     name: smoke-test
@@ -151,3 +159,4 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ACCEPTANCE_ACTORS: ${{ vars.ACCEPTANCE_ACTORS }}

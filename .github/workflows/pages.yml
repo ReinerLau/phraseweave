@@ -2,10 +2,15 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -16,6 +21,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout production source
@@ -23,11 +29,6 @@ jobs:
         with:
           ref: main
           path: source-main
-      - name: Checkout preview source
-        uses: actions/checkout@v4
-        with:
-          ref: dev
-          path: source-dev
       - uses: pnpm/action-setup@v4
         with:
           version: 9.0.6
@@ -36,18 +37,33 @@ jobs:
         with:
           node-version: 20.12.2
           cache: pnpm
-          cache-dependency-path: |
-            source-main/pnpm-lock.yaml
-            source-dev/pnpm-lock.yaml
-      - name: Resolve deployed revisions
+          cache-dependency-path: source-main/pnpm-lock.yaml
+      - name: Resolve trusted production and tested preview revisions
+        id: revisions
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "PRODUCTION_SHA=$(git -C source-main rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "PREVIEW_SHA=$(git -C source-dev rev-parse HEAD)" >> "$GITHUB_ENV"
+          production_sha=$(git -C source-main rev-parse HEAD)
+          preview_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev" --jq '.object.sha')
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs?branch=dev&event=push&status=success&per_page=100" \
+            --jq ".workflow_runs[] | select(.head_sha == \"$preview_sha\") | .id" | head -n 1)
+
+          if [ -z "$run_id" ]; then
+            echo "No successful CI run found for current dev revision $preview_sha." >&2
+            exit 1
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.head_sha }}" != "$preview_sha" ]; then
+            echo "Refusing to deploy stale preview ${{ github.event.workflow_run.head_sha }}; current dev is $preview_sha." >&2
+            exit 1
+          fi
+
+          echo "production_sha=$production_sha" >> "$GITHUB_OUTPUT"
+          echo "preview_sha=$preview_sha" >> "$GITHUB_OUTPUT"
+          echo "preview_run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "DEPLOYED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
       - name: Install production dependencies
         run: pnpm --dir source-main install --frozen-lockfile
-      - name: Install preview dependencies
-        run: pnpm --dir source-dev install --frozen-lockfile
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Build production
@@ -56,29 +72,30 @@ jobs:
           NODE_ENV: production
           NUXT_APP_BASE_URL: /phraseweave/
           DEPLOYMENT_ENVIRONMENT: production
-          BUILD_SHA: ${{ env.PRODUCTION_SHA }}
+          BUILD_SHA: ${{ steps.revisions.outputs.production_sha }}
           BUILD_TIME: ${{ env.DEPLOYED_AT }}
           BACKEND_ENDPOINT: ""
           LOGTO_ENDPOINT: ""
           LOGTO_APP_ID: ""
           EXERCISE_SYNC_SIGNAL_URL: ${{ vars.EXERCISE_SYNC_SIGNAL_URL }}
-      - name: Build preview
-        run: pnpm --dir source-dev build:client
-        env:
-          NODE_ENV: production
-          NUXT_APP_BASE_URL: /phraseweave/preview/
-          DEPLOYMENT_ENVIRONMENT: preview
-          BUILD_SHA: ${{ env.PREVIEW_SHA }}
-          BUILD_TIME: ${{ env.DEPLOYED_AT }}
-          BACKEND_ENDPOINT: ""
-          LOGTO_ENDPOINT: ""
-          LOGTO_APP_ID: ""
-          EXERCISE_SYNC_SIGNAL_URL: ${{ vars.EXERCISE_SYNC_SIGNAL_URL }}
+      - name: Download tested preview artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: preview-site-${{ steps.revisions.outputs.preview_sha }}
+          path: preview-artifact
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.revisions.outputs.preview_run_id }}
+      - name: Reject unsafe preview artifact entries
+        run: |
+          if find preview-artifact -type l -print -quit | grep -q .; then
+            echo "Preview artifact contains a symbolic link." >&2
+            exit 1
+          fi
       - name: Assemble production and preview
         run: |
           mkdir -p site/preview
           cp -R source-main/apps/client/.output/public/. site/
-          cp -R source-dev/apps/client/.output/public/. site/preview/
+          cp -R preview-artifact/. site/preview/
           if [ -f source-main/.github/pages/404.html ]; then
             cp source-main/.github/pages/404.html site/404.html
           fi

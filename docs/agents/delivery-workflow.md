@@ -46,6 +46,8 @@ Only the user may issue `验收通过`, and it must be handled in the original r
    预览地址: https://reinerlau.github.io/phraseweave/preview/
    ```
 
+   The comment must be posted by the same GitHub user named in `验收人`, and that user must be listed in the repository variable `ACCEPTANCE_ACTORS`.
+
 4. Move the Project item to `已验收`.
 
 Do not close the Issue yet. Acceptance authorizes inclusion in the next production release; it is not production deployment.
@@ -67,6 +69,7 @@ Treat `正式发布` as a separate release Goal:
 - Built-in Codex Automatic Review is the semantic review gate. It follows repository instructions but is not a required GitHub status check.
 - Auto-merge may be enabled only after the current PR head has no unresolved P0/P1 Codex findings. Unresolved GitHub review conversations block merging.
 - Required CI checks are `format`, `typecheck`, `unit-tests`, `static-build`, and `smoke-test`.
+- A `dev` push produces a tested preview artifact without deployment credentials. Only the Pages workflow stored on `main` may assemble production plus preview and deploy GitHub Pages.
 - PRs to `main` additionally require `release-readiness`, which verifies that every included `dev` PR references accepted Issue(s).
 - A merged PR updates the remote branch. Follow the synchronization rules in the root `AGENTS.md` before using a local checkout as the deployed source.
 

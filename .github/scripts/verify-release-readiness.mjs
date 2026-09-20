@@ -1,7 +1,17 @@
-const { GITHUB_REPOSITORY, GITHUB_TOKEN, BASE_SHA, HEAD_SHA } = process.env;
+const { GITHUB_REPOSITORY, GITHUB_TOKEN, BASE_SHA, HEAD_SHA, ACCEPTANCE_ACTORS } = process.env;
 
-if (!GITHUB_REPOSITORY || !GITHUB_TOKEN || !BASE_SHA || !HEAD_SHA) {
+if (!GITHUB_REPOSITORY || !GITHUB_TOKEN || !BASE_SHA || !HEAD_SHA || !ACCEPTANCE_ACTORS) {
   throw new Error("Missing GitHub release-readiness environment variables.");
+}
+
+const acceptanceActors = new Set(
+  ACCEPTANCE_ACTORS.split(",")
+    .map((actor) => actor.trim().replace(/^@/, "").toLowerCase())
+    .filter(Boolean),
+);
+
+if (acceptanceActors.size === 0) {
+  throw new Error("ACCEPTANCE_ACTORS must name at least one authorized GitHub user.");
 }
 
 const [owner, repo] = GITHUB_REPOSITORY.split("/");
@@ -81,7 +91,7 @@ for (const pullRequest of pullRequests.values()) {
     );
     const hasAcceptanceRecord = comments.some((comment) => {
       const body = comment.body || "";
-      const accepter = body.match(/^验收人:\s*@?[\w-]+\s*$/m);
+      const accepter = body.match(/^验收人:\s*@?([\w-]+)\s*$/m);
       const acceptedAt = body.match(/^验收时间:\s*(\S+)\s*$/m);
       const previewSha = body.match(/^预览 SHA:\s*([0-9a-f]{40})\s*$/im);
       const previewUrl = body.match(
@@ -91,6 +101,8 @@ for (const pullRequest of pullRequests.values()) {
       return Boolean(
         body.includes("<!-- phraseweave-acceptance -->") &&
           accepter &&
+          comment.user?.login?.toLowerCase() === accepter[1].toLowerCase() &&
+          acceptanceActors.has(comment.user.login.toLowerCase()) &&
           acceptedAt &&
           !Number.isNaN(Date.parse(acceptedAt[1])) &&
           previewSha?.[1] === pullRequest.merge_commit_sha &&
