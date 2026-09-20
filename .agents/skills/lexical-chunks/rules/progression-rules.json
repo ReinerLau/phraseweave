@@ -1,0 +1,38 @@
+{
+  "schema_version": 4,
+  "content_pos": ["ADJ", "ADV", "NOUN", "NUM", "PROPN", "VERB"],
+  "excluded_pos": ["AUX", "CCONJ", "DET", "PART", "PRON", "SCONJ"],
+  "excluded_dependencies": [
+    "agent",
+    "aux",
+    "auxpass",
+    "case",
+    "cc",
+    "cop",
+    "det",
+    "expl",
+    "mark",
+    "neg",
+    "prep",
+    "prt"
+  ],
+  "lexical_pos_compatibility": {
+    "a": ["ADJ"],
+    "n": ["NOUN", "PROPN"],
+    "r": ["ADV"],
+    "s": ["ADJ"],
+    "v": ["VERB"]
+  },
+  "combination_strategy": "nominal_phrase_first_right_fold",
+  "nominal_head_pos": ["NOUN", "PROPN"],
+  "nominal_premodifier_dependencies": [
+    "advmod",
+    "amod",
+    "compound",
+    "nummod",
+    "npadvmod",
+    "quantmod"
+  ],
+  "verb_particle_head_pos": ["VERB"],
+  "verb_particle_dependencies": ["prt"]
+}
