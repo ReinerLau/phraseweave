@@ -1,18 +1,30 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
-import packageJson from "../../package.json";
-
 const appScripts: any = [];
 const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
-const appVersion = packageJson.version;
 const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT || "local";
-const buildVersion = process.env.BUILD_VERSION || appVersion;
+const appVersion = process.env.BUILD_VERSION || formatBuildTimestamp(new Date());
 const exerciseSyncSignalUrl =
   process.env.EXERCISE_SYNC_SIGNAL_URL ||
   process.env.COURSE_TRANSFER_SIGNAL_URL ||
   (process.env.NODE_ENV === "development" ? "ws://localhost:8787/room" : "");
 if (process.env.NODE_ENV === "production") {
   addClarity();
+}
+
+function formatBuildTimestamp(date: Date) {
+  const parts = [
+    date.getUTCFullYear().toString().padStart(4, "0"),
+    (date.getUTCMonth() + 1).toString().padStart(2, "0"),
+    date.getUTCDate().toString().padStart(2, "0"),
+  ];
+  const time = [
+    date.getUTCHours().toString().padStart(2, "0"),
+    date.getUTCMinutes().toString().padStart(2, "0"),
+    date.getUTCSeconds().toString().padStart(2, "0"),
+  ];
+
+  return `${parts.join("")}-${time.join("")}`;
 }
 
 // for https://clarity.microsoft.com/
@@ -39,6 +51,12 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: "PhraseWeave",
+      meta: [
+        {
+          name: "viewport",
+          content: "width=device-width, initial-scale=1, viewport-fit=cover",
+        },
+      ],
       link: [
         { rel: "icon", type: "image/x-icon", href: `${appBaseURL}logo.png` },
         { rel: "manifest", href: `${appBaseURL}manifest.webmanifest` },
@@ -59,7 +77,6 @@ export default defineNuxtConfig({
       exerciseSyncSignalUrl,
       appVersion,
       deploymentEnvironment,
-      buildVersion,
     },
   },
 });

@@ -16,7 +16,7 @@
       </h2>
       <div class="min-h-0 flex-1 overflow-hidden">
         <div
-          class="grid h-full min-h-0 grid-cols-1 content-start justify-start gap-8 overflow-y-auto overflow-x-hidden pb-6 pl-0 pr-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          class="grid h-full min-h-0 grid-cols-1 content-start justify-start gap-8 overflow-y-auto overflow-x-hidden pb-[calc(1.5rem+env(safe-area-inset-bottom))] pl-0 pr-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
           <template
             v-for="course in exerciseCatalogStore.currentExercise?.courses"
