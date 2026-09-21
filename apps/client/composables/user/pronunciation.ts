@@ -1,5 +1,7 @@
 import { ref } from "vue";
 
+import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
+
 /**
  * 有道 Web 发音 API 接口
  *
@@ -32,11 +34,11 @@ export function usePronunciation() {
 
   function setStore(value: PronunciationType) {
     pronunciation.value = value;
-    localStorage.setItem(PRONUNCIATION_TYPE, value);
+    setLocalStorageItem(PRONUNCIATION_TYPE, value);
   }
 
   function getStore(): PronunciationType {
-    return localStorage.getItem(PRONUNCIATION_TYPE) as PronunciationType;
+    return getLocalStorageItem(PRONUNCIATION_TYPE) as PronunciationType;
   }
 
   function getPronunciationType(): number {

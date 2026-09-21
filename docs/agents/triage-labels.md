@@ -11,3 +11,5 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
 When a skill mentions a role, use the corresponding label string from this table.
+
+Lifecycle is separate from triage. Use exactly one of these mutually exclusive labels to show delivery state: `status:in-progress`, `status:waiting-acceptance`, `status:accepted`, `status:released`, or `status:blocked`.

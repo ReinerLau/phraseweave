@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
 import type { Course } from "../exercise";
-import type { CoursePack } from "../exerciseCatalog";
+import type { ExerciseCatalogItem } from "../exerciseCatalog";
 import { isAuthenticated } from "~/services/auth";
 import { getLocalExercise } from "~/services/localExerciseDb";
 import { useExerciseStore } from "../exercise";
@@ -44,7 +44,7 @@ const firstCourse: Course = {
   ],
 };
 
-const coursePack: CoursePack = {
+const coursePack: ExerciseCatalogItem = {
   id: "1",
   order: 1,
   title: "课程包1",

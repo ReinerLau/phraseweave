@@ -1,8 +1,10 @@
-import { defineNuxtPlugin } from "nuxt/app";
+import { defineNuxtPlugin, useRuntimeConfig } from "nuxt/app";
 
 export default defineNuxtPlugin(() => {
   if (!("serviceWorker" in navigator)) return;
 
+  const runtimeConfig = useRuntimeConfig();
+  const baseURL = runtimeConfig.app.baseURL;
   if (import.meta.dev) {
     void navigator.serviceWorker
       .getRegistrations()
@@ -12,5 +14,7 @@ export default defineNuxtPlugin(() => {
     return;
   }
 
-  void navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  if (runtimeConfig.public.deploymentEnvironment === "preview") return;
+
+  void navigator.serviceWorker.register(`${baseURL}sw.js`, { scope: baseURL });
 });

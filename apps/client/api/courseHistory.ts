@@ -1,4 +1,4 @@
-import type { CoursePack } from "~/store/exerciseCatalog";
+import type { ExerciseCatalogItem } from "~/store/exerciseCatalog";
 import { http } from "./http";
 
 export interface CourseHistoryResponse {
@@ -6,7 +6,7 @@ export interface CourseHistoryResponse {
   completionCount: number;
 }
 
-export async function fetchCourseHistory(coursePackId: CoursePack["id"]) {
+export async function fetchCourseHistory(coursePackId: ExerciseCatalogItem["id"]) {
   return await http.get<CourseHistoryResponse[], CourseHistoryResponse[]>(
     `/course-history/${coursePackId}`,
   );

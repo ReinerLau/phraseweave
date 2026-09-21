@@ -1,5 +1,7 @@
 import { computed, ref } from "vue";
 
+import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
+
 export enum SHORTCUT_KEY_TYPES {
   SOUND = "sound",
   ANSWER = "answer",
@@ -68,7 +70,7 @@ export function useShortcutKeyMode() {
   setShortcutKeys();
 
   function setShortcutKeys() {
-    const localKeys = localStorage.getItem(SHORTCUT_KEYS);
+    const localKeys = getLocalStorageItem(SHORTCUT_KEYS);
     if (localKeys) {
       const storedKeys = JSON.parse(localKeys);
       const migratedKeys = { ...storedKeys };
@@ -83,10 +85,10 @@ export function useShortcutKeyMode() {
       shortcutKeys.value = { ...shortcutKeys.value, ...migratedKeys };
 
       if (JSON.stringify(migratedKeys) !== localKeys) {
-        localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(migratedKeys));
+        setLocalStorageItem(SHORTCUT_KEYS, JSON.stringify(migratedKeys));
       }
     } else {
-      localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(shortcutKeys.value));
+      setLocalStorageItem(SHORTCUT_KEYS, JSON.stringify(shortcutKeys.value));
     }
   }
 
@@ -113,7 +115,7 @@ export function useShortcutKeyMode() {
     const trimmedShortcutKeyStr = shortcutKeyStr.value.trim();
     if (trimmedShortcutKeyStr) {
       shortcutKeys.value[currentKeyType.value] = trimmedShortcutKeyStr;
-      localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(shortcutKeys.value));
+      setLocalStorageItem(SHORTCUT_KEYS, JSON.stringify(shortcutKeys.value));
     }
   }
 

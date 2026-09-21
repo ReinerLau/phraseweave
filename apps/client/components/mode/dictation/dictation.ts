@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
+import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
 
 interface ToolBar {
   times: number;
@@ -21,11 +22,11 @@ const toolBarData = reactive({
 
 export function useToolbar() {
   function saveToolBarData() {
-    localStorage.setItem("dictationOptions", JSON.stringify(toolBarData));
+    setLocalStorageItem("dictationOptions", JSON.stringify(toolBarData));
   }
 
   function recoverToolBarData() {
-    const options = localStorage.getItem("dictationOptions");
+    const options = getLocalStorageItem("dictationOptions");
     if (options) {
       Object.assign(toolBarData, JSON.parse(options));
     }

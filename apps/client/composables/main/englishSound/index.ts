@@ -24,7 +24,7 @@ export function useCurrentStatementEnglishSound() {
 
   return {
     playSound: (options?: PlayOptions) => {
-      if (!YOUDAO_PRONUNCIATION_ENABLED) return;
+      if (!YOUDAO_PRONUNCIATION_ENABLED) return () => {};
 
       return play(options);
     },

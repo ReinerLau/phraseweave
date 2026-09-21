@@ -1,5 +1,7 @@
 import { ref } from "vue";
 
+import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
+
 export enum GameMode {
   Dictation = "DICTATION",
   ChineseToEnglish = "CHINESE_TO_ENGLISH",
@@ -19,11 +21,11 @@ function loadCache() {
 }
 
 function getStore() {
-  return localStorage.getItem(GameModeKey) as GameMode;
+  return getLocalStorageItem(GameModeKey) as GameMode;
 }
 
 function setStore(value: GameMode) {
-  localStorage.setItem(GameModeKey, value);
+  setLocalStorageItem(GameModeKey, value);
 }
 
 loadCache();
