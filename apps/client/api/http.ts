@@ -25,14 +25,13 @@ http.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    const { message } = error.response.data;
-    if (Array.isArray(message)) {
-      message.forEach((item) => {
-        httpStatusErrorHandler?.(item, error.response.status);
-      });
-    } else {
-      httpStatusErrorHandler?.(message, error.response.status);
-    }
+    const response = isRecord(error) && isRecord(error.response) ? error.response : undefined;
+    const statusCode = typeof response?.status === "number" ? response.status : 0;
+
+    extractHttpErrorMessages(error).forEach((message) => {
+      httpStatusErrorHandler?.(message, statusCode);
+    });
+
     return Promise.reject(error);
   },
 );
@@ -41,4 +40,20 @@ type HttpStatusErrorHandler = (message: string, statusCode: number) => void;
 let httpStatusErrorHandler: HttpStatusErrorHandler;
 export function injectHttpStatusErrorHandler(handler: HttpStatusErrorHandler) {
   httpStatusErrorHandler = handler;
+}
+
+export function extractHttpErrorMessages(error: unknown) {
+  const response = isRecord(error) && isRecord(error.response) ? error.response : undefined;
+  const data = response && "data" in response ? response.data : undefined;
+  const message = isRecord(data) ? data.message : undefined;
+  const messages = Array.isArray(message) ? message : [message];
+  const validMessages = messages.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
+
+  return validMessages.length > 0 ? validMessages : ["请求失败，请稍后再试"];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
