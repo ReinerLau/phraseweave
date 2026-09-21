@@ -7,13 +7,13 @@
       <NuxtLink
         href="/course-pack"
         class="clickable-item tooltip-item"
-        data-tip="练习列表"
+        data-tip="练习清单"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
       <div
         class="clickable-item tooltip-item ml-4"
-        data-tip="课程题目列表"
+        data-tip="练习卡片列表"
         @click="toggleContents"
       >
         {{ currentCourseInfo }}
@@ -24,7 +24,7 @@
     <div class="flex items-center">
       <div
         class="tooltip-item mr-4"
-        data-tip="重置当前课程进度"
+        data-tip="重置当前练习卡片进度"
         @click="handleDoAgain"
       >
         <span class="clickable-item icon-item i-ph-arrow-counter-clockwise"></span>
@@ -41,7 +41,7 @@
   <MainMessageBox
     class="mt-[-4vh]"
     v-model:isShowModal="showTipModal"
-    content="是否确认重置当前课程进度？"
+    content="是否确认重置当前练习卡片进度？"
     @confirm="handleTipConfirm"
   />
 </template>

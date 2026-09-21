@@ -59,7 +59,7 @@
             class="btn"
             @click="goToNextCourse"
           >
-            {{ haveNextCourse ? "开始下一项练习" : "返回练习列表" }}
+            {{ haveNextCourse ? "开始下一张练习卡片" : "返回练习清单" }}
             <kbd class="kbd"> ↵ </kbd>
           </button>
         </div>
@@ -104,13 +104,13 @@ const { updateLearnRecord } = useLearnRecord();
 
 watch(showModal, (val) => {
   if (val) {
-    // 阻止包含 statement 完成课程后会自动把用户的进度设置成下一课
+    // 阻止包含 statement 完成练习卡片后会自动把用户的进度设置成下一张卡片
     // 这里是为了防止先设置成下一课 后更新了 statement 的进度
     // 这就会造成获取用户最近练习进度出现错误，因为是基于时间来获取的。
     preventSaveStatement();
     // 注册回车键进入下一课
     registerShortcut("enter", goToNextCourse);
-    // 显示结算面板代表当前课程已经完成
+    // 显示结算面板代表当前练习卡片已经完成
     completeCourse();
     // 朗读每日一句
     soundSentence();

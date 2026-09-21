@@ -26,7 +26,7 @@ export const useExerciseCatalogStore = defineStore("exercise-catalog", () => {
 
   async function setupExercise(coursePackId: string) {
     const localPack = await getLocalExercise(coursePackId);
-    if (!localPack) throw new Error("本地找不到该课程包");
+    if (!localPack) throw new Error("本地找不到该练习");
     currentExercise.value = localPack;
   }
 

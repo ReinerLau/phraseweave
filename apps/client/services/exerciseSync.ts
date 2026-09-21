@@ -178,13 +178,13 @@ async function createSession(
       if (onChannelOpen) {
         void onChannelOpen(channel!)
           .then(() => {
-            onUpdate({ status: "completed", progress: 100, message: "课程已发送到手机" });
+            onUpdate({ status: "completed", progress: 100, message: "练习已发送到手机" });
             close();
           })
           .catch((error) => {
             onUpdate({
               status: "error",
-              message: error instanceof Error ? error.message : "课程发送失败",
+              message: error instanceof Error ? error.message : "练习发送失败",
             });
             close();
           });
@@ -213,7 +213,7 @@ async function createSession(
           .catch((error) => {
             onUpdate({
               status: "error",
-              message: error instanceof Error ? error.message : "课程接收失败",
+              message: error instanceof Error ? error.message : "练习接收失败",
             });
             close();
           });

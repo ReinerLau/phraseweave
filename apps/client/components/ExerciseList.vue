@@ -1,7 +1,7 @@
 <template>
-  <div class="flex w-full flex-col pt-2">
-    <div class="my-10 flex items-center justify-between gap-4">
-      <h2 class="text-2xl font-bold">练习列表</h2>
+  <div class="flex min-h-0 w-full flex-col overflow-hidden pt-2">
+    <div class="my-10 flex shrink-0 items-center justify-between gap-4">
+      <h2 class="text-2xl font-bold">练习清单</h2>
       <div class="flex gap-2">
         <button
           class="btn btn-sm"
@@ -23,17 +23,19 @@
       <Loading></Loading>
     </template>
     <template v-else>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        <template
-          v-for="exercise in exerciseCatalogStore.exercises"
-          :key="exercise.id"
-        >
-          <ExerciseCard
-            :exercise="exercise"
-            @delete="deleteExercise"
-            @sync="openSync"
-          />
-        </template>
+      <div class="min-h-0 flex-1 overflow-y-auto pb-6">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <template
+            v-for="exercise in exerciseCatalogStore.exercises"
+            :key="exercise.id"
+          >
+            <ExerciseCard
+              :exercise="exercise"
+              @delete="deleteExercise"
+              @sync="openSync"
+            />
+          </template>
+        </div>
       </div>
     </template>
 
@@ -63,7 +65,7 @@ const selectedExercise = ref<ExercisesResponse[number]>();
 setup();
 
 async function setup() {
-  // 练习列表不会自动更新，所以初始化时只读取一次本地数据。
+  // 练习清单不会自动更新，所以初始化时只读取一次本地数据。
   if (exerciseCatalogStore.exercises.length === 0) {
     isLoading.value = true;
     await exerciseCatalogStore.setupExercises();
