@@ -40,8 +40,12 @@ describe("ExerciseCard", () => {
       },
     });
 
-    const syncButton = wrapper.findAll("button")[0];
-    expect(syncButton.text()).toBe("同步");
+    const syncButton = wrapper.find('button[aria-label="同步"]');
+    expect(syncButton.attributes("title")).toBe("同步");
+    expect(syncButton.find("span").classes()).toContain("i-ph-arrows-clockwise");
+    const deleteButton = wrapper.find('button[aria-label="删除"]');
+    expect(deleteButton.attributes("title")).toBe("删除");
+    expect(deleteButton.find("span").classes()).toContain("i-ph-trash");
 
     await syncButton.trigger("click");
 
