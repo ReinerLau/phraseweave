@@ -10,16 +10,26 @@
           <button
             class="btn btn-ghost btn-xs"
             type="button"
+            aria-label="同步"
+            title="同步"
             @click.stop="emit('sync', exercise)"
           >
-            同步
+            <span
+              class="i-ph-arrows-clockwise h-4 w-4"
+              aria-hidden="true"
+            ></span>
           </button>
           <button
             class="btn btn-ghost btn-xs text-error"
             type="button"
+            aria-label="删除"
+            title="删除"
             @click.stop="emit('delete', exercise)"
           >
-            删除
+            <span
+              class="i-ph-trash h-4 w-4"
+              aria-hidden="true"
+            ></span>
           </button>
         </div>
       </div>
