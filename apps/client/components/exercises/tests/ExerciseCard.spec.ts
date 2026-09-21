@@ -25,6 +25,9 @@ describe("ExerciseCard", () => {
     });
 
     expect(wrapper.text()).toContain("导入的练习");
+    expect(wrapper.classes()).toContain("h-full");
+    expect(wrapper.classes()).toContain("w-full");
+    expect(wrapper.classes()).not.toContain("w-72");
   });
 
   it("emits a sync action for the selected exercise", async () => {
