@@ -46,6 +46,7 @@ describe("ExerciseCard", () => {
     const deleteButton = wrapper.find('button[aria-label="删除"]');
     expect(deleteButton.attributes("title")).toBe("删除");
     expect(deleteButton.find("span").classes()).toContain("i-ph-trash");
+    expect(syncButton.element.parentElement?.className).toContain("flex-col");
 
     await syncButton.trigger("click");
 
