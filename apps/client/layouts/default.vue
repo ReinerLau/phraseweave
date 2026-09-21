@@ -2,12 +2,12 @@
   <div
     :class="[
       'w-full bg-white pb-[env(safe-area-inset-bottom)] text-slate-600 transition-colors dark:bg-theme-dark dark:text-slate-300',
-      isExerciseNavigationPage ? 'h-screen overflow-hidden' : 'min-h-screen',
+      isExerciseNavigationPage ? 'app-dynamic-height overflow-hidden' : 'app-min-height',
     ]"
   >
     <div
       class="m-auto flex w-full flex-col items-center"
-      :class="isExerciseNavigationPage ? 'h-full min-h-0 overflow-hidden' : 'min-h-screen'"
+      :class="isExerciseNavigationPage ? 'h-full min-h-0 overflow-hidden' : 'app-min-height'"
     >
       <Navbar />
       <div
