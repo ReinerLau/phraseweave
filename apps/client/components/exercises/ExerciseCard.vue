@@ -6,7 +6,7 @@
     <div class="card-body">
       <div class="flex items-start justify-between gap-2">
         <h2 class="card-title">{{ exercise.title }}</h2>
-        <div class="flex gap-1">
+        <div class="flex shrink-0 flex-col gap-1">
           <button
             class="btn btn-ghost btn-xs"
             type="button"
