@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'w-full bg-white text-slate-600 transition-colors dark:bg-theme-dark dark:text-slate-300',
+      'w-full bg-white pb-[env(safe-area-inset-bottom)] text-slate-600 transition-colors dark:bg-theme-dark dark:text-slate-300',
       isExerciseNavigationPage ? 'h-screen overflow-hidden' : 'min-h-screen',
     ]"
   >
@@ -9,7 +9,6 @@
       class="m-auto flex w-full flex-col items-center"
       :class="isExerciseNavigationPage ? 'h-full min-h-0 overflow-hidden' : 'min-h-screen'"
     >
-      <EnvironmentBanner />
       <Navbar />
       <div
         class="flex w-full max-w-screen-xl flex-1 px-6"
