@@ -1,4 +1,6 @@
-import { defineNuxtPlugin } from "nuxt/app";
+import { defineNuxtPlugin, useRuntimeConfig } from "nuxt/app";
+
+import { getServiceWorkerRegistration } from "~/utils/serviceWorker";
 
 export default defineNuxtPlugin(() => {
   if (!("serviceWorker" in navigator)) return;
@@ -12,5 +14,6 @@ export default defineNuxtPlugin(() => {
     return;
   }
 
-  void navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  const { scriptUrl, scope } = getServiceWorkerRegistration(useRuntimeConfig().app.baseURL || "/");
+  void navigator.serviceWorker.register(scriptUrl, { scope });
 });

@@ -28,6 +28,7 @@ interface PackageMetadata {
 
 const CHUNK_SIZE = 16 * 1024;
 const RECEIVER_CONNECTION_TIMEOUT_MS = 30_000;
+const SIGNAL_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
 
 export function createRoomToken() {
   const bytes = new Uint8Array(32);
@@ -145,10 +146,13 @@ async function createSession(
 ) {
   if (!isValidRoomToken(roomToken)) throw new Error("无效的练习同步二维码");
 
-  const socket = new WebSocket(getSignalUrl(roomToken));
   const peer = new RTCPeerConnection();
   let channel: RTCDataChannel | undefined;
+  let socket: WebSocket | undefined;
   let closed = false;
+  let peerConnected = false;
+  let signalRetryCount = 0;
+  let signalRetryTimer: ReturnType<typeof setTimeout> | undefined;
   let connectionTimeout: ReturnType<typeof setTimeout> | undefined;
 
   const clearConnectionTimeout = () => {
@@ -156,16 +160,22 @@ async function createSession(
     connectionTimeout = undefined;
   };
 
+  const clearSignalRetry = () => {
+    if (signalRetryTimer) clearTimeout(signalRetryTimer);
+    signalRetryTimer = undefined;
+  };
+
   const close = () => {
     if (closed) return;
     closed = true;
     clearConnectionTimeout();
+    clearSignalRetry();
     peer.close();
-    socket.close();
+    socket?.close();
   };
 
   peer.onicecandidate = (event) => {
-    if (event.candidate && socket.readyState === WebSocket.OPEN) {
+    if (event.candidate && socket?.readyState === WebSocket.OPEN) {
       sendSignal(socket, event.candidate.toJSON());
     }
   };
@@ -174,6 +184,8 @@ async function createSession(
     channel = peer.createDataChannel("course-pack");
     channel.binaryType = "arraybuffer";
     channel.onopen = () => {
+      peerConnected = true;
+      clearSignalRetry();
       onUpdate({ status: "connected", progress: 0, message: "已连接手机" });
       if (onChannelOpen) {
         void onChannelOpen(channel!)
@@ -192,6 +204,8 @@ async function createSession(
     };
   } else {
     peer.ondatachannel = (event) => {
+      peerConnected = true;
+      clearSignalRetry();
       clearConnectionTimeout();
       channel = event.channel;
       channel.binaryType = "arraybuffer";
@@ -221,81 +235,127 @@ async function createSession(
     };
   }
 
-  socket.onopen = () => {
-    sendSocket(socket, { type: "join", role });
-    onUpdate({ status: "waiting", message: "等待另一台设备连接" });
-    if (role === "receiver") {
-      connectionTimeout = setTimeout(() => {
-        if (closed) return;
-        onUpdate({
-          status: "error",
-          message: "同步链接已失效，请让电脑端重新生成同步链接",
-        });
-        close();
-      }, RECEIVER_CONNECTION_TIMEOUT_MS);
-    }
-  };
-
   const pendingCandidates: RTCIceCandidateInit[] = [];
 
-  socket.onmessage = async (event) => {
-    try {
-      const message = JSON.parse(event.data) as SignalMessage;
+  const reportError = (message: string) => {
+    if (closed) return;
+    onUpdate({ status: "error", message });
+    close();
+  };
 
-      if (message.type === "error") throw new Error(formatSignalError(message.message));
+  const scheduleSignalRetry = (message: string) => {
+    if (closed || peerConnected || signalRetryTimer) return;
 
-      if (message.type === "peer-ready" && role === "sender") {
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        sendSignal(socket, offer);
+    const delay = SIGNAL_RETRY_DELAYS_MS[signalRetryCount];
+    if (delay === undefined) {
+      reportError(message);
+      return;
+    }
+
+    signalRetryCount += 1;
+    signalRetryTimer = setTimeout(() => {
+      signalRetryTimer = undefined;
+      if (!closed && !peerConnected) connectSignalSocket();
+    }, delay);
+  };
+
+  const connectSignalSocket = () => {
+    if (closed || peerConnected) return;
+
+    const nextSocket = new WebSocket(getSignalUrl(roomToken));
+    socket = nextSocket;
+    let handled = false;
+
+    const detachSocket = () => {
+      nextSocket.onopen = null;
+      nextSocket.onmessage = null;
+      nextSocket.onerror = null;
+      nextSocket.onclose = null;
+      if (socket === nextSocket) socket = undefined;
+    };
+
+    const retryAfterSignalFailure = (message: string) => {
+      if (handled || closed || peerConnected) return;
+      handled = true;
+      detachSocket();
+      nextSocket.close();
+      scheduleSignalRetry(message);
+    };
+
+    nextSocket.onopen = () => {
+      if (closed) {
+        nextSocket.close();
         return;
       }
 
-      if (message.type !== "signal" || !message.data) return;
-
-      if (isIceCandidate(message.data)) {
-        if (peer.remoteDescription) {
-          await peer.addIceCandidate(message.data);
-        } else {
-          pendingCandidates.push(message.data);
-        }
-      } else if (
-        isSessionDescription(message.data) &&
-        role === "receiver" &&
-        message.data.type === "offer"
-      ) {
-        await peer.setRemoteDescription(message.data);
-        await flushCandidates(peer, pendingCandidates);
-        const answer = await peer.createAnswer();
-        await peer.setLocalDescription(answer);
-        sendSignal(socket, answer);
-      } else if (
-        isSessionDescription(message.data) &&
-        role === "sender" &&
-        message.data.type === "answer"
-      ) {
-        await peer.setRemoteDescription(message.data);
-        await flushCandidates(peer, pendingCandidates);
+      sendSocket(nextSocket, { type: "join", role });
+      onUpdate({ status: "waiting", message: "等待另一台设备连接" });
+      if (role === "receiver" && !connectionTimeout) {
+        connectionTimeout = setTimeout(() => {
+          if (closed) return;
+          reportError("同步链接已失效，请让电脑端重新生成同步链接");
+        }, RECEIVER_CONNECTION_TIMEOUT_MS);
       }
-    } catch (error) {
-      onUpdate({
-        status: "error",
-        message: error instanceof Error ? error.message : "信令协商失败",
-      });
-      close();
-    }
+    };
+
+    nextSocket.onmessage = async (event) => {
+      try {
+        const message = JSON.parse(event.data) as SignalMessage;
+
+        if (message.type === "error") {
+          reportError(formatSignalError(message.message));
+          return;
+        }
+
+        if (message.type === "peer-ready" && role === "sender") {
+          const offer = await peer.createOffer();
+          await peer.setLocalDescription(offer);
+          sendSignal(nextSocket, offer);
+          return;
+        }
+
+        if (message.type !== "signal" || !message.data) return;
+
+        if (isIceCandidate(message.data)) {
+          if (peer.remoteDescription) {
+            await peer.addIceCandidate(message.data);
+          } else {
+            pendingCandidates.push(message.data);
+          }
+        } else if (
+          isSessionDescription(message.data) &&
+          role === "receiver" &&
+          message.data.type === "offer"
+        ) {
+          await peer.setRemoteDescription(message.data);
+          await flushCandidates(peer, pendingCandidates);
+          const answer = await peer.createAnswer();
+          await peer.setLocalDescription(answer);
+          sendSignal(nextSocket, answer);
+        } else if (
+          isSessionDescription(message.data) &&
+          role === "sender" &&
+          message.data.type === "answer"
+        ) {
+          await peer.setRemoteDescription(message.data);
+          await flushCandidates(peer, pendingCandidates);
+        }
+      } catch (error) {
+        reportError(error instanceof Error ? error.message : "信令协商失败");
+      }
+    };
+
+    nextSocket.onerror = () => {
+      retryAfterSignalFailure("无法连接练习同步服务");
+    };
+    nextSocket.onclose = () => {
+      if (!closed && !peerConnected) {
+        retryAfterSignalFailure("练习同步连接已断开，请重新生成同步链接");
+      }
+    };
   };
 
-  socket.onerror = () => {
-    onUpdate({ status: "error", message: "无法连接练习同步服务" });
-    close();
-  };
-  socket.onclose = () => {
-    if (!closed) {
-      clearConnectionTimeout();
-      onUpdate({ status: "error", message: "练习同步连接已断开，请重新生成同步链接" });
-    }
-  };
+  connectSignalSocket();
 
   return { close };
 }

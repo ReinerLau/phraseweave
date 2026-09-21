@@ -1,11 +1,27 @@
-const CACHE_NAME = "phraseweave-shell-v1";
+const CACHE_NAME = "phraseweave-shell-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      caches
+        .keys()
+        .then((cacheNames) =>
+          Promise.all(
+            cacheNames
+              .filter(
+                (cacheName) =>
+                  cacheName.startsWith("phraseweave-shell-") && cacheName !== CACHE_NAME,
+              )
+              .map((cacheName) => caches.delete(cacheName)),
+          ),
+        ),
+      self.clients.claim(),
+    ]),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
