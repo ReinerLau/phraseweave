@@ -94,6 +94,7 @@ describe("mobile practice layout", () => {
     cy.reload();
     cy.contains(courseTitle).first().click();
     cy.location("pathname").should("eq", `/game/${coursePackId}/${courseId}`);
+    cy.contains("返回练习清单").should("not.exist");
   });
 
   it("keeps the question view within the viewport", () => {
