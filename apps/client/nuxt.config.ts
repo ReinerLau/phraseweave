@@ -1,5 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
+import { formatBuildTimestamp } from "./utils/buildTimestamp";
+
 const appScripts: any = [];
 const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
 const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT || "local";
@@ -10,21 +12,6 @@ const exerciseSyncSignalUrl =
   (process.env.NODE_ENV === "development" ? "ws://localhost:8787/room" : "");
 if (process.env.NODE_ENV === "production") {
   addClarity();
-}
-
-function formatBuildTimestamp(date: Date) {
-  const parts = [
-    date.getUTCFullYear().toString().padStart(4, "0"),
-    (date.getUTCMonth() + 1).toString().padStart(2, "0"),
-    date.getUTCDate().toString().padStart(2, "0"),
-  ];
-  const time = [
-    date.getUTCHours().toString().padStart(2, "0"),
-    date.getUTCMinutes().toString().padStart(2, "0"),
-    date.getUTCSeconds().toString().padStart(2, "0"),
-  ];
-
-  return `${parts.join("")}-${time.join("")}`;
 }
 
 // for https://clarity.microsoft.com/

@@ -38,7 +38,7 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Set production build version
-        run: echo "BUILD_VERSION=$(date -u +'%Y%m%d-%H%M%S')" >> "$GITHUB_ENV"
+        run: echo "BUILD_VERSION=$(TZ=Asia/Shanghai date +'%Y%m%d-%H%M%S')" >> "$GITHUB_ENV"
       - name: Build production
         run: pnpm --dir source-main build:client
         env:
