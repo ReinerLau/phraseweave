@@ -80,6 +80,19 @@ body {
   }
 }
 
+@layer utilities {
+  .app-min-height {
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+
+  .app-dynamic-height {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
+}
+
 /* @layer base {
   * {
     @apply border-border;
