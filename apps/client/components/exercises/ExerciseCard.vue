@@ -9,6 +9,7 @@
         <div
           ref="actionsMenu"
           class="dropdown dropdown-end shrink-0"
+          :class="{ 'dropdown-open': showActions }"
           @click.stop
         >
           <button

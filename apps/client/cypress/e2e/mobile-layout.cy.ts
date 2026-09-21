@@ -112,4 +112,28 @@ describe("mobile practice layout", () => {
     cy.get("#contents").should("have.class", "show");
     assertNoHorizontalOverflow();
   });
+
+  it("opens exercise actions from a touch tap", () => {
+    cy.visit("/course-pack");
+    cy.get('button[aria-label="更多操作"]')
+      .should("be.visible")
+      .then(($button) => {
+        const button = $button[0];
+        button.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            bubbles: true,
+            pointerType: "touch",
+          }),
+        );
+        button.dispatchEvent(
+          new PointerEvent("pointerup", {
+            bubbles: true,
+            pointerType: "touch",
+          }),
+        );
+        button.click();
+      });
+    cy.get('button[aria-label="同步"]').should("be.visible");
+    cy.get('button[aria-label="删除"]').should("be.visible");
+  });
 });
