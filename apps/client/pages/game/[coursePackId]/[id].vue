@@ -4,12 +4,6 @@
       <Loading></Loading>
     </template>
     <template v-else>
-      <div class="mb-4 flex items-center">
-        <CommonBackLink
-          to="/course-pack"
-          label="返回练习清单"
-        />
-      </div>
       <MainTool />
       <MainGame />
     </template>
