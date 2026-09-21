@@ -1,10 +1,12 @@
 <template>
-  <div class="text-center">
-    <div class="ml-8 inline-flex flex-wrap items-center gap-1 text-5xl">
+  <div class="min-w-0 max-w-full text-center">
+    <div
+      class="flex w-full min-w-0 max-w-full flex-wrap items-center justify-center gap-1 text-5xl"
+    >
       <span
         v-for="word in words"
         :key="word"
-        class="cursor-pointer p-1 hover:text-fuchsia-500"
+        class="max-w-full cursor-pointer break-words p-1 hover:text-fuchsia-500"
         @click="handlePlayWordSound(word)"
         >{{ word }}</span
       >

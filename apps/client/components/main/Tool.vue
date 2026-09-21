@@ -1,18 +1,18 @@
 <template>
   <div
-    class="relative flex items-center justify-between border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
+    class="relative flex min-w-0 max-w-full items-center justify-between border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
   >
     <!-- 左侧 -->
-    <div class="flex items-center">
+    <div class="flex min-w-0 flex-1 items-center">
       <NuxtLink
         href="/course-pack"
-        class="clickable-item tooltip-item"
+        class="clickable-item tooltip-item shrink-0"
         data-tip="练习清单"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
       <div
-        class="clickable-item tooltip-item ml-4"
+        class="clickable-item tooltip-item ml-4 min-w-0 flex-1 truncate"
         data-tip="练习卡片列表"
         @click="toggleContents"
       >
@@ -21,9 +21,9 @@
     </div>
 
     <!-- 右侧 -->
-    <div class="flex items-center">
+    <div class="flex shrink-0 items-center">
       <div
-        class="tooltip-item mr-4"
+        class="tooltip-item tooltip-left mr-4"
         data-tip="重置当前练习卡片进度"
         @click="handleDoAgain"
       >
