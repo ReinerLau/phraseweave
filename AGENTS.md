@@ -10,7 +10,11 @@ Use the single-context layout with root `CONTEXT.md` and `docs/adr/` when docume
 
 ### Manual iteration
 
-The delivery loop is intentionally manual: plan, implement, run any useful checks, commit or merge as appropriate, and deploy when requested. Issues, branches, worktrees, pull requests, checks, and releases are optional tools. See `docs/agents/delivery-workflow.md` for the lightweight sequence.
+The delivery loop is intentionally manual: plan, implement, run any useful checks, commit on a working branch, open a pull request, merge it into `main`, and deploy when requested. `main` is a protected branch: code destined for release must reach it through a pull request, and agents must never push directly to `main`. When the user asks to publish, inspect the current branch and changes first, then prepare or update the pull request; do not attempt a direct push to `main`. See `docs/agents/delivery-workflow.md` for the lightweight sequence.
+
+### Protected release branch
+
+Treat `main` as the production release branch and protected branch. A release consists of merging a pull request into `main`; the existing GitHub Pages workflow then deploys the merged revision. Re-running that workflow manually is allowed for a previously merged revision, but it does not replace the pull request requirement for new code.
 
 ### Worktree and local main synchronization
 
