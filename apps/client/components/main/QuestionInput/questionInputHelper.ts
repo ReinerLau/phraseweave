@@ -8,6 +8,37 @@ export const QUESTION_INPUT_MAX_FONT_SIZE_REM = 3;
 
 const QUESTION_INPUT_FIT_FACTOR = 1.67;
 
+const QUESTION_INPUT_VIEWPORT_PADDING = 16;
+
+export interface QuestionInputRect {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Returns the amount the document needs to move for the input to stay inside
+ * the currently visible viewport (including the iOS keyboard viewport).
+ */
+export function getQuestionInputScrollOffset(
+  inputRect: QuestionInputRect,
+  viewportHeight: number,
+  viewportOffsetTop = 0,
+  viewportPadding = QUESTION_INPUT_VIEWPORT_PADDING,
+) {
+  const visibleTop = viewportOffsetTop + viewportPadding;
+  const visibleBottom = viewportOffsetTop + viewportHeight - viewportPadding;
+
+  if (inputRect.bottom > visibleBottom) {
+    return inputRect.bottom - visibleBottom;
+  }
+
+  if (inputRect.top < visibleTop) {
+    return inputRect.top - visibleTop;
+  }
+
+  return 0;
+}
+
 export function useQuestionInput() {
   function focusInput() {
     focusing.value = true;

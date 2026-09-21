@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getQuestionInputScrollOffset,
   getQuestionInputStyle,
   getQuestionTextWidth,
   getWordWidth,
@@ -36,6 +37,12 @@ describe("getWordWidth", () => {
 });
 
 describe("question input layout", () => {
+  it("keeps the input above the visible viewport bottom", () => {
+    expect(getQuestionInputScrollOffset({ top: 420, bottom: 480 }, 400)).toBe(96);
+    expect(getQuestionInputScrollOffset({ top: 8, bottom: 48 }, 400)).toBe(-8);
+    expect(getQuestionInputScrollOffset({ top: 100, bottom: 160 }, 400)).toBe(0);
+  });
+
   it("includes the spaces between words when estimating the sentence width", () => {
     expect(getQuestionTextWidth(["short", "sentence"])).toBeCloseTo(15);
   });

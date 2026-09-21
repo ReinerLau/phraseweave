@@ -1,5 +1,8 @@
 <template>
-  <div class="question-input-shell text-center">
+  <div
+    class="question-input-shell text-center"
+    :style="{ '--question-keyboard-inset': `${keyboardInset}px` }"
+  >
     <div
       class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-center gap-2 transition-all"
       :style="questionInputStyle"
@@ -22,7 +25,7 @@
         type="text"
         v-model="inputValue"
         @keydown="handleKeydown"
-        @focus="focusInput"
+        @focus="handleInputFocus"
         @blur="blurInput"
         @dblclick.prevent
         @mousedown="preventCursorMove"
@@ -48,7 +51,12 @@ import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useShowWordsWidth } from "~/composables/user/words";
 import { useExerciseStore } from "~/store/exercise";
-import { getQuestionInputStyle, getWordWidth, useQuestionInput } from "./questionInputHelper";
+import {
+  getQuestionInputScrollOffset,
+  getQuestionInputStyle,
+  getWordWidth,
+  useQuestionInput,
+} from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
 const courseStore = useExerciseStore();
@@ -76,9 +84,101 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, handleKeyboardI
   });
 const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
 
+const keyboardInset = ref(0);
+let inputVisibilityFrame: number | undefined;
+let inputVisibilityTimeout: number | undefined;
+let viewportHeightBeforeKeyboard = 0;
+
+function updateKeyboardInset() {
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    keyboardInset.value = 0;
+    return;
+  }
+
+  if (!focusing.value) {
+    if (
+      viewportHeightBeforeKeyboard === 0 ||
+      viewport.height >= viewportHeightBeforeKeyboard - 80
+    ) {
+      viewportHeightBeforeKeyboard = window.innerHeight;
+    }
+    keyboardInset.value = 0;
+    return;
+  }
+
+  const referenceHeight = Math.max(viewportHeightBeforeKeyboard, window.innerHeight);
+  const inset = referenceHeight - viewport.height - viewport.offsetTop;
+  keyboardInset.value = inset > 80 ? inset : 0;
+}
+
+function ensureInputVisible() {
+  const input = inputEl.value;
+  if (!input) return;
+
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    input.scrollIntoView({ block: "nearest", inline: "nearest" });
+    return;
+  }
+
+  const rect = input.getBoundingClientRect();
+  const scrollOffset = getQuestionInputScrollOffset(rect, viewport.height, viewport.offsetTop);
+
+  if (scrollOffset !== 0) {
+    window.scrollBy({ top: scrollOffset, left: 0, behavior: "auto" });
+  }
+}
+
+function scheduleInputVisibilityCheck() {
+  updateKeyboardInset();
+  if (inputVisibilityFrame !== undefined) {
+    window.cancelAnimationFrame(inputVisibilityFrame);
+  }
+
+  inputVisibilityFrame = window.requestAnimationFrame(() => {
+    inputVisibilityFrame = undefined;
+    ensureInputVisible();
+  });
+}
+
+function handleInputFocus() {
+  focusInput();
+  scheduleInputVisibilityCheck();
+
+  if (inputVisibilityTimeout !== undefined) {
+    window.clearTimeout(inputVisibilityTimeout);
+  }
+  inputVisibilityTimeout = window.setTimeout(scheduleInputVisibilityCheck, 300);
+}
+
+function handleViewportResize() {
+  if (focusing.value) {
+    scheduleInputVisibilityCheck();
+  }
+}
+
 onMounted(() => {
+  viewportHeightBeforeKeyboard = window.innerHeight;
+  const viewport = window.visualViewport;
+  viewport?.addEventListener("resize", handleViewportResize);
+  viewport?.addEventListener("scroll", handleViewportResize);
+  window.addEventListener("resize", handleViewportResize);
   focusInput();
   resetCloseTip();
+});
+
+onUnmounted(() => {
+  const viewport = window.visualViewport;
+  viewport?.removeEventListener("resize", handleViewportResize);
+  viewport?.removeEventListener("scroll", handleViewportResize);
+  window.removeEventListener("resize", handleViewportResize);
+  if (inputVisibilityFrame !== undefined) {
+    window.cancelAnimationFrame(inputVisibilityFrame);
+  }
+  if (inputVisibilityTimeout !== undefined) {
+    window.clearTimeout(inputVisibilityTimeout);
+  }
 });
 
 focusInputWhenWIndowFocus();
@@ -237,6 +337,7 @@ function preventCursorMove(event: MouseEvent) {
   max-height: min(60vh, 32rem);
   overflow-x: hidden;
   overflow-y: auto;
+  margin-bottom: var(--question-keyboard-inset, 0px);
   padding-inline: 1rem;
 }
 
