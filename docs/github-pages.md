@@ -33,7 +33,7 @@ EXERCISE_SYNC_SIGNAL_URL=https://phraseweave-course-signal.example.workers.dev
 
 在 `Settings → Pages → Build and deployment` 中选择 `GitHub Actions`。
 
-仓库已有 `.github/workflows/pages.yml`。在 GitHub Actions 中手动运行该 workflow 后，它会从 `main` 构建 `apps/client` 并发布到：
+仓库已有 `.github/workflows/pages.yml`。当代码合并到 `main` 后，workflow 会自动从 `main` 构建 `apps/client` 并发布；也可以在 GitHub Actions 中手动运行该 workflow 进行补发。站点地址为：
 
 ```text
 https://<github-用户名>.github.io/phraseweave/
