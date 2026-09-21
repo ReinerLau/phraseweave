@@ -6,22 +6,23 @@ const appScripts: any = [];
 const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
 const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT || "local";
 const appVersion = process.env.BUILD_VERSION || formatBuildTimestamp(new Date());
+const clarityId = process.env.CLARITY?.trim();
 const exerciseSyncSignalUrl =
   process.env.EXERCISE_SYNC_SIGNAL_URL ||
   process.env.COURSE_TRANSFER_SIGNAL_URL ||
   (process.env.NODE_ENV === "development" ? "ws://localhost:8787/room" : "");
-if (process.env.NODE_ENV === "production") {
-  addClarity();
+if (process.env.NODE_ENV === "production" && clarityId) {
+  addClarity(clarityId);
 }
 
 // for https://clarity.microsoft.com/
-function addClarity() {
+function addClarity(id: string) {
   appScripts.push({
     innerHTML: `(function(c,l,a,r,i,t,y){
         c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
         t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
         y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "${process.env.CLARITY}");`,
+    })(window, document, "clarity", "script", "${id}");`,
   });
 }
 
