@@ -53,6 +53,9 @@ for (const pullRequest of await githubPaginated(
 )) {
   if (pullRequest.merged_at && pullRequest.merge_commit_sha) {
     mergedFeaturePrsByCommit.set(pullRequest.merge_commit_sha, pullRequest);
+    if (pullRequest.head?.sha) {
+      mergedFeaturePrsByCommit.set(pullRequest.head.sha, pullRequest);
+    }
   }
 }
 
