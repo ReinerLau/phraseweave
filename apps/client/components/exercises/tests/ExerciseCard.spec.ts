@@ -41,7 +41,8 @@ describe("ExerciseCard", () => {
     });
 
     const syncButton = wrapper.findAll("button")[0];
-    expect(syncButton.text()).toBe("同步");
+    expect(syncButton.attributes("aria-label")).toBe("同步");
+    expect(syncButton.find(".i-ph-arrows-clockwise").exists()).toBe(true);
 
     await syncButton.trigger("click");
 
