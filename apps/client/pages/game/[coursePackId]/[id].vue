@@ -1,5 +1,5 @@
 <template>
-  <div class="flex w-full flex-col pt-2">
+  <div class="flex w-full min-w-0 flex-col overflow-x-hidden pt-2">
     <template v-if="isLoading">
       <Loading></Loading>
     </template>

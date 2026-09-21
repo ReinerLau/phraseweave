@@ -11,7 +11,7 @@
     >
       <Navbar />
       <div
-        class="flex w-full max-w-screen-xl flex-1 px-6"
+        class="flex w-full min-w-0 max-w-screen-xl flex-1 px-6"
         :class="isExerciseNavigationPage ? 'min-h-0 overflow-hidden' : ''"
       >
         <slot></slot>

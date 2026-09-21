@@ -1,12 +1,13 @@
 <template>
   <div>
     <dialog
+      v-if="shareModalVisible"
+      open
       class="modal mt-[-8vh]"
-      :open="shareModalVisible"
     >
       <div
         ref="dialogBoxRef"
-        class="modal-box flex w-[27rem] flex-col items-center overflow-hidden"
+        class="modal-box flex w-[27rem] max-w-[calc(100vw-2rem)] flex-col items-center overflow-hidden"
       >
         <div class="flex">
           <div class="gallery mr-2 py-2">

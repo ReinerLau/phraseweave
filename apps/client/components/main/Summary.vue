@@ -1,10 +1,11 @@
 <template>
   <div>
     <dialog
+      v-if="showModal"
+      open
       className="modal mt-[-8vh]"
-      :open="showModal"
     >
-      <div className="modal-box max-w-[48rem]">
+      <div className="modal-box w-[calc(100vw-2rem)] max-w-[48rem]">
         <div class="relative">
           <h3 className="font-bold text-lg mb-4">🎉 Congratulations!</h3>
           <button

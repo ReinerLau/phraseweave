@@ -1,7 +1,8 @@
 <template>
   <dialog
+    v-if="authRequireModalState"
+    open
     className="modal top-[-8vh]"
-    :open="authRequireModalState"
   >
     <div className="modal-box">
       <h3 className="font-bold text-lg mb-4">✨ 友情提示</h3>
