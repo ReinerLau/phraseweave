@@ -46,6 +46,15 @@ const comparison = await github(`/repos/${owner}/${repo}/compare/${BASE_SHA}...$
 const pullRequests = new Map();
 const commitsWithoutFeaturePr = [];
 const failures = [];
+const mergedFeaturePrsByCommit = new Map();
+
+for (const pullRequest of await githubPaginated(
+  `/repos/${owner}/${repo}/pulls?state=closed&base=dev&sort=updated&direction=desc`,
+)) {
+  if (pullRequest.merged_at && pullRequest.merge_commit_sha) {
+    mergedFeaturePrsByCommit.set(pullRequest.merge_commit_sha, pullRequest);
+  }
+}
 
 if (comparison.total_commits > comparison.commits.length) {
   failures.push(
@@ -54,10 +63,8 @@ if (comparison.total_commits > comparison.commits.length) {
 }
 
 for (const commit of comparison.commits) {
-  const associated = await github(`/repos/${owner}/${repo}/commits/${commit.sha}/pulls`);
-  const featurePrs = associated.filter(
-    (pullRequest) => pullRequest.base.ref === "dev" && pullRequest.merged_at,
-  );
+  const featurePr = mergedFeaturePrsByCommit.get(commit.sha);
+  const featurePrs = featurePr ? [featurePr] : [];
 
   if (featurePrs.length === 0) {
     commitsWithoutFeaturePr.push(commit.sha.slice(0, 7));
