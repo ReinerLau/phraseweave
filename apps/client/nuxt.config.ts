@@ -6,8 +6,7 @@ const appScripts: any = [];
 const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
 const appVersion = packageJson.version;
 const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT || "local";
-const buildSha = process.env.BUILD_SHA || "local";
-const buildTime = process.env.BUILD_TIME || "";
+const buildVersion = process.env.BUILD_VERSION || appVersion;
 const exerciseSyncSignalUrl =
   process.env.EXERCISE_SYNC_SIGNAL_URL ||
   process.env.COURSE_TRANSFER_SIGNAL_URL ||
@@ -60,8 +59,7 @@ export default defineNuxtConfig({
       exerciseSyncSignalUrl,
       appVersion,
       deploymentEnvironment,
-      buildSha,
-      buildTime,
+      buildVersion,
     },
   },
 });

@@ -93,7 +93,7 @@ for (const pullRequest of pullRequests.values()) {
       const body = comment.body || "";
       const accepter = body.match(/^验收人:\s*@?([\w-]+)\s*$/m);
       const acceptedAt = body.match(/^验收时间:\s*(\S+)\s*$/m);
-      const previewSha = body.match(/^预览 SHA:\s*([0-9a-f]{40})\s*$/im);
+      const previewVersion = body.match(/^预览版本:\s*(preview-\d{4}\.\d{2}\.\d{2}-\d+)\s*$/m);
       const previewUrl = body.match(
         /^预览地址:\s*https:\/\/reinerlau\.github\.io\/phraseweave\/preview\/?\s*$/m,
       );
@@ -105,18 +105,16 @@ for (const pullRequest of pullRequests.values()) {
           acceptanceActors.has(comment.user.login.toLowerCase()) &&
           acceptedAt &&
           !Number.isNaN(Date.parse(acceptedAt[1])) &&
-          previewSha?.[1] === pullRequest.merge_commit_sha &&
+          previewVersion &&
           previewUrl,
       );
     });
 
-    if (!labels.includes("accepted")) {
-      failures.push(`Issue #${issueNumber} is missing the accepted label.`);
+    if (!labels.includes("status:accepted")) {
+      failures.push(`Issue #${issueNumber} is missing the status:accepted label.`);
     }
     if (!hasAcceptanceRecord) {
-      failures.push(
-        `Issue #${issueNumber} needs a complete acceptance record for merged SHA ${pullRequest.merge_commit_sha}.`,
-      );
+      failures.push(`Issue #${issueNumber} needs a complete acceptance record.`);
     }
   }
 }

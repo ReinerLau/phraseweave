@@ -97,13 +97,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Set preview build version
+        run: echo "BUILD_VERSION=preview-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
       - run: pnpm build:client
         env:
           NODE_ENV: production
           NUXT_APP_BASE_URL: /phraseweave/preview/
           DEPLOYMENT_ENVIRONMENT: preview
-          BUILD_SHA: ${{ github.sha }}
-          BUILD_TIME: ${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
       - name: Upload preview artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
         uses: actions/upload-artifact@v4
@@ -128,14 +128,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Cypress browser
         run: pnpm -F client exec cypress install
+      - name: Set preview build version
+        run: echo "BUILD_VERSION=preview-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
       - name: Build preview
         run: pnpm build:client
         env:
           NODE_ENV: production
           NUXT_APP_BASE_URL: /phraseweave/preview/
           DEPLOYMENT_ENVIRONMENT: preview
-          BUILD_SHA: ${{ github.sha }}
-          BUILD_TIME: ${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
       - name: Assemble preview path
         run: |
           mkdir -p "$RUNNER_TEMP/phraseweave-smoke/phraseweave/preview"

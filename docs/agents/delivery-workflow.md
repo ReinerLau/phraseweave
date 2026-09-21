@@ -1,79 +1,69 @@
-# Delivery workflow
+# 迭代交付流程
 
-This repository uses GitHub as the durable source of truth. A chat is the working session, not the project record.
+GitHub Issue 和 Pull Request 是持续交付的正式记录。Codex 对话是工作会话，不能替代 Issue。
 
-## One requirement, one delivery lane
+## 需求进入与规划
 
-For each requirement:
+1. 在 Plan Mode 中讨论并澄清需求。
+2. 生成完整实现计划，至少覆盖目标、用户可见的成功标准、范围、接口、数据流、边界情况、测试、发布方式和假设。
+3. 只有在用户说“开始开发”后，才创建 GitHub Issue，并把完整计划写入 Issue 正文。
+4. Issue 始终只保留一个流程状态标签：`status:in-progress`、`status:waiting-acceptance`、`status:accepted`、`status:released` 或 `status:blocked`。流程状态标签与 triage 标签分开使用。
 
-1. Create or identify one GitHub Issue and add it to the delivery Project.
-2. Use one Codex conversation and one isolated worktree/branch for that Issue.
-3. Keep the Issue, branch, commits, and pull request linked. A feature PR targets `dev` and contains `Refs #<issue>`; do not use `Closes` because acceptance and production happen later.
-4. Independent requirements may run in parallel. Requirements that touch the same area or depend on one another must be ordered explicitly.
-5. The original requirement conversation owns implementation, CI failures, review feedback, merge conflicts, and preview verification until the requirement reaches `待验收`.
+所有改动都必须关联一个 Issue，包括产品功能、缺陷修复、文档、CI、依赖和重构。实现细节发生变化时，更新原 Issue 并记录原因；如果目标、范围或验收标准发生变化，暂停开发并重新确认计划。
 
-Project statuses are: `待澄清`, `可开发`, `开发中`, `PR 审查中`, `待验收`, `已验收`, `已发布`, and `受阻`.
+## 交付隔离
 
-## Natural-language commands
+每个 Issue 对应一个 Codex 对话、一个隔离 Worktree、一个分支和一个 Pull Request。相互独立的 Issue 可以并行推进；有依赖关系或修改同一区域的 Issue 必须在计划中明确顺序。
 
-### 发布测试
+功能和修复分支统一以 `dev` 为目标分支。PR 正文必须包含 `Refs #<issue>`，不能使用 `Closes`，因为验收和正式发布在之后进行。只有用户说“发布测试”时才创建 PR，不提前创建 Draft PR。
 
-When the user says `发布测试`, treat it as a completion contract, not merely a request to open a PR:
+## “发布测试”
 
-1. Start or continue a Goal whose completion condition is a verified preview deployment.
-2. Run the relevant local checks.
-3. Push the requirement branch and open a PR to `dev` with `Refs #<issue>`.
-4. Request/observe Codex review. Do not enable auto-merge while the current PR head has unresolved P0/P1 findings.
-5. Keep fixing and pushing until all required CI checks pass, review conversations are resolved, and auto-merge merges the PR.
-6. Wait for the Pages deployment, then smoke-test the fixed preview URL at `https://reinerlau.github.io/phraseweave/preview/`.
-7. Record the merged SHA and preview URL on the Issue, move it to `待验收`, and only then complete the Goal.
+把“发布测试”视为一个完整的交付指令：
 
-Feature PRs use squash merge. Never merge a failing PR or bypass branch protection.
+1. 运行相关的本地检查。
+2. 推送需求分支，并使用仓库 PR 模板创建一个指向 `dev` 的 PR。
+3. 等待 `format`、`typecheck`、`unit-tests`、`static-build` 和 `smoke-test` 全部通过。检查失败时修复问题；只有确认是偶发基础设施问题时才重跑同一检查，并始终保留分支保护。
+4. 阅读 Codex Review，并向用户总结发现。Review 建议不阻塞合并；CI 和分支保护是合并门禁。
+5. 使用 squash merge 启用或等待自动合并，并等待 PR 合入。
+6. 等待 Pages 工作流部署固定预览地址：`https://reinerlau.github.io/phraseweave/preview/`。
+7. 验证预览路径的 smoke 流程，并确认页面显示当前版本，格式为 `preview-YYYY.MM.DD-N`。
+8. 将 Issue 状态改为 `status:waiting-acceptance`，并报告预览地址和版本号。
 
-### 验收通过
+如果 CI、Review、合并或部署失败，原对话和 PR 继续负责处理：诊断、修复、推送并重新等待。外部依赖导致无法推进时，将 Issue 改为 `status:blocked`。
 
-Only the user may issue `验收通过`, and it must be handled in the original requirement conversation. On that command:
+## “验收通过”
 
-1. Resolve the Issue and preview SHA being accepted.
-2. Add the `accepted` label.
-3. Add an Issue comment in this exact shape. `预览 SHA` is the full 40-character squash-merge SHA deployed to `dev`:
+只有用户本人可以发出“验收通过”。Codex 写入验收评论，包含授权用户、时间、固定预览地址和可读的预览版本，然后把 Issue 改为 `status:accepted`。验收记录不绑定 Git SHA；页面上显示的版本号是用户可识别的依据。
 
-   ```text
-   <!-- phraseweave-acceptance -->
-   验收人: @github-user
-   验收时间: 2026-09-21T12:00:00+08:00
-   预览 SHA: 0123456789abcdef0123456789abcdef01234567
-   预览地址: https://reinerlau.github.io/phraseweave/preview/
-   ```
+验收评论使用以下格式：
 
-   The comment must be posted by the same GitHub user named in `验收人`, and that user must be listed in the repository variable `ACCEPTANCE_ACTORS`.
+```text
+<!-- phraseweave-acceptance -->
+验收人: @github-user
+验收时间: 2026-09-21T12:00:00+08:00
+预览版本: preview-2026.09.21-1
+预览地址: https://reinerlau.github.io/phraseweave/preview/
+```
 
-4. Move the Project item to `已验收`.
+验收通过时不要关闭 Issue。验收只表示允许进入下一次正式发布，不代表已经上线。
 
-Do not close the Issue yet. Acceptance authorizes inclusion in the next production release; it is not production deployment.
+## “正式发布”
 
-### 正式发布
+“正式发布”表示用户授权发布当前 `dev` 内容，不需要再次进行人工版本确认。Codex 在创建发布 PR 前执行机器门禁：
 
-Treat `正式发布` as a separate release Goal:
+1. 比较 `main..dev`，找出所有已合入的功能或修复 PR。
+2. 要求每个 PR 都包含 `Refs #<issue>`，每个关联 Issue 都有 `status:accepted` 和完整验收记录。
+3. 如果有改动没有关联 Issue，或存在未验收 Issue，则阻止发布。
+4. 从当前 `dev` 快照创建发布分支，并创建指向 `main` 的发布 PR。
+5. 等待 `release-readiness`、五项必需 CI 检查和自动合并。发布 PR 使用 merge commit。
+6. 等待正式 Pages 部署，并对 `https://reinerlau.github.io/phraseweave/` 执行 smoke 验证。
+7. 记录正式版本，关闭已发布的 Issue，并将其改为 `status:released`。
 
-1. Compare `main..dev` and enumerate every feature/fix PR and linked Issue in the unreleased range.
-2. Block the entire release if any change lacks a linked Issue or any linked Issue lacks the `accepted` label and acceptance record.
-3. Create a release branch from the exact accepted `dev` SHA. Do not let later `dev` commits enter this snapshot.
-4. Open a release PR to `main`. Wait for the release-readiness guard, all required CI checks, review, and auto-merge.
-5. Release PRs use a merge commit so the production boundary remains visible.
-6. Wait for the production Pages deployment, smoke-test `https://reinerlau.github.io/phraseweave/`, record the production SHA, close the released Issues, and move them to `已发布`.
-7. Only then complete the release Goal.
+正式环境使用相同的日期序号格式：`production-YYYY.MM.DD-N`。线上出现问题时，必须新建 Issue，继续走 `dev` → 预览 → 验收 → `main` 流程；紧急回滚使用单独且明确记录的 PR。
 
-## Review and automation rules
+## 必需检查与故障恢复
 
-- Built-in Codex Automatic Review is the semantic review gate. It follows repository instructions but is not a required GitHub status check.
-- Auto-merge may be enabled only after the current PR head has no unresolved P0/P1 Codex findings. Unresolved GitHub review conversations block merging.
-- Required CI checks are `format`, `typecheck`, `unit-tests`, `static-build`, and `smoke-test`.
-- A `dev` push produces a tested preview artifact without deployment credentials. Only the Pages workflow stored on `main` may assemble production plus preview and deploy GitHub Pages.
-- A production deployment never waits on the mutable `dev` head. It reuses the newest available successful preview artifact; if none exists, production still deploys independently.
-- PRs to `main` additionally require `release-readiness`, which runs its guard from the protected `main` revision and verifies that every included `dev` PR references accepted Issue(s).
-- A merged PR updates the remote branch. Follow the synchronization rules in the root `AGENTS.md` before using a local checkout as the deployed source.
+受保护的 `dev` 和 `main` 分支都要求以下检查：`format`、`typecheck`、`unit-tests`、`static-build`、`smoke-test`。`main` 还额外要求 `release-readiness`。
 
-## Recovery
-
-If CI, review, merge, or deployment fails, the owning conversation stays active: diagnose, fix, push, and wait again. Do not create a second PR unless the existing PR cannot safely represent the same requirement. If an already merged preview is broken, create a follow-up Issue/PR linked to the original rather than rewriting history.
+Codex Review 是建议性检查，负责解释风险和后续工作，但不能替代 CI、用户验收或分支保护。

@@ -1,12 +1,12 @@
 name: 🚀 新需求
 title: "[需求] "
-description: 用自然语言描述希望页面产生的变化
-labels: [needs-triage]
+description: 保存已经完成计划的产品需求
+labels: [ready-for-agent, status:in-progress]
 body:
   - type: markdown
     attributes:
       value: |
-        不需要描述代码。请说明谁在什么场景下，希望看到什么结果，以及怎样算完成。
+        这个模板用于保存已经完成 Plan Mode 的交付计划。请在用户确认“开始开发”后创建 Issue，并完整填写计划。
   - type: textarea
     id: feature-description
     attributes:
@@ -15,38 +15,34 @@ body:
     validations:
       required: true
   - type: textarea
-    id: suggested-solution
+    id: implementation-plan
     attributes:
-      label: 期望的页面行为
-      description: 用户操作后，页面应该出现什么变化？
+      label: 完整实现计划
+      description: 粘贴 Plan Mode 生成的完整计划，包括关键改动、接口、边界、测试、发布和假设。
       placeholder: |
-        1. 打开……
-        2. 点击……
-        3. 应看到……
+        ## Summary
+        ## Implementation changes
+        ## Tests and acceptance
+        ## Assumptions
     validations:
       required: true
   - type: textarea
-    validations:
-      required: false
+    id: scope-exclusions
     attributes:
-      label: 不包含的内容
+      label: 范围外
       description: 明确这次不做什么，避免范围持续扩大。
   - type: textarea
+    id: acceptance-criteria
     attributes:
-      label: 截图或录屏
-      description: |
-        If applicable, add screenshots or a video to help explain your problem.
-        For more information on the supported file image/file types and the file size limits, please refer
-        to the following link: https://docs.github.com/en/github/writing-on-github/working-with-advanced-formatting/attaching-files
-      placeholder: |
-        You can drag your video or image files inside of this editor ↓
-  - type: textarea
-    id: additional-context
-    attributes:
-      label: 验收标准
-      description: 请用可以在测试页面上实际操作、观察的方式描述。
+      label: 用户验收标准
+      description: 请用可以在固定 /preview/ 页面实际操作和观察的方式描述。
       placeholder: |
         - [ ] 当我……时，页面会……
         - [ ] 刷新页面后……
     validations:
-      required: false
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 其他上下文
+      description: 补充截图、录屏、依赖或已知风险。

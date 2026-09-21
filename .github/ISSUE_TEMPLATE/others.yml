@@ -1,12 +1,27 @@
 name: 其他事项
-description: 不属于新需求或页面问题的事项
-
+description: 保存已经完成计划的文档、CI、依赖或重构事项
+labels: [ready-for-agent, status:in-progress]
 body:
-  - type: textarea
-    id: description
+  - type: markdown
     attributes:
-      label: 说明
-      description: 请用自然语言说明目标、背景以及怎样算完成。
-      placeholder: 我希望……；完成时应该能看到……
+      value: |
+        请在用户确认“开始开发”后创建 Issue，并粘贴完整的 Plan Mode 实现计划。
+  - type: textarea
+    id: implementation-plan
+    attributes:
+      label: 完整实现计划
+      description: 包括目标、范围、关键改动、测试、发布、回退和假设。
+      placeholder: |
+        ## Summary
+        ## Implementation changes
+        ## Tests and acceptance
+        ## Assumptions
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 完成与验收标准
+      description: 描述如何判断这项工作已完成。
     validations:
       required: true

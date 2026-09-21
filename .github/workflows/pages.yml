@@ -89,14 +89,14 @@ jobs:
         run: pnpm --dir source-main install --frozen-lockfile
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Set production build version
+        run: echo "BUILD_VERSION=production-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
       - name: Build production
         run: pnpm --dir source-main build:client
         env:
           NODE_ENV: production
           NUXT_APP_BASE_URL: /phraseweave/
           DEPLOYMENT_ENVIRONMENT: production
-          BUILD_SHA: ${{ steps.revisions.outputs.production_sha }}
-          BUILD_TIME: ${{ env.DEPLOYED_AT }}
           BACKEND_ENDPOINT: ""
           LOGTO_ENDPOINT: ""
           LOGTO_APP_ID: ""
