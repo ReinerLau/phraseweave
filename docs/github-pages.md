@@ -33,7 +33,7 @@ EXERCISE_SYNC_SIGNAL_URL=https://phraseweave-course-signal.example.workers.dev
 
 在 `Settings → Pages → Build and deployment` 中选择 `GitHub Actions`。
 
-仓库已有 `.github/workflows/pages.yml`。推送到 `main` 后，它会构建 `apps/client` 并发布到：
+仓库已有 `.github/workflows/pages.yml`。在 GitHub Actions 中手动运行该 workflow 后，它会从 `main` 构建 `apps/client` 并发布到：
 
 ```text
 https://<github-用户名>.github.io/phraseweave/
@@ -41,14 +41,4 @@ https://<github-用户名>.github.io/phraseweave/
 
 工作流会把 `EXERCISE_SYNC_SIGNAL_URL` 注入生产构建；如果没有配置该 Variable，练习同步会提示“未配置练习同步服务”。
 
-## 3. 固定预览地址
-
-需求 PR 合入 `dev` 后，CI 会先通过五项必需检查，再生成测试构建。Pages 工作流会把最近一次成功测试的构建放到固定地址：
-
-```text
-https://<github-用户名>.github.io/phraseweave/preview/
-```
-
-页面顶部会显示当前环境和版本，格式为 `测试环境 · preview-YYYY.MM.DD-N`。用户验收时记录这个版本号；正式环境显示 `正式环境 · production-YYYY.MM.DD-N`。
-
-预览构建与正式构建使用隔离的浏览器存储和 Service Worker 路径，避免测试数据污染正式站点。
+部署完成后，正式站点页面顶部会显示当前生产环境和版本，版本格式为 `production-YYYY.MM.DD-N`。
