@@ -5,93 +5,144 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
-    # types: [review_requested, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+env:
+  NODE_VERSION: 20.12.2
 
 jobs:
-  test:
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format-check
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -F client type-check
+
+  unit-tests:
+    name: unit-tests
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgres://test:password@localhost:5480/phraseweave_test
       SECRET: test-only-secret
       REDIS_URL: redis://127.0.0.1:6379
-
     services:
       pg:
         image: postgres:14-alpine
-        volumes:
-          - data:/var/lib/postgres/test-data
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: password
           POSTGRES_DB: phraseweave_test
         ports:
           - 5480:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d phraseweave_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       redis:
         image: redis:6.2.5
         ports:
           - 6379:6379
-
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: "20.11.0"
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:init:test:ci
+      - run: pnpm schema:build
+      - run: pnpm test:ci
 
-      - name: Setup pnpm
-        run: corepack enable
+  static-build:
+    name: static-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Set preview build version
+        run: echo "BUILD_VERSION=preview-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+      - run: pnpm build:client
+        env:
+          NODE_ENV: production
+          NUXT_APP_BASE_URL: /phraseweave/preview/
+          DEPLOYMENT_ENVIRONMENT: preview
+      - name: Upload preview artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-site-${{ github.sha }}
+          path: apps/client/.output/public
+          if-no-files-found: error
+          retention-days: 90
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run database initialization command
-        run: pnpm db:init:test:ci
-
-      - name: Run build schema
-        run: pnpm schema:build
-
-      - name: Run tests
-        run: pnpm test:ci
-
-  # lint:
-
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-  #     - uses: actions/checkout@v3
-
-  #     - name: Use Node.js 16.14.2
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: 16.14.2
-
-  #     - name: Setup
-  #       run: npm i -g @antfu/ni
-
-  #     - name: Install
-  #       run: nci
-
-  #     - name: Lint
-  #       run: nr lint
-
-  # build:
-
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-  #     - uses: actions/checkout@v3
-
-  #     - name: Use Node.js 16.14.2
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: 16.14.2
-
-  #     - name: Setup
-  #       run: npm i -g @antfu/ni
-
-  #     - name: Install
-  #       run: nci
-
-  #     - name: Build
-  #       run: nr build
+  smoke-test:
+    name: smoke-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Cypress browser
+        run: pnpm -F client exec cypress install
+      - name: Set preview build version
+        run: echo "BUILD_VERSION=preview-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+      - name: Build preview
+        run: pnpm build:client
+        env:
+          NODE_ENV: production
+          NUXT_APP_BASE_URL: /phraseweave/preview/
+          DEPLOYMENT_ENVIRONMENT: preview
+      - name: Assemble preview path
+        run: |
+          mkdir -p "$RUNNER_TEMP/phraseweave-smoke/phraseweave/preview"
+          cp -R apps/client/.output/public/. "$RUNNER_TEMP/phraseweave-smoke/phraseweave/preview/"
+      - name: Smoke-test generated application
+        run: >-
+          pnpm -F client exec start-server-and-test
+          "pnpm exec serve $RUNNER_TEMP/phraseweave-smoke --listen 3000 --no-port-switching"
+          http://127.0.0.1:3000/phraseweave/preview/
+          "pnpm test:smoke --config baseUrl=http://127.0.0.1:3000/phraseweave/preview/"

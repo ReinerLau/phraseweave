@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+    <title>PhraseWeave</title>
+  </head>
+  <body>
+    <p>正在打开 PhraseWeave…</p>
+    <script>
+      const productionBase = "/phraseweave/";
+      const previewBase = `${productionBase}preview/`;
+      const base = location.pathname.startsWith(previewBase) ? previewBase : productionBase;
+
+      fetch(`${base}200.html`)
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then((html) => {
+          document.open();
+          document.write(html);
+          document.close();
+        })
+        .catch(() => {
+          document.body.textContent = "页面加载失败，请返回首页重试。";
+        });
+    </script>
+  </body>
+</html>

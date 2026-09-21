@@ -8,16 +8,14 @@ const getDevice = (userAgent: string) => {
       (/macintosh|mac os x/i.test(navigator.userAgent) &&
         window.screen.height > window.screen.width &&
         !navigator.userAgent.match(/(iPhone\sOS)\s([\d_]+)/)) ||
-        navigator.userAgent.match(/(iPad).*OS\s([\d_]+)/)
-    )
+        navigator.userAgent.match(/(iPad).*OS\s([\d_]+)/),
+    ),
   );
   const isOpera = ref(Boolean(userAgent.match(/Opera Mini/i)));
   const isWindows = ref(Boolean(userAgent.match(/IEMobile/i)));
   const isSSR = ref(Boolean(userAgent.match(/SSR/i)));
   const isMobile = ref(
-    Boolean(
-      isAndroid.value || isIphone.value || isOpera.value || isWindows.value
-    )
+    Boolean(isAndroid.value || isIphone.value || isOpera.value || isWindows.value),
   );
   const isDesktop = !isMobile.value && !isSSR.value;
 
@@ -32,8 +30,7 @@ const getDevice = (userAgent: string) => {
 };
 
 function useDevice() {
-  const userAgent =
-    typeof navigator === "undefined" ? "SSR" : navigator.userAgent;
+  const userAgent = typeof navigator === "undefined" ? "SSR" : navigator.userAgent;
 
   return getDevice(userAgent);
 }
@@ -45,8 +42,7 @@ function useIsLandscape() {
     const orientationType = window.screen.orientation.type;
 
     isLandscape.value =
-      orientationType === "landscape-primary" ||
-      orientationType === "landscape-secondary";
+      orientationType === "landscape-primary" || orientationType === "landscape-secondary";
   };
 
   onMounted(() => {

@@ -1,37 +1,47 @@
-name: 🐞 Bug report
-title: "[BUG] - YOUR_ISSUE_TITLE_HERE_REPLACE_ME"
-description: Report an issue with phraseweave
-labels: [bug]
+name: 🐞 页面问题
+title: "[问题] "
+description: 保存已经完成计划的缺陷修复
+labels: [ready-for-agent, status:in-progress]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
+        这个模板用于保存已经完成 Plan Mode 的修复计划。请在用户确认“开始开发”后创建 Issue，并完整填写计划。
   - type: textarea
     id: bug-description
     attributes:
-      label: Describe the bug
-      description: A clear and concise description of what the bug is. If you intend to submit a PR for this issue, tell us in the description. Thanks!
-      placeholder: Bug description
+      label: 实际表现与期望表现
+      description: 页面上看到了什么错误或异常行为？正确表现应该是什么？
     validations:
       required: true
-  - type: input
+  - type: textarea
     id: reproduction
     attributes:
-      label: Reproduction
-      description: Please provide a link via or a link to a repo that can reproduce the problem you ran into. A [minimal reproduction](https://stackoverflow.com/help/minimal-reproducible-example) is required.
-      placeholder: Reproduction
+      label: 复现步骤
+      description: 从打开哪个页面开始，依次做了什么？
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 看到……
     validations:
-      required: false
+      required: true
+  - type: textarea
+    id: implementation-plan
+    attributes:
+      label: 完整实现计划
+      description: 粘贴 Plan Mode 生成的完整修复计划，包括根因、改动、测试、发布和假设。
+      placeholder: |
+        ## Summary
+        ## Root cause and implementation changes
+        ## Tests and acceptance
+        ## Assumptions
+    validations:
+      required: true
   - type: checkboxes
     id: checkboxes
     attributes:
-      label: Validations
-      description: Before submitting the issue, please make sure you do the following
+      label: 提交前确认
+      description: 帮助我们准确验收修复
       options:
-        - label: Read the [Contributing Guidelines](https://github.com/ReinerLau/phraseweave/blob/main/CONTRIBUTING.md).
-          required: true
-        - label: Check that there isn't [already an issue](https://github.com/ReinerLau/phraseweave/issues) that reports the same bug to avoid creating a duplicate.
-          required: true
-        - label: The provided reproduction is a [minimal reproducible example](https://stackoverflow.com/help/minimal-reproducible-example) of the bug.
+        - label: 我确认目前没有重复 Issue。
           required: true

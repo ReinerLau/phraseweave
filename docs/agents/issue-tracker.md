@@ -13,6 +13,8 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+Every repository change has one Issue. Create it only after Plan Mode has produced the complete implementation plan and the user says `开始开发`. Keep one lifecycle label on the Issue: `status:in-progress`, `status:waiting-acceptance`, `status:accepted`, `status:released`, or `status:blocked`.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.**
