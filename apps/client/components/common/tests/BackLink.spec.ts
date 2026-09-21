@@ -7,7 +7,7 @@ describe("BackLink", () => {
   test("renders a discoverable mobile-friendly link to the fixed parent page", () => {
     const wrapper = mount(BackLink, {
       props: {
-        label: "返回练习列表",
+        label: "返回练习清单",
         to: "/course-pack",
       },
       global: {
@@ -23,8 +23,8 @@ describe("BackLink", () => {
     const link = wrapper.get("a");
 
     expect(link.attributes("href")).toBe("/course-pack");
-    expect(link.attributes("aria-label")).toBe("返回练习列表");
-    expect(link.text()).toContain("返回练习列表");
+    expect(link.attributes("aria-label")).toBe("返回练习清单");
+    expect(link.text()).toContain("返回练习清单");
     expect(link.classes()).toEqual(
       expect.arrayContaining(["btn", "min-h-11", "px-4", "text-base"]),
     );

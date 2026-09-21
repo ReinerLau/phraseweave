@@ -43,7 +43,7 @@ const { activeCourseMap } = useActiveCourseMap();
 const activeCourseRef = ref<HTMLDivElement>();
 const hasFinished = computed(() => !!props.count);
 const isActiveCourse = computed(() => activeCourseMap.value[props.coursePackId] == props.id);
-const dataTip = computed(() => `恭喜您，当前课程已完成 ${props.count} 次 🎉`);
+const dataTip = computed(() => `恭喜您，当前练习卡片已完成 ${props.count} 次 🎉`);
 
 onMounted(() => {
   activeCourseRef.value?.scrollIntoView({

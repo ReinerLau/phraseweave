@@ -84,7 +84,7 @@
           </p>
 
           <h2 class="py-4 text-xl font-bold">帮助</h2>
-          <h3 class="pb-2 text-base font-semibold">课程页面</h3>
+          <h3 class="pb-2 text-base font-semibold">练习页面</h3>
           <p class="py-1 leading-7">
             输入下划线全是灰色，没有
             <span class="text-fuchsia-500">紫色</span>
