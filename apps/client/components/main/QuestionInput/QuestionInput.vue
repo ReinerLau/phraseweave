@@ -201,8 +201,12 @@ function focusInputWhenWIndowFocus() {
 function getWordsClassNames(index: number) {
   const word = userInputWords[index];
 
-  // 答案提示使用占位符样式，不显示激活或错误状态。
+  // 答案提示文字使用占位符样式，但聚焦时仍高亮当前输入位置。
   if (isAnswerTip()) {
+    if (word.isActive && focusing.value) {
+      return "text-gray-400 border-b-fuchsia-500 dark:text-gray-500 dark:border-b-fuchsia-500";
+    }
+
     return "text-gray-400 border-b-gray-300 dark:text-gray-500 dark:border-b-gray-400";
   }
 
