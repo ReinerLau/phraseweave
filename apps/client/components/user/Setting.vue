@@ -284,10 +284,6 @@ const shortcutKeyBindList = [
     type: SHORTCUT_KEY_TYPES.SOUND,
   },
   {
-    label: "显示隐藏/答案预览",
-    type: SHORTCUT_KEY_TYPES.ANSWER,
-  },
-  {
     label: "返回上个问题",
     type: SHORTCUT_KEY_TYPES.PREVIOUS,
   },

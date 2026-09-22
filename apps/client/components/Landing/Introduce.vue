@@ -38,14 +38,7 @@
           <p class="py-1 leading-7">
             题目提交后若出现
             <span class="text-red-500">红色</span>
-            单词和下划线显示，代表这部分单词存在某些错误需要更正，此时可按下空格键
-            <span class="text-gray-500">（Space ␣）</span>
-            快速定位到第一个错误单词并清空，完成更改后再按一次空格继续定位到下个错词
-          </p>
-          <p class="py-1 leading-7">
-            此时若发现上个错词未正确修改，可按下退格键
-            <span class="text-gray-500">（Backspace ⌫）</span>
-            来回退到上一个错词，直到所有错词被更正完成，按下回车键提交即可
+            单词和下划线显示，代表这部分单词存在错误。直接修改错误单词，按下回车键重新提交即可。
           </p>
           <p class="py-1 leading-7">
             验证通过后会显示答案页面，同时会播放对应题目语音用于辅助记忆。
@@ -66,15 +59,13 @@
             播放题目语音
           </p>
           <p class="p-1">
-            <button class="instruction-btn">⌃ Ctrl+;</button>
-            <span class="text-gray-500">（或快捷键 Ctrl+;）</span>
+            <button class="instruction-btn">显示答案</button>
             显示题目答案
           </p>
           <h3 class="py-2 text-base font-semibold">答案页面</h3>
           <p class="py-1 leading-7">答案下方的按钮</p>
           <p class="py-1">
             <button class="instruction-btn">again</button>
-            <span class="text-gray-500">（或快捷键 Ctrl+;）</span>
             再来亿次，怎能不会！
           </p>
           <p class="py-1">

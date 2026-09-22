@@ -75,13 +75,12 @@ const { handleAnswerError, resetCloseTip } = answerError();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const { isShowErrorTip } = useErrorTip();
 
-const { inputValue, userInputWords, submitAnswer, setInputValue, handleKeyboardInput, isFixMode } =
-  useInput({
-    source: () => courseStore.currentStatement?.english!,
-    setInputCursorPosition,
-    getInputCursorPosition,
-    inputChangedCallback,
-  });
+const { inputValue, userInputWords, submitAnswer, setInputValue, handleKeyboardInput } = useInput({
+  source: () => courseStore.currentStatement?.english!,
+  setInputCursorPosition,
+  getInputCursorPosition,
+  inputChangedCallback,
+});
 const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
 
 const inputViewportOffset = ref(0);
@@ -199,8 +198,7 @@ function getWordsClassNames(index: number) {
 
   // 当前单词错误 且 聚焦
   if (word.incorrect && focusing.value) {
-    // Fix 修复模式添加动画
-    return `text-red-500 border-b-red-500 ${isFixMode() && "animate-shake"}`;
+    return "text-red-500 border-b-red-500";
   }
 
   // 默认样式
