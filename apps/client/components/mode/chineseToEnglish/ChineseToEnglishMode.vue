@@ -1,5 +1,7 @@
 <template>
-  <div class="flex h-full w-full min-w-0 items-center justify-center">
+  <div
+    class="flex h-full min-h-0 w-full min-w-0 flex-col items-start justify-start overflow-hidden"
+  >
     <template v-if="isQuestion()">
       <ModeChineseToEnglishQuestion />
     </template>

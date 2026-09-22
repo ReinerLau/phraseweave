@@ -19,7 +19,7 @@
       >
         <slot></slot>
       </div>
-      <Footer></Footer>
+      <Footer v-if="!isPracticePage"></Footer>
     </div>
   </div>
 </template>

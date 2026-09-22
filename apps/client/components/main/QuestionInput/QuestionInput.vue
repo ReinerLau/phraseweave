@@ -1,19 +1,15 @@
 <template>
-  <div
-    class="question-input-shell text-center"
-    :style="{ '--question-input-viewport-offset': `${inputViewportOffset}px` }"
-  >
+  <div class="question-input-shell">
     <div
       ref="questionInputWordsEl"
-      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-center gap-2 transition-all"
-      :style="questionInputStyle"
+      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-start gap-2 text-left"
     >
       <template
         v-for="(w, i) in courseStore.words"
         :key="i"
       >
         <div
-          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none transition-all"
+          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
           :class="getWordsClassNames(i)"
           :style="{ width: `${inputWidth(w)}ch` }"
         >
@@ -44,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
@@ -57,16 +53,10 @@ import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useShowWordsWidth } from "~/composables/user/words";
 import { useExerciseStore } from "~/store/exercise";
-import {
-  getQuestionInputScrollOffset,
-  getQuestionInputStyle,
-  getWordWidth,
-  useQuestionInput,
-} from "./questionInputHelper";
+import { getWordWidth, useQuestionInput } from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
 const courseStore = useExerciseStore();
-const questionInputStyle = computed(() => getQuestionInputStyle(courseStore.words));
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
@@ -94,76 +84,17 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
   });
 const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 
-const inputViewportOffset = ref(0);
-let inputVisibilityFrame: number | undefined;
-let inputVisibilityTimeout: number | undefined;
-
-function ensureInputVisible() {
-  const input = inputEl.value;
-  if (!input) return;
-
-  const viewport = window.visualViewport;
-  const viewportHeight = viewport && viewport.height > 0 ? viewport.height : window.innerHeight;
-  const viewportOffsetTop = viewport?.offsetTop ?? 0;
-
-  const rect = input.getBoundingClientRect();
-  inputViewportOffset.value = getQuestionInputScrollOffset(rect, viewportHeight, viewportOffsetTop);
-}
-
-function scheduleInputVisibilityCheck() {
-  if (inputVisibilityFrame !== undefined) {
-    window.cancelAnimationFrame(inputVisibilityFrame);
-  }
-
-  inputVisibilityFrame = window.requestAnimationFrame(() => {
-    inputVisibilityFrame = undefined;
-    ensureInputVisible();
-  });
-}
-
 function handleInputFocus() {
   focusInput();
-  scheduleInputVisibilityCheck();
-
-  if (inputVisibilityTimeout !== undefined) {
-    window.clearTimeout(inputVisibilityTimeout);
-  }
-  inputVisibilityTimeout = window.setTimeout(scheduleInputVisibilityCheck, 300);
 }
 
 function handleInputBlur() {
   blurInput();
-  inputViewportOffset.value = 0;
-}
-
-function handleViewportResize() {
-  if (focusing.value) {
-    scheduleInputVisibilityCheck();
-  } else {
-    inputViewportOffset.value = 0;
-  }
 }
 
 onMounted(() => {
-  const viewport = window.visualViewport;
-  viewport?.addEventListener("resize", handleViewportResize);
-  viewport?.addEventListener("scroll", handleViewportResize);
-  window.addEventListener("resize", handleViewportResize);
   focusInput();
   resetCloseTip();
-});
-
-onUnmounted(() => {
-  const viewport = window.visualViewport;
-  viewport?.removeEventListener("resize", handleViewportResize);
-  viewport?.removeEventListener("scroll", handleViewportResize);
-  window.removeEventListener("resize", handleViewportResize);
-  if (inputVisibilityFrame !== undefined) {
-    window.cancelAnimationFrame(inputVisibilityFrame);
-  }
-  if (inputVisibilityTimeout !== undefined) {
-    window.clearTimeout(inputVisibilityTimeout);
-  }
 });
 
 focusInputWhenWIndowFocus();
@@ -193,7 +124,6 @@ watch(
   () => courseStore.statementIndex,
   () => {
     focusInput();
-    scheduleInputVisibilityCheck();
     resetCloseTip();
   },
 );
@@ -201,7 +131,6 @@ watch(
 function focusInputWhenWIndowFocus() {
   const handleFocus = () => {
     focusInput();
-    scheduleInputVisibilityCheck();
   };
 
   onMounted(() => {
@@ -376,31 +305,20 @@ function preventCursorMove(event: MouseEvent) {
 
 <style scoped>
 .question-input-shell {
-  container-type: inline-size;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  padding-inline: 1rem;
-  transform: translateY(calc(var(--question-input-viewport-offset, 0px) * -1));
 }
 
 .question-input-words {
-  --question-min-font-size: clamp(
-    0.875rem,
-    min(var(--question-base-min-font-size), 3.5dvh),
-    var(--question-base-min-font-size)
-  );
   gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
-  font-size: clamp(
-    var(--question-min-font-size),
-    min(var(--question-fluid-font-size), 7dvh),
-    var(--question-max-font-size)
-  );
+  font-size: inherit;
 }
 
 .question-input-word {
   min-height: 1em;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 </style>

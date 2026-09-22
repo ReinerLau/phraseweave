@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  getQuestionInputScrollOffset,
-  getQuestionInputStyle,
-  getQuestionTextWidth,
-  getWordWidth,
-  QUESTION_INPUT_MIN_FONT_SIZE_REM,
-} from "../questionInputHelper";
+import { getWordWidth } from "../questionInputHelper";
 
 describe("getWordWidth", () => {
   it("should return the correct width for a single letter", () => {
@@ -33,46 +27,5 @@ describe("getWordWidth", () => {
     const longString =
       "This is a long string with various characters, including letters, numbers, and symbols! 1234567890";
     expect(getWordWidth(longString)).toBe(91.3);
-  });
-});
-
-describe("question input layout", () => {
-  it("keeps the input above the visible viewport bottom", () => {
-    expect(getQuestionInputScrollOffset({ top: 420, bottom: 480 }, 400)).toBe(96);
-    expect(getQuestionInputScrollOffset({ top: 8, bottom: 48 }, 400)).toBe(-8);
-    expect(getQuestionInputScrollOffset({ top: 100, bottom: 160 }, 400)).toBe(0);
-  });
-
-  it("includes the spaces between words when estimating the sentence width", () => {
-    expect(getQuestionTextWidth(["short", "sentence"])).toBeCloseTo(15);
-  });
-
-  it("reduces the fluid font size for longer sentences while keeping one minimum", () => {
-    const shortSentenceStyle = getQuestionInputStyle(["short"]);
-    const longSentenceStyle = getQuestionInputStyle([
-      "This",
-      "is",
-      "a",
-      "sentence",
-      "that",
-      "needs",
-      "more",
-      "room",
-    ]);
-
-    const shortFluidSize = Number(
-      shortSentenceStyle["--question-fluid-font-size"].replace("cqw", ""),
-    );
-    const longFluidSize = Number(
-      longSentenceStyle["--question-fluid-font-size"].replace("cqw", ""),
-    );
-
-    expect(shortFluidSize).toBeGreaterThan(longFluidSize);
-    expect(shortSentenceStyle["--question-base-min-font-size"]).toBe(
-      `${QUESTION_INPUT_MIN_FONT_SIZE_REM}rem`,
-    );
-    expect(longSentenceStyle["--question-base-min-font-size"]).toBe(
-      `${QUESTION_INPUT_MIN_FONT_SIZE_REM}rem`,
-    );
   });
 });
