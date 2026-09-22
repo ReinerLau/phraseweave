@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center justify-center gap-1">
+  <div class="flex items-center justify-start gap-1">
     <!-- left arrow button: go to previous question -->
     <div class="h-10 w-10 shrink-0">
       <button

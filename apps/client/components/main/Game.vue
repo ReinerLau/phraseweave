@@ -12,7 +12,6 @@
     </template>
   </div>
 
-  <MainTips />
   <MainSummary />
   <MainShare />
   <MainAuthRequired />

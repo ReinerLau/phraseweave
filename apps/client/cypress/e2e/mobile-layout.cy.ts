@@ -150,6 +150,21 @@ describe("mobile practice layout", () => {
     assertNoVerticalOverflow();
   });
 
+  it("keeps the practice controls and version above the question", () => {
+    cy.get("footer").contains(/^v/).should("be.visible");
+    cy.contains("显示答案").should("be.visible");
+    cy.get(".question-content").should(($question) => {
+      const questionTop = $question[0].getBoundingClientRect().top;
+      const footerBottom = document.querySelector("footer")?.getBoundingClientRect().bottom ?? 0;
+      const tipsBottom =
+        document.querySelector("[data-testid='practice-tips']")?.getBoundingClientRect().bottom ??
+        0;
+
+      expect(footerBottom).to.be.at.most(questionTop);
+      expect(tipsBottom).to.be.at.most(questionTop);
+    });
+  });
+
   it("scales the input area with the available viewport", () => {
     let inputBeforeResize = { fontSize: 0, wordHeight: 0 };
 
@@ -157,7 +172,8 @@ describe("mobile practice layout", () => {
       .first()
       .should(($word) => {
         const styles = window.getComputedStyle($word[0]);
-        expect(styles.whiteSpace).to.equal("nowrap");
+        expect(styles.whiteSpace).to.equal("normal");
+        expect(styles.overflowWrap).to.equal("anywhere");
         expect($word[0].getBoundingClientRect().height).to.be.greaterThan(0);
       });
 
@@ -165,11 +181,14 @@ describe("mobile practice layout", () => {
 
     cy.get(".question-input-words").should(($words) => {
       const styles = window.getComputedStyle($words[0]);
+      const questionStyles = window.getComputedStyle(
+        $words[0].closest<HTMLElement>(".question-content")!,
+      );
       const wordHeight = $words[0]
         .querySelector<HTMLElement>(".question-input-word")
         ?.getBoundingClientRect().height;
       inputBeforeResize = {
-        fontSize: parseFloat(styles.fontSize),
+        fontSize: parseFloat(questionStyles.fontSize),
         wordHeight: wordHeight ?? 0,
       };
       expect(inputBeforeResize.fontSize).to.be.greaterThan(0);
@@ -184,7 +203,7 @@ describe("mobile practice layout", () => {
 
     cy.viewport(320, 288);
     cy.get(".question-input-words").should(($words) => {
-      const styles = window.getComputedStyle($words[0]);
+      const styles = window.getComputedStyle($words[0].closest<HTMLElement>(".question-content")!);
       const wordHeight = $words[0]
         .querySelector<HTMLElement>(".question-input-word")
         ?.getBoundingClientRect().height;
@@ -261,23 +280,31 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
-  it("compresses the Chinese prompt in a short viewport", () => {
-    let promptBeforeResize = { fontSize: 0, marginTop: 0, marginBottom: 0 };
+  it("uses the same shrinking font size for the Chinese prompt and input", () => {
+    let promptBeforeResize = 0;
     cy.get('[data-testid="question-prompt"]').then(($prompt) => {
       const styles = window.getComputedStyle($prompt[0]);
-      promptBeforeResize = {
-        fontSize: parseFloat(styles.fontSize),
-        marginTop: parseFloat(styles.marginTop),
-        marginBottom: parseFloat(styles.marginBottom),
-      };
+      promptBeforeResize = parseFloat(styles.fontSize);
+      expect(styles.fontSize).to.equal(
+        window.getComputedStyle(
+          $prompt[0]
+            .closest<HTMLElement>(".question-content")!
+            .querySelector(".question-input-words")!,
+        ).fontSize,
+      );
     });
 
     cy.viewport(320, 288);
     cy.get('[data-testid="question-prompt"]').should(($prompt) => {
       const styles = window.getComputedStyle($prompt[0]);
-      expect(parseFloat(styles.fontSize)).to.be.at.most(promptBeforeResize.fontSize);
-      expect(parseFloat(styles.marginTop)).to.be.at.most(promptBeforeResize.marginTop);
-      expect(parseFloat(styles.marginBottom)).to.be.at.most(promptBeforeResize.marginBottom);
+      expect(parseFloat(styles.fontSize)).to.be.lessThan(promptBeforeResize);
+      expect(styles.fontSize).to.equal(
+        window.getComputedStyle(
+          $prompt[0]
+            .closest<HTMLElement>(".question-content")!
+            .querySelector(".question-input-words")!,
+        ).fontSize,
+      );
     });
   });
 

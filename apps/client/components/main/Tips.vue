@@ -1,5 +1,8 @@
 <template>
-  <div class="relative flex h-32 items-center justify-center">
+  <div
+    class="relative flex min-h-10 items-start justify-start py-1"
+    data-testid="practice-tips"
+  >
     <MainPrevAndNextBtn>
       <button
         class="btn btn-outline btn-sm z-10"
