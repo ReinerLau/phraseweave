@@ -1,4 +1,4 @@
-export const QUESTION_FONT_MAX_SIZE_PX = 48;
+export const QUESTION_FONT_MAX_SIZE_PX = 40;
 export const QUESTION_FONT_MIN_SIZE_PX = 12;
 
 /**
