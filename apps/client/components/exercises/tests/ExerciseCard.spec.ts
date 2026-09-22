@@ -30,7 +30,7 @@ describe("ExerciseCard", () => {
     expect(wrapper.classes()).not.toContain("w-72");
   });
 
-  it("wraps long titles and centers the actions beside them", () => {
+  it("wraps long titles and aligns the actions with their top", () => {
     const wrapper = mount(ExerciseCard, {
       props: {
         exercise: {
@@ -46,8 +46,10 @@ describe("ExerciseCard", () => {
     const title = wrapper.find("h2");
     const titleRow = title.element.parentElement;
 
-    expect(title.classes()).toEqual(expect.arrayContaining(["min-w-0", "flex-1", "break-words"]));
-    expect(titleRow?.classList).toContain("items-center");
+    expect(title.classes()).toEqual(
+      expect.arrayContaining(["line-clamp-2", "min-w-0", "flex-1", "break-words"]),
+    );
+    expect(titleRow?.classList).toContain("items-start");
   });
 
   it("groups exercise actions behind a more menu", async () => {
