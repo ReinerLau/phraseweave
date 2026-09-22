@@ -10,10 +10,6 @@
         @click="handlePlayWordSound(word)"
         >{{ word }}</span
       >
-      <span
-        class="i-ph-speaker-simple-high ml-1 inline-block h-7 w-7 cursor-pointer text-gray-500 hover:text-fuchsia-500"
-        @click="handlePlayEnglishSound"
-      ></span>
     </div>
     <div class="my-6 text-xl text-gray-500">
       {{ courseStore.currentStatement?.soundmark }}
@@ -49,7 +45,7 @@ import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const courseStore = useExerciseStore();
 const { handlePlayWordSound } = usePlayWordSound();
-const { handlePlayEnglishSound } = usePlayEnglishSound();
+usePlayEnglishSound();
 const { showSummary } = useSummary();
 const { showQuestion } = useGameMode();
 const { isAutoPlaySound } = useAutoPronunciation();
@@ -66,14 +62,6 @@ function usePlayEnglishSound() {
       playSound();
     }
   });
-
-  function handlePlayEnglishSound() {
-    playSound();
-  }
-
-  return {
-    handlePlayEnglishSound,
-  };
 }
 
 function registerShortcutKeyForNextQuestion() {
