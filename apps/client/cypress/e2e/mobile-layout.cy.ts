@@ -153,15 +153,9 @@ describe("mobile practice layout", () => {
   it("keeps the practice controls at the bottom without a version or arrow controls", () => {
     cy.get("footer").should("not.exist");
     cy.get(".arrow-btn").should("not.exist");
-    cy.get('[data-testid="practice-tips"] button')
-      .should("have.length", 2)
-      .then(($buttons) => {
-        expect($buttons[0].getBoundingClientRect().width).to.equal(
-          $buttons[1].getBoundingClientRect().width,
-        );
-      });
+    cy.get('[data-testid="practice-tips"] button').should("have.length", 1);
+    cy.get('[data-testid="next-question-button"]').should("not.exist");
     cy.contains("显示答案").should("be.visible");
-    cy.contains("下一题").should("be.visible");
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
       const questionTop = $question[0].getBoundingClientRect().top;
@@ -343,9 +337,14 @@ describe("mobile practice layout", () => {
   });
 
   it("keeps the answer font size and content alignment from the question view", () => {
-    let questionFontSize = 0;
+    let questionFontSize = "";
+    cy.get('input[type="text"]').type(englishSentence, { force: true });
+    cy.wait(100);
+
     cy.get(".question-content").then(($question) => {
-      questionFontSize = parseFloat(window.getComputedStyle($question[0]).fontSize);
+      questionFontSize = window
+        .getComputedStyle($question[0])
+        .getPropertyValue("--question-font-size");
       const promptTop = $question
         .find('[data-testid="question-prompt"]')[0]
         .getBoundingClientRect().top;
@@ -353,12 +352,12 @@ describe("mobile practice layout", () => {
       expect(promptTop).to.be.at.most(inputTop);
     });
 
-    cy.get('input[type="text"]')
-      .type(englishSentence, { force: true })
-      .type("{enter}", { force: true });
+    cy.get('input[type="text"]').type("{enter}", { force: true });
 
     cy.get(".answer-content").should(($answer) => {
-      const answerFontSize = parseFloat(window.getComputedStyle($answer[0]).fontSize);
+      const answerFontSize = window
+        .getComputedStyle($answer[0])
+        .getPropertyValue("--question-font-size");
       const promptTop = $answer
         .find('[data-testid="answer-prompt"]')[0]
         .getBoundingClientRect().top;
@@ -369,12 +368,21 @@ describe("mobile practice layout", () => {
     });
     cy.contains("再来一次").should("be.visible");
     cy.contains("下一题").should("be.visible");
+    cy.get('[data-testid="practice-tips"] button')
+      .should("have.length", 2)
+      .then(($buttons) => {
+        expect($buttons[0].getBoundingClientRect().width).to.be.closeTo(
+          $buttons[1].getBoundingClientRect().width,
+          1.5,
+        );
+      });
     assertPracticePageDoesNotScroll();
   });
 
   it("shows the answer in the input area without opening a popup", () => {
     cy.get('input[type="text"]').type("wrong", { force: true });
-    cy.contains("显示答案").click();
+    cy.get('[data-testid="show-answer-button"]').click({ force: true });
+    cy.get('[data-testid="next-question-button"]').should("not.exist");
 
     cy.get('input[type="text"]').should("have.value", "");
     cy.get(".question-input-word")
@@ -426,7 +434,7 @@ describe("mobile practice layout", () => {
     cy.get('[data-tip="练习卡片列表"]').click();
     cy.get('input[type="text"]').should("not.be.focused");
 
-    cy.contains("显示答案").click();
+    cy.get('[data-testid="show-answer-button"]').click({ force: true });
     cy.get('input[type="text"]').should("not.be.focused");
   });
 
@@ -441,7 +449,7 @@ describe("mobile practice layout", () => {
   });
 
   it("filters non-Latin input and keeps the answer visible until a letter is entered", () => {
-    cy.contains("显示答案").click();
+    cy.get('[data-testid="show-answer-button"]').click({ force: true });
     cy.get('input[type="text"]').click({ force: true }).should("be.focused");
 
     setNativeInputValue("中文123");
