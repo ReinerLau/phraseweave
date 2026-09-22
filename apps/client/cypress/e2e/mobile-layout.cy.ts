@@ -85,6 +85,23 @@ function assertNoVerticalOverflow() {
   });
 }
 
+function assertPracticePageDoesNotScroll() {
+  assertNoVerticalOverflow();
+  cy.window().then((window) => {
+    expect(window.scrollY).to.equal(0);
+  });
+}
+
+function assertQuestionInputDoesNotScroll() {
+  assertPracticePageDoesNotScroll();
+  cy.get(".question-input-shell").should(($shell) => {
+    const element = $shell[0];
+    const styles = window.getComputedStyle(element);
+    expect(styles.overflowY).to.equal("hidden");
+    expect(element.scrollTop).to.equal(0);
+  });
+}
+
 function assertExerciseNavigationShellIsFullWidth() {
   cy.get('[data-testid="exercise-navigation-shell"]').should(($shell) => {
     const element = $shell[0];
@@ -167,7 +184,28 @@ describe("mobile practice layout", () => {
       const document = $shell[0].ownerDocument;
       expect(document.documentElement.scrollHeight).to.be.at.most(pageHeightBeforeKeyboard + 1);
     });
-    cy.contains("div.text-2xl", "这是一个测试句子").should("be.visible");
+    cy.get('[data-testid="question-prompt"]').contains("这是一个测试句子").should("be.visible");
+    assertQuestionInputDoesNotScroll();
+  });
+
+  it("compresses the Chinese prompt in a short viewport", () => {
+    let promptBeforeResize = { fontSize: 0, marginTop: 0, marginBottom: 0 };
+    cy.get('[data-testid="question-prompt"]').then(($prompt) => {
+      const styles = window.getComputedStyle($prompt[0]);
+      promptBeforeResize = {
+        fontSize: parseFloat(styles.fontSize),
+        marginTop: parseFloat(styles.marginTop),
+        marginBottom: parseFloat(styles.marginBottom),
+      };
+    });
+
+    cy.viewport(320, 288);
+    cy.get('[data-testid="question-prompt"]').should(($prompt) => {
+      const styles = window.getComputedStyle($prompt[0]);
+      expect(parseFloat(styles.fontSize)).to.be.at.most(promptBeforeResize.fontSize);
+      expect(parseFloat(styles.marginTop)).to.be.at.most(promptBeforeResize.marginTop);
+      expect(parseFloat(styles.marginBottom)).to.be.at.most(promptBeforeResize.marginBottom);
+    });
   });
 
   it("keeps the answer and contents views within the viewport", () => {
@@ -176,7 +214,7 @@ describe("mobile practice layout", () => {
       .type("{enter}", { force: true });
     cy.contains("再来一次").should("be.visible");
     assertNoHorizontalOverflow();
-    assertNoVerticalOverflow();
+    assertPracticePageDoesNotScroll();
 
     cy.get('[data-tip="练习卡片列表"]').click();
     cy.get("#contents").should("have.class", "show");
@@ -186,7 +224,7 @@ describe("mobile practice layout", () => {
       expect(rect.left).to.be.at.least(0);
     });
     assertNoHorizontalOverflow();
-    assertNoVerticalOverflow();
+    assertPracticePageDoesNotScroll();
   });
 
   it("shows the answer in the input area without opening a popup", () => {

@@ -336,10 +336,9 @@ function preventCursorMove(event: MouseEvent) {
   container-type: inline-size;
   width: 100%;
   min-width: 0;
+  min-height: 0;
   max-width: 100%;
-  max-height: min(60vh, 32rem);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   padding-inline: 1rem;
   transform: translateY(calc(var(--question-input-viewport-offset, 0px) * -1));
 }
@@ -354,7 +353,6 @@ function preventCursorMove(event: MouseEvent) {
 }
 
 .question-input-word {
-  min-height: clamp(2.5rem, 12vw, 4rem);
   overflow-wrap: anywhere;
 }
 </style>
