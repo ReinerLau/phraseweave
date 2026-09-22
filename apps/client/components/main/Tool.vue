@@ -6,28 +6,21 @@
     <div class="flex min-w-0 flex-1 items-center">
       <NuxtLink
         href="/course-pack"
-        class="clickable-item tooltip-item shrink-0"
+        class="clickable-item tooltip-item tooltip-bottom shrink-0"
         data-tip="练习清单"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
+    </div>
+
+    <!-- 右侧 -->
+    <div class="flex min-w-0 max-w-[75%] items-center">
       <div
-        class="clickable-item tooltip-item ml-4 min-w-0 flex-1 truncate"
+        class="clickable-item tooltip-item min-w-0 truncate text-right"
         data-tip="练习卡片列表"
         @click="toggleContents"
       >
         {{ currentCourseInfo }}
-      </div>
-    </div>
-
-    <!-- 右侧 -->
-    <div class="flex shrink-0 items-center">
-      <div
-        class="tooltip-item tooltip-left mr-4"
-        data-tip="重置当前练习卡片进度"
-        @click="handleDoAgain"
-      >
-        <span class="clickable-item icon-item i-ph-arrow-counter-clockwise"></span>
       </div>
     </div>
 
