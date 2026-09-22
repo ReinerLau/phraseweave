@@ -68,10 +68,10 @@ describe("question input layout", () => {
     );
 
     expect(shortFluidSize).toBeGreaterThan(longFluidSize);
-    expect(shortSentenceStyle["--question-min-font-size"]).toBe(
+    expect(shortSentenceStyle["--question-base-min-font-size"]).toBe(
       `${QUESTION_INPUT_MIN_FONT_SIZE_REM}rem`,
     );
-    expect(longSentenceStyle["--question-min-font-size"]).toBe(
+    expect(longSentenceStyle["--question-base-min-font-size"]).toBe(
       `${QUESTION_INPUT_MIN_FONT_SIZE_REM}rem`,
     );
   });

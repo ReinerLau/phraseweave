@@ -41,9 +41,9 @@ function handleAutoPlayEnglish() {
 
 <style scoped>
 .question-prompt {
-  margin-bottom: clamp(0.5rem, 2.5vh, 1rem);
-  margin-top: clamp(0.5rem, 7vh, 2.5rem);
-  font-size: clamp(0.875rem, min(5vw, 4vh), 1.5rem);
+  margin-bottom: clamp(0.5rem, 2.5dvh, 1rem);
+  margin-top: clamp(0.5rem, 7dvh, 2.5rem);
+  font-size: clamp(0.875rem, min(5vw, 4dvh), 1.5rem);
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
