@@ -11,7 +11,7 @@
         <div
           class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
           :class="getWordsClassNames(i)"
-          :style="{ width: `${inputWidth(w)}ch` }"
+          :style="{ width: `${inputWidth(i)}em` }"
         >
           {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
         </div>
@@ -30,7 +30,7 @@
         @compositionend="handleCompositionEnd"
         autoFocus
       />
-      <!-- 隐藏探针：用真实渲染字体测量文本宽度和 1ch 像素宽度 -->
+      <!-- 隐藏探针：用真实渲染字体测量文本宽度和当前字号 -->
       <span
         ref="questionInputProbeEl"
         class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
@@ -54,8 +54,9 @@ import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useExerciseStore } from "~/store/exercise";
 import {
   createWordWidthMeasurer,
-  getInputWordWidthCh,
-  getWordCapacityCh,
+  getInputWordWidthEm,
+  getWordCapacityEm,
+  SUBPIXEL_SAFETY_EM,
   useQuestionInput,
 } from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
@@ -83,12 +84,19 @@ function readProbeWidth(text: string) {
   return probe.getBoundingClientRect().width;
 }
 
-const wordMeasurer = createWordWidthMeasurer(readProbeWidth);
+function readProbeFontSize() {
+  const probe = questionInputProbeEl.value;
+  if (!probe) return 0;
 
-function measureCh(text: string) {
+  return Number.parseFloat(window.getComputedStyle(probe).fontSize);
+}
+
+const wordMeasurer = createWordWidthMeasurer(readProbeWidth, readProbeFontSize);
+
+function measureEm(text: string) {
   // 读取版本号：字体加载完成后失效重测，并让渲染副作用重新测量
   void measureVersion.value;
-  return wordMeasurer.measureCh(text);
+  return wordMeasurer.measureEm(text);
 }
 
 function invalidateMeasurements() {
@@ -205,26 +213,30 @@ function inputChangedCallback(e: KeyboardEvent) {
   }
 }
 
-// 输入块宽度：目标单词在当前字体下的实测宽度，下划线与单词齐平，单位 ch
-function inputWidth(word: string) {
-  return measureCh(word);
+// 输入块宽度 = 实际显示内容的实测宽度，保证下划线与文字齐平、文字不会被挤出块外；
+// 未输入时回退到目标单词宽度，保留答案长度提示。单位 em（随字号缩放，避开 ch 单位的度量偏差）。
+function inputWidth(index: number) {
+  const targetWord = courseStore.words[index] ?? "";
+  const typedWord = isAnswerTip() ? "" : userInputWords[index]?.userInput ?? "";
+
+  return measureEm(typedWord || targetWord) + SUBPIXEL_SAFETY_EM;
 }
 
-// 已输入文本的实测宽度，单位 ch
+// 已输入文本的实测宽度，单位 em
 function getInputWordWidth(text: string) {
-  return getInputWordWidthCh(text, measureCh);
+  return getInputWordWidthEm(text, measureEm);
 }
 
 // 可输入容量：不超过目标单词的实测宽度，保证敲完目标单词一定放得下
 function getInputWordCapacity(word: string) {
-  const wordWidthCh = getInputWordWidth(word);
+  const wordWidthEm = getInputWordWidth(word);
   const wordsEl = questionInputWordsEl.value;
-  if (!wordsEl) return wordWidthCh;
+  if (!wordsEl) return wordWidthEm;
 
-  const zeroWidth = wordMeasurer.chWidthPx();
-  if (zeroWidth <= 0) return wordWidthCh;
+  const fontPx = wordMeasurer.fontSizePx();
+  if (fontPx <= 0) return wordWidthEm;
 
-  return getWordCapacityCh(wordWidthCh, wordsEl.clientWidth / zeroWidth);
+  return getWordCapacityEm(wordWidthEm, wordsEl.clientWidth / fontPx);
 }
 
 function cancelErrorReset() {
@@ -335,5 +347,7 @@ function preventCursorMove(event: MouseEvent) {
   min-height: 1em;
   overflow-wrap: anywhere;
   white-space: normal;
+  /* 行内放不下时单词整体换到下一行，而不是压缩块宽把文字挤成两行 */
+  flex-shrink: 0;
 }
 </style>
