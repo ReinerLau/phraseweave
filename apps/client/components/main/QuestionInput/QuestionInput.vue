@@ -48,7 +48,6 @@ import { useGameMode } from "~/composables/main/game";
 import { containsLatinLetter, sanitizeQuestionInput, useInput } from "~/composables/main/question";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
-import { useErrorTip } from "~/composables/user/errorTip";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useShowWordsWidth } from "~/composables/user/words";
@@ -67,9 +66,7 @@ const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { playRightSound, playErrorSound } = usePlayTipSound();
-const { handleAnswerError, resetCloseTip } = answerError();
 const { isAutoNextQuestion } = useAutoNextQuestion();
-const { isShowErrorTip } = useErrorTip();
 const questionInputWordsEl = ref<HTMLElement>();
 const questionInputChProbeEl = ref<HTMLElement>();
 
@@ -82,7 +79,7 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     getInputWordWidth,
     getInputWordCapacity,
   });
-const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 
 function handleInputFocus() {
   focusInput();
@@ -94,7 +91,6 @@ function handleInputBlur() {
 
 onMounted(() => {
   focusInput();
-  resetCloseTip();
 });
 
 focusInputWhenWIndowFocus();
@@ -124,7 +120,6 @@ watch(
   () => courseStore.statementIndex,
   () => {
     focusInput();
-    resetCloseTip();
   },
 );
 
@@ -207,26 +202,8 @@ function getInputWordCapacity(word: string) {
     : Math.max(0, Math.min(blockCapacity, availableBlockWidth));
 }
 
-function answerError() {
-  let wrongTimes = 0;
-
-  function handleAnswerError() {
-    playErrorSound();
-    wrongTimes++;
-    if (isShowErrorTip() && wrongTimes >= 3) {
-      showAnswerTip();
-    }
-  }
-
-  function resetCloseTip() {
-    wrongTimes = 0;
-    hiddenAnswerTip();
-  }
-
-  return {
-    handleAnswerError,
-    resetCloseTip,
-  };
+function handleAnswerError() {
+  playErrorSound();
 }
 
 function handleAnswerRight() {
