@@ -10,11 +10,10 @@
     </template>
     <template v-else>
       <MainTool />
-      <MainTips class="shrink-0" />
-      <Footer compact />
-      <div class="min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div class="h-0 min-h-0 min-w-0 flex-1 overflow-hidden">
         <MainGame />
       </div>
+      <MainTips class="shrink-0" />
     </template>
   </div>
 </template>

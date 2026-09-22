@@ -59,8 +59,9 @@ describe("Answer", () => {
 
     expect(wrapper.find(".i-ph-speaker-simple-high").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("再来一次");
-    expect(wrapper.text()).toContain("下一题");
-    expect(wrapper.get("button").classes()).not.toContain("ml-6");
+    expect(wrapper.text()).not.toContain("下一题");
+    expect(wrapper.findAll("button")).toHaveLength(0);
+    expect(wrapper.get('[data-testid="answer-prompt"]').text()).toBe("我喜欢");
 
     await wrapper.find("span").trigger("click");
     expect(handlePlayWordSound).toHaveBeenCalledWith("I");

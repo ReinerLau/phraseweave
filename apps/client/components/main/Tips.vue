@@ -1,16 +1,22 @@
 <template>
   <div
-    class="relative flex min-h-10 items-start justify-start py-1"
+    class="relative flex min-h-10 w-full items-stretch justify-start gap-2 py-1"
     data-testid="practice-tips"
   >
-    <MainPrevAndNextBtn>
-      <button
-        class="btn btn-outline btn-sm z-10"
-        @click="toggleGameMode"
-      >
-        {{ answerTipText }}
-      </button>
-    </MainPrevAndNextBtn>
+    <button
+      class="btn btn-outline btn-sm min-w-0 flex-1"
+      data-testid="show-answer-button"
+      @click="toggleGameMode"
+    >
+      {{ answerTipText }}
+    </button>
+    <button
+      class="btn btn-outline btn-sm min-w-0 flex-1"
+      data-testid="next-question-button"
+      @click="goToNextQuestion"
+    >
+      下一题
+    </button>
   </div>
 </template>
 
@@ -20,6 +26,10 @@ import { computed, onMounted, onUnmounted } from "vue";
 import { useQuestionInput } from "~/components/main/QuestionInput/questionInputHelper";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
+import {
+  useExerciseNavigation,
+  useExerciseNavigationShortcuts,
+} from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
 import { useSummary } from "~/composables/main/summary";
 import { useShortcutKeyMode } from "~/composables/user/shortcutKey";
@@ -28,6 +38,8 @@ import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 const { shortcutKeys } = useShortcutKeyMode();
 usePlaySound(shortcutKeys.value.sound);
 const { toggleGameMode } = useShowAnswer();
+const { goToNextQuestion } = useExerciseNavigation();
+useExerciseNavigationShortcuts();
 
 const answerTipText = computed(() => {
   let text = "";
