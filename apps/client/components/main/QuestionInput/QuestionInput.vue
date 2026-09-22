@@ -204,6 +204,7 @@ function getInputWordCapacity(word: string) {
 
 function handleAnswerError() {
   playErrorSound();
+  clearInput();
 }
 
 function handleAnswerRight() {
