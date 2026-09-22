@@ -1,7 +1,7 @@
 <template>
   <div class="min-w-0 max-w-full text-center">
     <div
-      class="flex w-full min-w-0 max-w-full flex-wrap items-center justify-center gap-1 text-5xl"
+      class="answer-words flex w-full min-w-0 max-w-full flex-wrap items-center justify-center gap-1"
     >
       <span
         v-for="word in words"
@@ -84,3 +84,9 @@ function goToNextQuestion() {
   showQuestion();
 }
 </script>
+
+<style scoped>
+.answer-words {
+  font-size: clamp(1.5rem, 8vw, 3rem);
+}
+</style>
