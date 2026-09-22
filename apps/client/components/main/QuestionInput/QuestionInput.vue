@@ -340,7 +340,7 @@ function preventCursorMove(event: MouseEvent) {
   container-type: inline-size;
   width: 100%;
   min-width: 0;
-  min-height: 0;
+  min-height: clamp(3.5rem, 12vh, 4rem);
   max-width: 100%;
   overflow: hidden;
   padding-inline: 1rem;
