@@ -363,6 +363,16 @@ describe("mobile practice layout", () => {
     cy.contains(courseTitle).should("be.visible");
   });
 
+  it("disables iOS telephone detection for practice titles", () => {
+    cy.get('meta[name="format-detection"]')
+      .should("have.attr", "content", "telephone=no");
+
+    cy.get('[data-tip="练习卡片列表"]').click();
+    cy.get("#contents").should("have.class", "show");
+    cy.get('a[href^="tel:"]').should("not.exist");
+    cy.location("pathname").should("eq", `/game/${coursePackId}/${courseId}`);
+  });
+
   it("opens exercise actions from a touch tap", () => {
     cy.visit("/course-pack");
     cy.get('button[aria-label="更多操作"]')
