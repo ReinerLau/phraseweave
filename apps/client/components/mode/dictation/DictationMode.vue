@@ -10,7 +10,6 @@
       <ModeDictationToolbar />
       <template v-if="isQuestion()">
         <ModeDictationQuestion />
-        <MainAnswerTip v-show="isAnswerTip()" />
       </template>
       <template v-else-if="isAnswer()">
         <MainAnswer />
@@ -22,12 +21,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 
-import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
 import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const { isAnswer, isQuestion } = useGameMode();
-const { isAnswerTip } = useAnswerTip();
 const { isStart } = useStartGame();
 
 function useStartGame() {

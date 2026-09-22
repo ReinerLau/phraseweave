@@ -14,6 +14,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
 
+import { useQuestionInput } from "~/components/main/QuestionInput/questionInputHelper";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
 import { useGameMode } from "~/composables/main/game";
@@ -59,6 +60,7 @@ function usePlaySound(key: string) {
 }
 
 function useShowAnswer() {
+  const { focusInput } = useQuestionInput();
   const { showQuestion } = useGameMode();
   const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
 
@@ -80,6 +82,7 @@ function useShowAnswer() {
       } else {
         showAnswerTip();
       }
+      focusInput();
     }
   }
 

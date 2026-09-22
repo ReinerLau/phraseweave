@@ -44,6 +44,15 @@ export function useInput({
     updateActiveWord(val ? getInputCursorPosition() : 0);
   }
 
+  function clearInput() {
+    inputValue.value = "";
+    userInputWords.forEach((word) => {
+      word.userInput = "";
+      word.incorrect = false;
+    });
+    updateActiveWord(0);
+  }
+
   function createWord(word: string, id: number) {
     return reactive({
       text: word,
@@ -206,6 +215,7 @@ export function useInput({
     userInputWords,
     submitAnswer,
     setInputValue,
+    clearInput,
     handleKeyboardInput,
     resetUserInputWords,
   };

@@ -16,7 +16,7 @@
           :class="getWordsClassNames(i)"
           :style="{ width: `${inputWidth(w)}ch` }"
         >
-          {{ userInputWords[i]["userInput"] }}
+          {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
         </div>
       </template>
       <input
@@ -75,13 +75,14 @@ const { handleAnswerError, resetCloseTip } = answerError();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const { isShowErrorTip } = useErrorTip();
 
-const { inputValue, userInputWords, submitAnswer, setInputValue, handleKeyboardInput } = useInput({
-  source: () => courseStore.currentStatement?.english!,
-  setInputCursorPosition,
-  getInputCursorPosition,
-  inputChangedCallback,
-});
-const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
+const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
+  useInput({
+    source: () => courseStore.currentStatement?.english!,
+    setInputCursorPosition,
+    getInputCursorPosition,
+    inputChangedCallback,
+  });
+const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 
 const inputViewportOffset = ref(0);
 let inputVisibilityFrame: number | undefined;
@@ -161,9 +162,17 @@ watch(
   () => inputValue.value,
   (val) => {
     setInputValue(val);
-    courseTimer.time(String(courseStore.statementIndex));
+    if (!isAnswerTip()) {
+      courseTimer.time(String(courseStore.statementIndex));
+    }
   },
 );
+
+watch(isAnswerTip, (isVisible) => {
+  if (isVisible) {
+    clearInput();
+  }
+});
 
 watch(
   () => courseStore.statementIndex,
@@ -265,6 +274,9 @@ function handleAnswerRight() {
 // 通过检测是否为输入法 来避免按下 enter 后直接触发 submit answer
 let isComposing = ref(false);
 function handleCompositionStart() {
+  if (isAnswerTip()) {
+    hiddenAnswerTip();
+  }
   isComposing.value = true;
 }
 
@@ -273,6 +285,16 @@ function handleCompositionEnd() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (isAnswerTip()) {
+    hiddenAnswerTip();
+
+    if (e.code === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+  }
+
   // 避免在某些中文输入法中，按下 Ctrl 键时，输入法会将当前的预输入字符上屏
   if (e.ctrlKey) {
     e.preventDefault();
