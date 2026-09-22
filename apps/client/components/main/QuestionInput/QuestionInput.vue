@@ -69,6 +69,8 @@ const { playRightSound, playErrorSound } = usePlayTipSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 const questionInputChProbeEl = ref<HTMLElement>();
+const ERROR_FEEDBACK_DURATION_MS = 300;
+let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
 
 const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
   useInput({
@@ -94,6 +96,7 @@ onMounted(() => {
 });
 
 focusInputWhenWIndowFocus();
+onUnmounted(cancelErrorReset);
 
 watch(
   () => inputValue.value,
@@ -202,12 +205,24 @@ function getInputWordCapacity(word: string) {
     : Math.max(0, Math.min(blockCapacity, availableBlockWidth));
 }
 
+function cancelErrorReset() {
+  if (errorResetTimer === undefined) return;
+
+  clearTimeout(errorResetTimer);
+  errorResetTimer = undefined;
+}
+
 function handleAnswerError() {
   playErrorSound();
-  clearInput();
+  cancelErrorReset();
+  errorResetTimer = setTimeout(() => {
+    errorResetTimer = undefined;
+    clearInput();
+  }, ERROR_FEEDBACK_DURATION_MS);
 }
 
 function handleAnswerRight() {
+  cancelErrorReset();
   courseTimer.timeEnd(String(courseStore.statementIndex)); // 停止当前题目的计时
   playRightSound();
 
