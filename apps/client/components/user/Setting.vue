@@ -159,17 +159,6 @@
             </td>
           </tr>
 
-          <tr class="hover">
-            <td class="label-text">自动显示答案（输错三次）</td>
-            <td class="w-[300px] text-center">
-              <input
-                type="checkbox"
-                class="toggle toggle-secondary"
-                :checked="showErrorTip"
-                @change="toggleShowErrorTip"
-              />
-            </td>
-          </tr>
         </tbody>
       </table>
     </section>
@@ -224,7 +213,6 @@ import { onMounted, onUnmounted, ref } from "vue";
 
 import Message from "~/components/main/Message/useMessage";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
-import { useErrorTip } from "~/composables/user/errorTip";
 import { GameMode, useGameMode } from "~/composables/user/gameMode";
 import { PronunciationType, usePronunciation } from "~/composables/user/pronunciation";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
@@ -264,7 +252,6 @@ const {
 } = usePronunciation();
 const { showWordsWidth, toggleAutoWordsWidth } = useShowWordsWidth();
 const { useSpace, toggleUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
-const { showErrorTip, toggleShowErrorTip } = useErrorTip();
 const {
   showModal,
   shortcutKeys,
