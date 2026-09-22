@@ -1,31 +1,110 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { getWordWidth } from "../questionInputHelper";
+import {
+  createWordWidthMeasurer,
+  getInputWordWidthCh,
+  getWordBlockWidthCh,
+  getWordCapacityCh,
+  WORD_BLOCK_PADDING_CH,
+} from "../questionInputHelper";
 
-describe("getWordWidth", () => {
-  it("should return the correct width for a single letter", () => {
-    expect(getWordWidth("i")).toBe(1.5); // 0.5 (width of 'i') + 1 (padding)
-    expect(getWordWidth("w")).toBe(2.5); // 1.5 (width of 'w') + 1 (padding)
+// 模拟真实字体：不同字符宽度不同，"0" 宽 10px（即 1ch = 10px）
+const LETTER_WIDTHS: Record<string, number> = { "0": 10, i: 4, l: 4, w: 16, o: 11 };
+
+function fakeReadWidth(text: string) {
+  return text.split("").reduce((total, char) => total + (LETTER_WIDTHS[char] ?? 8), 0);
+}
+
+describe("createWordWidthMeasurer", () => {
+  it("按探针实测宽度换算为 ch 单位", () => {
+    const measurer = createWordWidthMeasurer(fakeReadWidth);
+
+    expect(measurer.chWidthPx()).toBe(10);
+    expect(measurer.measureCh("0")).toBe(1);
+    expect(measurer.measureCh("ii")).toBe(0.8);
+    expect(measurer.measureCh("wow")).toBe(4.3);
   });
 
-  it("should return the correct width for a word", () => {
-    expect(getWordWidth("hi")).toBe(2.6); // 1.1 (width of 'h') + 0.5 (width of 'i') + 1 (padding)
-    expect(getWordWidth("wow")).toBe(5.1); // 1.5 (width of 'w') * 2 + 1.1 (width of 'o') + 1 (padding)
+  it("不同字符宽度不同的字体不会被拉平", () => {
+    const measurer = createWordWidthMeasurer(fakeReadWidth);
+
+    // i 和 w 实际宽度差 4 倍，测量结果必须保留真实差异
+    expect(measurer.measureCh("wwww")).toBeGreaterThan(measurer.measureCh("iiii") * 3);
   });
 
-  it("should handle uppercase letters", () => {
-    expect(getWordWidth("I")).toBe(1.5); // 0.5 (width of 'I') + 1 (padding)
-    expect(getWordWidth("WOW")).toBe(5.1); // 1.5 (width of 'W') * 2 + 1.1 (width of 'O') + 1 (padding)
+  it("缓存测量结果，重复测量不再读取探针", () => {
+    const readWidth = vi.fn(fakeReadWidth);
+    const measurer = createWordWidthMeasurer(readWidth);
+
+    measurer.measureCh("hello");
+    const callsAfterFirstMeasure = readWidth.mock.calls.length;
+    measurer.measureCh("hello");
+
+    expect(readWidth.mock.calls.length).toBe(callsAfterFirstMeasure);
   });
 
-  it("should handle non-letter characters", () => {
-    expect(getWordWidth("123")).toBe(4); // 1 (width of each character) * 3 + 1 (padding)
-    expect(getWordWidth("!@#")).toBe(4); // 1 (width of each character) * 3 + 1 (padding)
+  it("invalidate 后重新测量", () => {
+    const readWidth = vi.fn(fakeReadWidth);
+    const measurer = createWordWidthMeasurer(readWidth);
+
+    measurer.measureCh("hello");
+    measurer.invalidate();
+    measurer.measureCh("hello");
+
+    expect(readWidth.mock.calls.length).toBeGreaterThan(1);
   });
 
-  it("should return the correct width for a long string with various characters", () => {
-    const longString =
-      "This is a long string with various characters, including letters, numbers, and symbols! 1234567890";
-    expect(getWordWidth(longString)).toBe(91.3);
+  it("探针不可用时退化为按字符数估算", () => {
+    const measurer = createWordWidthMeasurer(() => 0);
+
+    expect(measurer.chWidthPx()).toBe(0);
+    expect(measurer.measureCh("because")).toBe(7);
+  });
+});
+
+describe("getWordBlockWidthCh", () => {
+  it("块宽等于目标单词实测宽度加左右留白", () => {
+    const blockWidth = getWordBlockWidthCh("wow", (text) => fakeReadWidth(text) / 10);
+
+    expect(blockWidth).toBeCloseTo(4.3 + WORD_BLOCK_PADDING_CH * 2);
+  });
+
+  it("块宽永远不小于目标单词本身，敲完的单词一定放得下", () => {
+    const measureCh = (text: string) => fakeReadWidth(text) / 10;
+
+    for (const word of ["i", "because", "internationalization", "WOW", "don't", "123"]) {
+      expect(getWordBlockWidthCh(word, measureCh)).toBeGreaterThanOrEqual(measureCh(word));
+    }
+  });
+});
+
+describe("getInputWordWidthCh", () => {
+  it("按小写测量，大小写作答都能放进同一个块", () => {
+    const measureCh = vi.fn((text: string) => fakeReadWidth(text) / 10);
+
+    expect(getInputWordWidthCh("THIS", measureCh)).toBe(getInputWordWidthCh("this", measureCh));
+    expect(measureCh).toHaveBeenCalledWith("this");
+  });
+
+  it("多敲一个字符宽度一定变大，截断边界是确定的", () => {
+    const measureCh = (text: string) => fakeReadWidth(text) / 10;
+
+    expect(getInputWordWidthCh("thist", measureCh)).toBeGreaterThan(
+      getInputWordWidthCh("this", measureCh),
+    );
+  });
+});
+
+describe("getWordCapacityCh", () => {
+  it("容器足够宽时容量就是目标单词实测宽度", () => {
+    expect(getWordCapacityCh(7.5, 100)).toBe(7.5);
+  });
+
+  it("容器更窄时按容器宽度收窄并扣除留白", () => {
+    expect(getWordCapacityCh(12, 10)).toBeCloseTo(10 - WORD_BLOCK_PADDING_CH * 2);
+  });
+
+  it("容量不为负数", () => {
+    expect(getWordCapacityCh(7.5, 0)).toBe(0);
   });
 });

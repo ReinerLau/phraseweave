@@ -30,9 +30,10 @@
         @compositionend="handleCompositionEnd"
         autoFocus
       />
+      <!-- 隐藏探针：用真实渲染字体测量文本宽度和 1ch 像素宽度 -->
       <span
-        ref="questionInputChProbeEl"
-        class="pointer-events-none absolute h-0 w-[1ch] opacity-0"
+        ref="questionInputProbeEl"
+        class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
         aria-hidden="true"
       ></span>
     </div>
@@ -50,9 +51,14 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
-import { useShowWordsWidth } from "~/composables/user/words";
 import { useExerciseStore } from "~/store/exercise";
-import { getWordWidth, useQuestionInput } from "./questionInputHelper";
+import {
+  createWordWidthMeasurer,
+  getInputWordWidthCh,
+  getWordBlockWidthCh,
+  getWordCapacityCh,
+  useQuestionInput,
+} from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
 const courseStore = useExerciseStore();
@@ -61,14 +67,36 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 
 const { showAnswer } = useGameMode();
 const { showSummary } = useSummary();
-const { isShowWordsWidth } = useShowWordsWidth();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { playRightSound, playErrorSound } = usePlayTipSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
-const questionInputChProbeEl = ref<HTMLElement>();
+const questionInputProbeEl = ref<HTMLElement>();
+const measureVersion = ref(0);
+
+function readProbeWidth(text: string) {
+  const probe = questionInputProbeEl.value;
+  if (!probe) return 0;
+
+  probe.textContent = text;
+  return probe.getBoundingClientRect().width;
+}
+
+const wordMeasurer = createWordWidthMeasurer(readProbeWidth);
+
+function measureCh(text: string) {
+  // 读取版本号：字体加载完成后失效重测，并让渲染副作用重新测量
+  void measureVersion.value;
+  return wordMeasurer.measureCh(text);
+}
+
+function invalidateMeasurements() {
+  wordMeasurer.invalidate();
+  measureVersion.value += 1;
+}
+
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -93,6 +121,12 @@ function handleInputBlur() {
 
 onMounted(() => {
   focusInput();
+
+  // 首次渲染时探针 ref 还未挂载，缓存里是退化的按字符数估算，挂载后按真实字体重测
+  invalidateMeasurements();
+
+  // 字体加载完成后按最终字体重新测量
+  document.fonts?.ready?.then(invalidateMeasurements).catch(() => undefined);
 });
 
 focusInputWhenWIndowFocus();
@@ -172,37 +206,26 @@ function inputChangedCallback(e: KeyboardEvent) {
   }
 }
 
-// 输入宽度
+// 输入块宽度：按目标单词在当前字体下的实测宽度预留，单位 ch
 function inputWidth(word: string) {
-  if (!isShowWordsWidth()) {
-    // 不显示对应单词宽度，默认 4 字符宽度
-    return 4;
-  }
-
-  return getWordWidth(word);
+  return getWordBlockWidthCh(word, measureCh);
 }
 
-function getInputWordWidth(word: string) {
-  return Math.max(0, getWordWidth(word) - 1);
+// 已输入文本的实测宽度，单位 ch
+function getInputWordWidth(text: string) {
+  return getInputWordWidthCh(text, measureCh);
 }
 
+// 可输入容量：不超过目标单词的实测宽度，保证敲完目标单词一定放得下
 function getInputWordCapacity(word: string) {
-  const blockCapacity = isShowWordsWidth() ? getInputWordWidth(word) : 4;
+  const wordWidthCh = getInputWordWidth(word);
   const wordsEl = questionInputWordsEl.value;
-  const chProbeEl = questionInputChProbeEl.value;
+  if (!wordsEl) return wordWidthCh;
 
-  if (!wordsEl || !chProbeEl) return blockCapacity;
+  const zeroWidth = wordMeasurer.chWidthPx();
+  if (zeroWidth <= 0) return wordWidthCh;
 
-  const chWidth = chProbeEl.getBoundingClientRect().width;
-  if (chWidth <= 0) return blockCapacity;
-
-  const containerWidthInCh = wordsEl.clientWidth / chWidth;
-  const blockWidth = inputWidth(word);
-  const availableBlockWidth = Math.min(blockWidth, containerWidthInCh);
-
-  return isShowWordsWidth()
-    ? Math.max(0, Math.min(blockCapacity, availableBlockWidth - 1))
-    : Math.max(0, Math.min(blockCapacity, availableBlockWidth));
+  return getWordCapacityCh(wordWidthCh, wordsEl.clientWidth / zeroWidth);
 }
 
 function cancelErrorReset() {

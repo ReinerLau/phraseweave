@@ -126,17 +126,6 @@
       <table class="table">
         <tbody>
           <tr class="hover">
-            <td class="label-text">显示每个单词长度</td>
-            <td class="w-[300px] text-center">
-              <input
-                type="checkbox"
-                class="toggle toggle-secondary"
-                :checked="showWordsWidth"
-                @change="toggleAutoWordsWidth"
-              />
-            </td>
-          </tr>
-          <tr class="hover">
             <td class="label-text">开启空格提交答案</td>
             <td class="w-[300px] text-center">
               <input
@@ -158,7 +147,6 @@
               />
             </td>
           </tr>
-
         </tbody>
       </table>
     </section>
@@ -222,7 +210,6 @@ import {
   useKeyboardSound,
 } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
-import { useShowWordsWidth } from "~/composables/user/words";
 import { parseShortcutKeys } from "~/utils/keyboardShortcuts";
 
 const dialogBoxRef = ref<HTMLElement | null>(null);
@@ -250,7 +237,6 @@ const {
   getPronunciationOptions,
   togglePronunciation,
 } = usePronunciation();
-const { showWordsWidth, toggleAutoWordsWidth } = useShowWordsWidth();
 const { useSpace, toggleUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const {
   showModal,
