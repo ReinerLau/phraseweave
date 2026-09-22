@@ -102,6 +102,30 @@ describe("mobile practice layout", () => {
     assertNoHorizontalOverflow();
   });
 
+  it("does not stretch the page when the iOS keyboard shrinks the viewport", () => {
+    cy.get('input[type="text"]').click({ force: true });
+    let pageHeightBeforeKeyboard = 0;
+    cy.window().then((window) => {
+      pageHeightBeforeKeyboard = window.document.documentElement.scrollHeight;
+      const viewport = window.visualViewport;
+      expect(viewport).to.not.be.null;
+
+      let viewportHeight = window.innerHeight;
+      Object.defineProperty(viewport, "height", {
+        configurable: true,
+        get: () => viewportHeight,
+      });
+      viewportHeight -= 280;
+      viewport?.dispatchEvent(new Event("resize"));
+    });
+
+    cy.get(".question-input-shell").should(($shell) => {
+      const document = $shell[0].ownerDocument;
+      expect(document.documentElement.scrollHeight).to.be.at.most(pageHeightBeforeKeyboard + 1);
+    });
+    cy.contains("div.text-2xl", "这是一个测试句子").should("be.visible");
+  });
+
   it("keeps the answer and contents views within the viewport", () => {
     cy.get('input[type="text"]')
       .type(englishSentence, { force: true })
