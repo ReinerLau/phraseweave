@@ -97,6 +97,9 @@ function invalidateMeasurements() {
   measureVersion.value += 1;
 }
 
+const ERROR_FEEDBACK_DURATION_MS = 300;
+let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
+
 const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
   useInput({
     source: () => courseStore.currentStatement?.english!,
@@ -127,6 +130,7 @@ onMounted(() => {
 });
 
 focusInputWhenWIndowFocus();
+onUnmounted(cancelErrorReset);
 
 watch(
   () => inputValue.value,
@@ -224,11 +228,24 @@ function getInputWordCapacity(word: string) {
   return getWordCapacityCh(wordWidthCh, wordsEl.clientWidth / zeroWidth);
 }
 
+function cancelErrorReset() {
+  if (errorResetTimer === undefined) return;
+
+  clearTimeout(errorResetTimer);
+  errorResetTimer = undefined;
+}
+
 function handleAnswerError() {
   playErrorSound();
+  cancelErrorReset();
+  errorResetTimer = setTimeout(() => {
+    errorResetTimer = undefined;
+    clearInput();
+  }, ERROR_FEEDBACK_DURATION_MS);
 }
 
 function handleAnswerRight() {
+  cancelErrorReset();
   courseTimer.timeEnd(String(courseStore.statementIndex)); // 停止当前题目的计时
   playRightSound();
 
