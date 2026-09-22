@@ -34,10 +34,6 @@
     <MainContents />
   </div>
 
-  <CommonProgressBar
-    class="h-6 p-[2px]"
-    :percentage="currentPercentage"
-  />
   <MainMessageBox
     class="mt-[-4vh]"
     v-model:isShowModal="showTipModal"
@@ -64,18 +60,7 @@ const { toggleContents } = useContent();
 const { showTipModal, handleDoAgain, handleTipConfirm } = useDoAgain();
 
 const currentCourseInfo = computed(() => {
-  return `${courseStore.currentCourse?.title}（${currentSchedule.value}/${courseStore.totalQuestionsCount}）`;
-});
-
-const currentSchedule = computed(() => {
-  return courseStore.statementIndex + 1;
-});
-
-const currentPercentage = computed(() => {
-  if (courseStore.isAllDone()) {
-    return 100;
-  }
-  return ((courseStore.statementIndex / courseStore.totalQuestionsCount) * 100).toFixed(2);
+  return courseStore.currentCourse?.title;
 });
 
 function useDoAgain() {
