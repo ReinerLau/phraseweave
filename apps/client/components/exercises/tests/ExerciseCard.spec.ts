@@ -30,6 +30,22 @@ describe("ExerciseCard", () => {
     expect(wrapper.classes()).not.toContain("w-72");
   });
 
+  it("does not render an empty description element", () => {
+    const wrapper = mount(ExerciseCard, {
+      props: {
+        exercise: {
+          id: "exercise-1",
+          title: "202609201714",
+          description: "",
+          isFree: true,
+          cover: "",
+        },
+      },
+    });
+
+    expect(wrapper.find("p").exists()).toBe(false);
+  });
+
   it("wraps long titles and aligns the actions with their top", () => {
     const wrapper = mount(ExerciseCard, {
       props: {
@@ -70,6 +86,7 @@ describe("ExerciseCard", () => {
 
     const moreButton = wrapper.find('button[aria-label="更多操作"]');
     expect(moreButton.attributes("title")).toBe("更多操作");
+    expect(moreButton.classes()).toContain("pr-0");
     expect(moreButton.find("span").classes()).toContain("i-ph-dots-three-vertical");
 
     await moreButton.trigger("click");

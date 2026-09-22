@@ -13,7 +13,7 @@
           @click.stop
         >
           <button
-            class="btn btn-ghost btn-sm"
+            class="btn btn-ghost btn-sm pr-0"
             type="button"
             aria-label="更多操作"
             title="更多操作"
@@ -65,7 +65,7 @@
           </ul>
         </div>
       </div>
-      <p>{{ exercise.description }}</p>
+      <p v-if="exercise.description">{{ exercise.description }}</p>
     </div>
   </div>
 </template>
