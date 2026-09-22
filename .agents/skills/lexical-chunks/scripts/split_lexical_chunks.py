@@ -875,13 +875,6 @@ def markdown_content_escape(text: str) -> str:
     return re.sub(r"([`*_{}\[\]()<>#+.!|])", r"\\\1", escaped)
 
 
-def render_report(chunks_by_sentence: Iterable[Iterable[str]]) -> str:
-    lines = ["| 英文语块 |", "|---|"]
-    for chunks in chunks_by_sentence:
-        lines.extend(f"| {markdown_escape(chunk)} |" for chunk in chunks)
-    return "\n".join(lines) + "\n"
-
-
 def _require_exact_keys(
     value: Mapping[str, Any], expected: set[str], location: str
 ) -> None:
@@ -1213,18 +1206,69 @@ def parse_annotations(text: str, analysis: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def render_contextual_report(
-    analysis: Mapping[str, Any], annotations: Mapping[str, Any]
+    analysis: Mapping[str, Any],
+    annotations: Mapping[str, Any],
+    rules: ProgressionRules | None = None,
 ) -> str:
+    active_rules = rules if rules is not None else load_rules()
+
+    def atoms_for_unit(
+        unit: Mapping[str, Any], atoms: Sequence[Mapping[str, Any]]
+    ) -> list[Mapping[str, Any]]:
+        return [
+            atom
+            for atom in atoms
+            if atom["core"]
+            and atom["start"] >= unit["start"]
+            and atom["end"] <= unit["end"]
+        ]
+
+    def nominal_composition_ranges(
+        atoms: Sequence[Mapping[str, Any]],
+    ) -> set[tuple[int, int]]:
+        ranges: set[tuple[int, int]] = set()
+        for group in _nominal_core_groups(atoms, active_rules):
+            for core_count in range(2, len(group) + 1):
+                first = group[-core_count][1]
+                last = group[-1][1]
+                ranges.add((first["start"], last["end"]))
+        return ranges
+
+    def unit_label(
+        unit: Mapping[str, Any],
+        atoms: Sequence[Mapping[str, Any]],
+        nominal_ranges: set[tuple[int, int]],
+    ) -> str:
+        if unit["kind"] == "composition":
+            if (unit["start"], unit["end"]) in nominal_ranges:
+                return "组合·名词短语"
+            return "组合·渐进组合"
+
+        unit_atoms = atoms_for_unit(unit, atoms)
+        if len(unit_atoms) != 1:
+            raise ConfigurationError(
+                "core learning unit must map to exactly one core atom"
+            )
+        source = unit_atoms[0]["source"]
+        if source == "oewn":
+            return "核心·词典匹配"
+        if source == "syntax":
+            return "核心·动词 + 小品词"
+        if source == "token":
+            return "核心·实义词"
+        raise ConfigurationError(f"unsupported core atom source: {source}")
+
     lines = ["# 渐进学习单元", ""]
     for index, (analyzed_sentence, annotated_sentence) in enumerate(
         zip(analysis["sentences"], annotations["sentences"], strict=True), start=1
     ):
+        nominal_ranges = nominal_composition_ranges(analyzed_sentence["atoms"])
         lines.extend(
             [
                 f"## 第 {index} 句",
                 "",
-                "| 步骤 | 中文提示 | 英文答案 |",
-                "|---:|---|---|",
+                "| 步骤 | 中文提示 | 英文答案 | 匹配标签 |",
+                "|---:|---|---|---|",
             ]
         )
         for step, (unit, prompt) in enumerate(
@@ -1237,7 +1281,8 @@ def render_contextual_report(
         ):
             lines.append(
                 f"| {step} | {markdown_content_escape(prompt)} | "
-                f"{markdown_content_escape(unit['text'])} |"
+                f"{markdown_content_escape(unit['text'])} | "
+                f"{markdown_content_escape(unit_label(unit, analyzed_sentence['atoms'], nominal_ranges))} |"
             )
         final_step = len(analyzed_sentence["learning_units"]) + 1
         lines.extend(
@@ -1245,13 +1290,13 @@ def render_contextual_report(
                 (
                     f"| {final_step} | "
                     f"{markdown_content_escape(annotated_sentence['sentence_translation'])} | "
-                    f"{markdown_escape(analyzed_sentence['sentence'])} |"
+                    f"{markdown_escape(analyzed_sentence['sentence'])} | "
+                    "完成·完整原句 |"
                 ),
                 "",
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
-
 
 def render_phraseweave_backup(
     analysis: Mapping[str, Any], annotations: Mapping[str, Any]
@@ -1324,15 +1369,26 @@ def write_output(requested: Path, content: str) -> Path:
 def main() -> int:
     args = parse_args()
 
+    if args.render_analysis is None and args.analysis_output is None:
+        print(
+            "lexical-chunks: specify --analysis-output or --render-analysis",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.render_analysis is not None:
         try:
+            rules = load_rules()
             analysis = load_analysis(args.render_analysis)
             annotations = parse_annotations(sys.stdin.read(), analysis)
             markdown_path, phraseweave_path = output_paths(args)
             rendered_outputs: list[tuple[Path, str]] = []
             if markdown_path is not None:
                 rendered_outputs.append(
-                    (markdown_path, render_contextual_report(analysis, annotations))
+                    (
+                        markdown_path,
+                        render_contextual_report(analysis, annotations, rules),
+                    )
                 )
             if phraseweave_path is not None:
                 rendered_outputs.append(
@@ -1384,18 +1440,7 @@ def main() -> int:
         print(output)
         return 0
 
-    output = write_output(
-        args.output or DEFAULT_OUTPUT,
-        render_report(
-            [
-                [unit["text"] for unit in item["learning_units"]]
-                + [item["sentence"]]
-                for item in analysis["sentences"]
-            ]
-        ),
-    )
-    print(output)
-    return 0
+    raise AssertionError("analysis-output should have returned before rendering")
 
 
 if __name__ == "__main__":
