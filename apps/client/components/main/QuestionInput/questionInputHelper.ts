@@ -32,9 +32,6 @@ export function useQuestionInput() {
   };
 }
 
-/** 输入块每侧留白，单位 ch（当前字体中 "0" 的宽度） */
-export const WORD_BLOCK_PADDING_CH = 0.25;
-
 export interface WordWidthMeasurer {
   /** 测量文本在当前字体下的宽度，单位 ch */
   measureCh(text: string): number;
@@ -75,11 +72,6 @@ export function createWordWidthMeasurer(readWidth: (text: string) => number): Wo
   return { measureCh, chWidthPx, invalidate };
 }
 
-/** 输入块宽度：目标单词实测宽度 + 左右留白，单位 ch */
-export function getWordBlockWidthCh(word: string, measureCh: (text: string) => number) {
-  return measureCh(word) + WORD_BLOCK_PADDING_CH * 2;
-}
-
 /**
  * 已输入文本的测量宽度，单位 ch。
  * 按小写测量，保留"大小写作答都算数"的旧行为（判定比较本身也是小写归一的）。
@@ -88,7 +80,7 @@ export function getInputWordWidthCh(text: string, measureCh: (text: string) => n
   return measureCh(text.toLocaleLowerCase());
 }
 
-/** 可输入容量：不超过目标单词实测宽度；容器更窄时扣除留白，保证文字不会顶到容器边缘，单位 ch */
+/** 可输入容量：不超过目标单词实测宽度；容器更窄时不超过容器宽度，单位 ch */
 export function getWordCapacityCh(wordWidthCh: number, containerWidthCh: number) {
-  return Math.max(0, Math.min(wordWidthCh, containerWidthCh - WORD_BLOCK_PADDING_CH * 2));
+  return Math.max(0, Math.min(wordWidthCh, containerWidthCh));
 }
