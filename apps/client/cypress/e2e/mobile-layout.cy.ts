@@ -150,18 +150,33 @@ describe("mobile practice layout", () => {
     assertNoVerticalOverflow();
   });
 
-  it("keeps the practice controls and version above the question", () => {
-    cy.get("footer").contains(/^v/).should("be.visible");
+  it("keeps the practice controls at the bottom without a version or arrow controls", () => {
+    cy.get("footer").should("not.exist");
+    cy.get(".arrow-btn").should("not.exist");
+    cy.get('[data-testid="practice-tips"] button')
+      .should("have.length", 2)
+      .then(($buttons) => {
+        expect($buttons[0].getBoundingClientRect().width).to.equal(
+          $buttons[1].getBoundingClientRect().width,
+        );
+      });
     cy.contains("显示答案").should("be.visible");
+    cy.contains("下一题").should("be.visible");
     cy.get(".question-content").should(($question) => {
+      const document = $question[0].ownerDocument;
       const questionTop = $question[0].getBoundingClientRect().top;
-      const footerBottom = document.querySelector("footer")?.getBoundingClientRect().bottom ?? 0;
+      const toolBottom =
+        document.querySelector('[data-tip="练习卡片列表"]')?.getBoundingClientRect().bottom ?? 0;
       const tipsBottom =
         document.querySelector("[data-testid='practice-tips']")?.getBoundingClientRect().bottom ??
         0;
+      const questionBottom = $question[0].getBoundingClientRect().bottom;
+      const tipsTop =
+        document.querySelector("[data-testid='practice-tips']")?.getBoundingClientRect().top ?? 0;
 
-      expect(footerBottom).to.be.at.most(questionTop);
-      expect(tipsBottom).to.be.at.most(questionTop);
+      expect(toolBottom).to.be.at.most(questionTop);
+      expect(questionBottom).to.be.at.most(tipsTop + 1);
+      expect(tipsBottom).to.be.at.most(568);
     });
   });
 
@@ -327,6 +342,36 @@ describe("mobile practice layout", () => {
     assertPracticePageDoesNotScroll();
   });
 
+  it("keeps the answer font size and content alignment from the question view", () => {
+    let questionFontSize = 0;
+    cy.get(".question-content").then(($question) => {
+      questionFontSize = parseFloat(window.getComputedStyle($question[0]).fontSize);
+      const promptTop = $question
+        .find('[data-testid="question-prompt"]')[0]
+        .getBoundingClientRect().top;
+      const inputTop = $question.find(".question-input-words")[0].getBoundingClientRect().top;
+      expect(promptTop).to.be.at.most(inputTop);
+    });
+
+    cy.get('input[type="text"]')
+      .type(englishSentence, { force: true })
+      .type("{enter}", { force: true });
+
+    cy.get(".answer-content").should(($answer) => {
+      const answerFontSize = parseFloat(window.getComputedStyle($answer[0]).fontSize);
+      const promptTop = $answer
+        .find('[data-testid="answer-prompt"]')[0]
+        .getBoundingClientRect().top;
+      const wordsTop = $answer.find(".answer-words")[0].getBoundingClientRect().top;
+
+      expect(answerFontSize).to.equal(questionFontSize);
+      expect(promptTop).to.be.at.most(wordsTop);
+    });
+    cy.contains("再来一次").should("be.visible");
+    cy.contains("下一题").should("be.visible");
+    assertPracticePageDoesNotScroll();
+  });
+
   it("shows the answer in the input area without opening a popup", () => {
     cy.get('input[type="text"]').type("wrong", { force: true });
     cy.contains("显示答案").click();
@@ -419,8 +464,7 @@ describe("mobile practice layout", () => {
   });
 
   it("disables iOS telephone detection for practice titles", () => {
-    cy.get('meta[name="format-detection"]')
-      .should("have.attr", "content", "telephone=no");
+    cy.get('meta[name="format-detection"]').should("have.attr", "content", "telephone=no");
 
     cy.get('[data-tip="练习卡片列表"]').click();
     cy.get("#contents").should("have.class", "show");

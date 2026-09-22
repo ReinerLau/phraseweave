@@ -18,6 +18,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
+import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useAutoPlayEnglish } from "~/composables/user/sound";
 import { useExerciseStore } from "~/store/exercise";
 import { findLargestFittingFontSize, QUESTION_FONT_MAX_SIZE_PX } from "./questionLayoutHelper";
@@ -26,7 +27,7 @@ const courseStore = useExerciseStore();
 const { playSound } = useCurrentStatementEnglishSound();
 const { isAutoPlayEnglish } = useAutoPlayEnglish();
 const questionRootEl = ref<HTMLElement>();
-const questionFontSize = ref(QUESTION_FONT_MAX_SIZE_PX);
+const { questionFontSize } = useQuestionFontSize();
 const questionStyle = computed(() => ({
   "--question-font-size": `${questionFontSize.value}px`,
 }));
