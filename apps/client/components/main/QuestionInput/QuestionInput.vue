@@ -43,7 +43,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
-import { useInput } from "~/composables/main/question";
+import { containsLatinLetter, sanitizeQuestionInput, useInput } from "~/composables/main/question";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useErrorTip } from "~/composables/user/errorTip";
@@ -161,7 +161,12 @@ focusInputWhenWIndowFocus();
 watch(
   () => inputValue.value,
   (val) => {
-    setInputValue(val);
+    const sanitizedValue = sanitizeQuestionInput(val);
+    if (isAnswerTip() && containsLatinLetter(sanitizedValue)) {
+      hiddenAnswerTip();
+    }
+
+    setInputValue(sanitizedValue);
     if (!isAnswerTip()) {
       courseTimer.time(String(courseStore.statementIndex));
     }
@@ -284,9 +289,6 @@ function handleAnswerRight() {
 // 通过检测是否为输入法 来避免按下 enter 后直接触发 submit answer
 let isComposing = ref(false);
 function handleCompositionStart() {
-  if (isAnswerTip()) {
-    hiddenAnswerTip();
-  }
   isComposing.value = true;
 }
 
@@ -295,20 +297,24 @@ function handleCompositionEnd() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (isAnswerTip()) {
-    hiddenAnswerTip();
-
-    if (e.code === "Enter") {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-  }
-
-  // 避免在某些中文输入法中，按下 Ctrl 键时，输入法会将当前的预输入字符上屏
   if (e.ctrlKey) {
     e.preventDefault();
     return;
+  }
+
+  if (isAnswerTip()) {
+    const isLatinLetterKey = /^[A-Za-z]$/.test(e.key) && !e.metaKey && !e.altKey;
+    if (isLatinLetterKey) {
+      hiddenAnswerTip();
+    } else {
+      if (e.code === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.code.startsWith("Arrow")) {
+        handleKeyboardInput(e);
+      }
+      return;
+    }
   }
 
   if (e.code === "Enter" && !isComposing.value) {

@@ -22,6 +22,17 @@ const separator = " ";
 
 const inputValue = ref("");
 
+const QUESTION_INPUT_ALLOWED_CHARACTERS = /[^A-Za-z '.,?!-]/g;
+const LATIN_LETTER = /[A-Za-z]/;
+
+export function sanitizeQuestionInput(value: string) {
+  return value.replace(QUESTION_INPUT_ALLOWED_CHARACTERS, "");
+}
+
+export function containsLatinLetter(value: string) {
+  return LATIN_LETTER.test(value);
+}
+
 export function clearQuestionInput() {
   inputValue.value = "";
 }
@@ -38,10 +49,13 @@ export function useInput({
   updateActiveWord(getInputCursorPosition());
 
   function setInputValue(val: string) {
-    inputValue.value = val;
+    const sanitizedValue = sanitizeQuestionInput(val);
+    const cursorPosition = sanitizeQuestionInput(val.slice(0, getInputCursorPosition())).length;
+
+    inputValue.value = sanitizedValue;
     resetAllWordUserInput();
     inputSyncUserInputWords();
-    updateActiveWord(val ? getInputCursorPosition() : 0);
+    updateActiveWord(sanitizedValue ? cursorPosition : 0);
   }
 
   function clearInput() {

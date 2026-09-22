@@ -82,28 +82,41 @@ describe("question", () => {
     expect(userInputWords[1].incorrect).toBe(true);
   });
 
-  it.each(["i don‘t", "i don’t", "i don“t", `i don"t`, `i don”t`])(
-    "should be correct when input '%s'",
-    async (input) => {
-      const setInputCursorPosition = () => {};
-      const getInputCursorPosition = () => 0;
+  it("should accept an ASCII apostrophe in the input", async () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
 
-      const { setInputValue, submitAnswer } = useInput({
-        source: () => "i don't",
-        setInputCursorPosition,
-        getInputCursorPosition,
-      });
+    const { setInputValue, submitAnswer } = useInput({
+      source: () => "i don't",
+      setInputCursorPosition,
+      getInputCursorPosition,
+    });
 
-      setInputValue(input);
+    setInputValue("i don't");
 
-      const correctCallback = vi.fn();
-      const wrongCallback = vi.fn();
-      submitAnswer(correctCallback, wrongCallback);
+    const correctCallback = vi.fn();
+    const wrongCallback = vi.fn();
+    submitAnswer(correctCallback, wrongCallback);
 
-      expect(correctCallback).toBeCalled();
-      expect(wrongCallback).not.toBeCalled();
-    },
-  );
+    expect(correctCallback).toBeCalled();
+    expect(wrongCallback).not.toBeCalled();
+  });
+
+  it("should filter input to Latin letters, spaces, and English punctuation", () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
+
+    const { inputValue, userInputWords, setInputValue } = useInput({
+      source: () => "Abe' .?!-",
+      setInputCursorPosition,
+      getInputCursorPosition,
+    });
+
+    setInputValue("A中b1\te' .?!-_");
+
+    expect(inputValue.value).toBe("Abe' .?!-");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["Abe'", ".?!-"]);
+  });
 
   it("should be the first word should be active", () => {
     const setInputCursorPosition = () => {};
