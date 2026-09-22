@@ -203,7 +203,7 @@ function getWordsClassNames(index: number) {
 
   // 答案提示使用占位符样式，不显示激活或错误状态。
   if (isAnswerTip()) {
-    return "text-gray-400 border-b-gray-300 dark:text-gray-500 dark:border-b-gray-500";
+    return "text-gray-400 border-b-gray-300 dark:text-gray-500 dark:border-b-gray-400";
   }
 
   // 当前单词激活 且 聚焦
