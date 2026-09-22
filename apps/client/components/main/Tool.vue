@@ -6,7 +6,7 @@
     <div class="flex min-w-0 flex-1 items-center">
       <NuxtLink
         href="/course-pack"
-        class="clickable-item tooltip-item tooltip-bottom shrink-0"
+        class="clickable-item tooltip-item tooltip-right shrink-0"
         data-tip="练习清单"
       >
         <IconsExpand class="h-7 w-7" />
