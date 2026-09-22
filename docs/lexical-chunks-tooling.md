@@ -50,11 +50,11 @@ Birdsong is good for our mental health.
 
 ## 外部接口
 
-CLI 有三个模式：
+CLI 支持两种工作模式：
 
 - `--analysis-output <路径>`：从标准输入读取英文，输出 schema 6 分析 JSON。
 - `--render-analysis <路径>`：读取严格对齐的中文提示 JSON，按 `--format` 生成最终输出。
-- 不传分析或渲染参数：生成兼容的英文单列表格，内容与确定性学习单元一致；此模式只支持 Markdown。
+- 必须指定 `--analysis-output` 或 `--render-analysis`；不再支持无参数生成兼容 Markdown。
 
 最终输出格式由 `--format` 选择：
 
@@ -68,6 +68,19 @@ CLI 有三个模式：
 `text.learning-units.md` 对应 `text.learning-units.json`。
 
 默认路径为 `outputs/lexical-chunks/text.learning-units.md`。同名文件存在时生成 `text-2.learning-units.md` 等递增名称。任何校验失败都返回非零状态且不创建报告。
+
+Markdown 报告只使用分析渲染格式，表格固定包含匹配标签列；每个学习单元只对应一个标签：
+
+```text
+| 步骤 | 中文提示 | 英文答案 | 匹配标签 |
+|---:|---|---|---|
+| 1 | 鸟鸣 | Birdsong | 核心·词典匹配 |
+| 2 | 心理健康 | mental health | 核心·词典匹配 |
+| 3 | 对我们的心理健康有益 | good for our mental health | 组合·渐进组合 |
+| 4 | 鸟鸣有益于我们的心理健康。 | Birdsong is good for our mental health. | 完成·完整原句 |
+```
+
+标签由分析 JSON 的 `atoms` 和确定性组合规则生成，不由模型生成，也不改变英文学习单元或中文提示校验。
 
 PhraseWeave JSON 使用现有导入器支持的 schema 1。每个学习单元生成一个
 `statement`，每句的完整原句作为最后一个 statement；`soundmark` 暂无音标数据，

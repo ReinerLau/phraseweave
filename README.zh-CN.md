@@ -1,248 +1,78 @@
-<div align="center">
-  <img alt="PhraseWeave" width="120" height="120" src="./assets/logo/logo-1000.png">
-  <h1>PhraseWeave</h1>
-  <span>中文 | <a href="./README.md">English</a></span>
-</div>
+## 🧩 lexical-chunks 语块生成规则
 
-## ⚡ 介绍
+语块生成由脚本和固定规则决定，模型只负责为已经确定的英文单元填写中文提示。需要调整规则时，优先查看或修改：
 
-通过连词构句的方式让你更好的学习英语~ 😊
+- 规则配置：`.agents/skills/lexical-chunks/rules/progression-rules.json`
+- 详细设计：[教材渐进学习单元工具与架构](./docs/lexical-chunks-tooling.md)
 
-## 🚀 如何开始？
+### 实义核心匹配
 
-**以下所有相关操作都基于项目根目录位置，请注意检查不要出错！**
+脚本按下面的优先级确定哪些词或短语可以独立出题：
 
-### 注意事项
+1. 使用 OEWN 做最长且不重叠的匹配，多词表达优先于其中的单词。
+2. 词典未覆盖时，将连续的 `VERB + prt` 动词小品词结构识别为一个不可拆的实义核心。
+3. 再根据单词 OEWN 匹配、词典词性与上下文词性的兼容关系，以及上下文实义词性补充核心。
+4. 功能词性或功能依存角色优先排除；冠词、代词、系动词、助动词、介词和连词不独立出题。
 
-- **pnpm version >= 8**
+表层 OEWN 命中且没有承担功能角色时，可以抵抗统计模型的上下文词性误标；不维护教材词汇白名单。非连续的动词小品词结构、普通介词结构和带插入词的结构不会合并。
 
-  ```bash
-  corepack enable
-  ```
+### Markdown 输出标签
 
-- **Node.js version >= v20**
-  > 使用来自 .node-version 的版本 [支持的工具](https://github.com/shadowspawn/node-version-usage#compatibility-testing)
-- **Postgres version >= 8.0.0**
-- **Redis version >= 5.0.0**
-- 项目依赖 **Docker**，所以请确保你本地已安装并成功运行
+Markdown 中每个学习单元只对应一个标签：
 
-### 编辑器
+这里的“实义核心”是指可以独立出题的词或词典表达，不等于句子中的每一个 token。功能词即使出现在原文中，也不会成为实义核心。
 
-#### VSCode
+标签前缀表示学习单元所处的层级：`核心` 是最初识别出的实义单位，`组合` 是由核心继续组成的语块，`完成` 是最后追加的完整原句。
 
-- 安装推荐的插件 [extensions.json](./.vscode/extensions.json)
+| 标签 | 含义 |
+| --- | --- |
+| `核心·词典匹配` | OEWN 找到了这个词或短语，并且它在当前句中通过了功能角色过滤。直接命中和词形还原统一归为此标签。 |
+| `核心·实义词` | 没有词典匹配，但根据当前句的词性判断，它是名词、动词、形容词、副词等实义词。 |
+| `核心·动词 + 小品词` | 识别到连续的 `VERB + prt`，例如 `Hurry up`。这是当前唯一的句法回退规则。 |
+| `组合·名词短语` | 以名词或专有名词为中心，从中心词向左逐步组成的语块，例如 `green spaces`、`more green spaces`。 |
+| `组合·渐进组合` | 将已经形成的核心组或名词短语组从右向左继续合并，例如 `good for our mental health`。组合时功能词随原文一起带入，不单独生成核心。 |
+| `完成·完整原句` | 渲染器最后追加的完整句子，不参与实义核心匹配。 |
 
-```bash
-docker --version # Docker version 24.0.7, build afdd53b
+词典命中后还会结合当前句的词性和依存角色进行过滤。比如 `is`、`for`、`our` 即使可能有词典记录，但分别承担系动词、介词和限定词角色，因此不会生成学习单元；它们只会在后续组合时随原文带入。
 
-node --version # v20+
+### 规则由谁完成
 
-pnpm -v # 8+
+- OEWN 和 Morphy 负责词典词条及词形还原。
+- spaCy 提供当前句的词性、依存角色和句法中心信息。
+- 项目自身负责最长非重叠匹配、功能角色过滤、`VERB + prt` 的连续性检查、名词短语优先和渐进组合顺序，以及原文范围和 Markdown 输出。
+
+### 匹配示例
+
+下面只展示“实义核心匹配”阶段的结果，组合规则见下一节：
+
+| 原文 | 匹配结果 | 原因 |
+| --- | --- | --- |
+| `mental health` | 一个核心：`mental health` | 标签：`核心·词典匹配`。多词 OEWN 表达优先，不再拆成 `mental` 和 `health`。 |
+| `Hurry up.` | 一个核心：`Hurry up` | 标签：`核心·动词 + 小品词`。词典未覆盖时，连续 `VERB + prt` 通过句法回退合并。 |
+| `Clean up.` | 一个核心：`Clean up` | 标签：`核心·词典匹配`。多词 OEWN 命中优先于动词小品词句法回退。 |
+| `Walk up the hill.` | 两个核心：`Walk`、`hill` | `up` 是普通介词，不是 `prt`，所以不合并成 `Walk up`。 |
+| `Birdsong matters.` | 一个核心：`Birdsong` | 标签：`核心·词典匹配`。表层 OEWN 命中可以抵抗统计模型的词性误标。 |
+| `A study matters.` | 一个核心：`study` | `A` 虽可能命中词典，但承担 `DET/det` 功能角色，会被排除；`study` 作为实义核心保留。 |
+
+### 渐进组合
+
+1. 所有实义核心先按原文顺序独立出题。
+2. 连续的名词前置修饰结构从名词中心向左组成自然名词短语，生成的单元标签为 `组合·名词短语`。
+3. 已形成的名词短语视为不可拆的组合组。
+4. 从最右侧组合组开始向左折叠，生成的单元标签为 `组合·渐进组合`。每次合并都截取两个单元边界之间的完整原文，因此 `for our`、`and` 等功能词会夹在两个已学单元之间自动带入；它们不是被单独匹配出来的核心。
+5. 覆盖全部实义核心的完整原句作为最后一步，不额外生成缺少句末标点的重复组合。
+6. 中间步骤必须是原文中的连续片段，不生成破坏名词短语边界的组合。
+
+例如 `Birdsong is good for our mental health.` 会依次包含：
+
+```text
+Birdsong                 核心·词典匹配
+good                     核心·词典匹配
+mental health            核心·词典匹配
+good + [for our] + mental health  组合·渐进组合
+Birdsong is good for our mental health.  完成·完整原句
 ```
 
-### 1. 安装依赖
+其中 `for our` 在渐进组合时作为两个核心之间的原文片段进入，`is` 在完整原句步骤才进入。
 
-```bash
-pnpm install
-```
-
-### 2. 配置 `.env` 文件
-
-可以选择将 `./apps/api/.env.example` 文件内容复制到 `./apps/api/.env`，请注意 `example` 文件中的是示例配置，主要是一些系统的环境变量信息，比如：数据库连接地址、用户名、密码、端口、密钥等等，后端服务会从此文件中读取配置信息，**当然你也可以更改成你自己的配置信息**。
-
-Windows 用户推荐快捷键复制粘贴，Linux 用户可以通过下面的命令进行操作。
-
-#### Server
-
-```bash
-cp ./apps/api/.env.example ./apps/api/.env
-```
-
-#### Client
-
-```bash
-cp ./apps/client/.env.example ./apps/client/.env
-```
-
-### 3. 配置本地 Logto
-
-使用 Docker Compose 启动本地 Logto，然后根据 `apps/api/.env` 和 `apps/client/.env` 配置本地客户端。只使用本地生成的凭据，不要提交密钥或数据库快照。
-
-### 4. 启动 Docker Compose 服务
-
-后端用到了 Postgres 和 Redis 服务，通过下面在 `package.json` 中配置的命令启动和停止。
-
-```bash
-# 启动
-pnpm docker:start
-
-# 下面这些命令等你用的时候在执行，不要傻乎乎的刚启动就停止哈 😊
-# 停止
-pnpm docker:stop
-# 删除
-pnpm docker:delete
-# 完全删除（包括 Volume 数据）
-pnpm docker:down
-```
-
-当然如果你更喜欢手动挡
-
-```bash
-docker compose up -d
-docker compose stop
-docker compose down
-
-# 兼容老版本 docker 的命令
-docker-compose up -d
-```
-
-### 5. 初始化数据库表结构
-
-执行这个命令时，尽量与上个命令间隔一点时间，因为刚刚使用的 `-d` 参数会让其服务挂起在后台执行，此时 docker 服务可能还在 running 中，若是发现报错了那就再执行一遍。😊
-
-```bash
-pnpm db:init
-```
-
-### 6. 创建并上传课程数据
-
-**只有第一次初始化数据库后需要执行**。
-
-```bash
-pnpm db:upload
-```
-
-### 7. 启动后端服务
-
-```bash
-pnpm dev:serve
-```
-
-### 8. 启动前端服务
-
-```bash
-pnpm dev:client
-```
-
-## 🛠️ 关于测试
-
-**提交 commit 前先跑测试，测试通过后再提交代码，以免产生多次 commit 来解决测试问题的情况出现**。
-
-### 前端测试
-
-主要就是 Vitest 的单测以及 cypress 的自动化测试，执行以下命令：
-
-```bash
-# 进入前端项目目录
-cd apps/client
-
-# vitest
-pnpm test:unit:run
-# cypress
-pnpm test:e2e:run
-
-# 监听 vitest，方便热更新看测试结果
-pnpm test:unit:watch
-```
-
-### 后端测试
-
-主要就是 Jest 的单测和端对端测试，但需要接入测试的数据库，所以需要先确保：
-
-1. Docker Compose 中的 testdb 和 testRedis 服务正常启动。
-2. `.env.test` 文件中的配置信息是正确的，如果没有这个文件，可以复制 `apps/api/.env.test.example` 文件内容到 `apps/api/.env.test` 文件，下面有提供命令直接用。
-
-执行以下命令：
-
-```bash
-# 进入后端项目目录
-cd apps/api
-
-# 如果有 .env.test 文件，就不需要跑这一步了
-cp .env.test.example .env.test
-
-# 单测
-pnpm test:unit
-# 端对端测试
-pnpm test:e2e
-# 单测和端对端测试一起跑
-pnpm test
-```
-
-## ❓ 常见问题解答
-
-### 数据库连接不上
-
-我的 Docker 和里面的数据库都正常跑起来了，但是跑 `db:init` 命令时还是报错，提示数据库连接失败。
-
-可以检查下 `.env` 文件中的数据库配置是否正确，甚至是这个文件有没有！😠
-
-### 如何正确的更新课程数据？
-
-当你发现有错误的课程数据并修改后，应当使用下面的命令将课程数据更新到数据库中。
-
-```bash
-pnpm db:update
-```
-
-### pnpm install 报错？
-
-某些依赖模块需要编译安装，因此需要相关编译环境。如果没有对应环境则会编译失败， 且不同模块所需编译环境不同，因此具体问题需要具体分析。
-以下列出已经碰到过的具体问题。
-
-先尝试使用下面的命令更新 `pnpm`。
-
-```shell
-pnpm i -g
-# or
-pnpm i -g pnpm
-# or
-npx pnpm i -g pnpm@latest
-```
-
-**在 Windows 上安装 argon2 模块失败的处理方式**
-
-- 安装 Visual Studio 2015 以上版本的组件，具体来说是 “使用 C++的桌面开发” 这个组件。（实际上包含 C++相关开发工具库的组件都可以）
-- 编译过程中遇到中文乱码时，在命令行中执行 `chcp 437` 后，再重新运行 install 命令。
-
-### WSL2 中 docker 无权访问?
-
-在 Windows 中使用 wsl2 做为开发环境时，通过 `docker compose up -d` 启动 docker 出现如下错误：
-
-```bash
-permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.24/containers/json": dial unix /var/run/docker.sock: connect: permission denied
-```
-
-> 解决方法
-
-将当前的用户添加到 docker 组中
-
-```bash
-# 添加 docker 用户组
-sudo groupadd docker
-# 将登录用户加入到 docker 用户组中
-sudo gpasswd -a $USER docker
-# 更新用户组
-newgrp docker
-# 测试 docker 命令是否正常使用
-docker images
-```
-
-## 🤝 前端开发规范
-
-1. 不要解构 pinia 的 store
-
-   - 解构会导致响应式丢失问题（ref 类型也会变成普通类型）
-     - 使用 storeToRefs 非常的麻烦
-   - 带上 store 代码可读性也会更好一点 一眼就能知道数据的来源是哪里
-
-2. composables 里面不要包含 UI 逻辑
-
-   - useMessage 之类的
-   - router 相关的也不要放进去（不便于测试 我们把 router 划分为 UI 逻辑）
-
-## 🌟 贡献者
-
-在此感谢所有为 PhraseWeave 做出过贡献的人！🎉
-
-贡献记录位于私有项目仓库中。
+对于 `more green spaces and lower speed limits`，会先生成带有 `组合·名词短语` 标签的 `green spaces`、`more green spaces` 和 `lower speed limits`，再生成带有 `组合·渐进组合` 标签的完整并列短语；不会生成 `spaces and lower speed limits` 这种破坏名词短语边界的中间项。

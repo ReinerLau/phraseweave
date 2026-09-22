@@ -37,7 +37,6 @@ from split_lexical_chunks import (
     phraseweave_path_for,
     render_contextual_report,
     render_phraseweave_backup,
-    render_report,
     select_longest_spans,
     split_sentences,
     tokenize,
@@ -694,24 +693,35 @@ class SplitLexicalChunksTests(TestCase):
             analysis["learning_units"],
         )
 
-    def test_renders_compatibility_english_column(self):
-        self.assertEqual(
-            render_report([["dogs", "Dogs bark."]]),
-            "| 英文语块 |\n|---|\n| dogs |\n| Dogs bark. |\n",
-        )
-
-    def test_escapes_markdown_table_pipes(self):
-        self.assertEqual(
-            render_report([["a | b"]]),
-            "| 英文语块 |\n|---|\n| a \\| b |\n",
-        )
-
     def test_contextual_report_does_not_escape_hyphens(self):
         analysis = {
             "sentences": [
                 {
                     "sentence": "Birdsong benefited well-being.",
-                    "learning_units": [{"text": "well-being"}],
+                    "atoms": [
+                        {
+                            "text": "well-being",
+                            "start": 19,
+                            "end": 29,
+                            "source": "token",
+                            "lexicon_lemmas": [],
+                            "lexicon_pos": [],
+                            "match_kind": "none",
+                            "head_pos": "NOUN",
+                            "head_dep": "ROOT",
+                            "head_atom": None,
+                            "core": True,
+                        }
+                    ],
+                    "learning_units": [
+                        {
+                            "text": "well-being",
+                            "start": 19,
+                            "end": 29,
+                            "kind": "core",
+                            "core_count": 1,
+                        }
+                    ],
                 }
             ]
         }
@@ -890,14 +900,150 @@ class SplitLexicalChunksTests(TestCase):
             render_contextual_report(analysis, annotations),
             "# 渐进学习单元\n\n"
             "## 第 1 句\n\n"
-            "| 步骤 | 中文提示 | 英文答案 |\n"
-            "|---:|---|---|\n"
-            "| 1 | 鸟鸣 | Birdsong |\n"
-            "| 2 | 有益的 | good |\n"
-            "| 3 | 心理健康 | mental health |\n"
-            "| 4 | 对我们的心理健康有益 | good for our mental health |\n"
-            "| 5 | 鸟鸣有益于我们的心理健康。 | Birdsong is good for our mental health. |\n",
+            "| 步骤 | 中文提示 | 英文答案 | 匹配标签 |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | 鸟鸣 | Birdsong | 核心·词典匹配 |\n"
+            "| 2 | 有益的 | good | 核心·词典匹配 |\n"
+            "| 3 | 心理健康 | mental health | 核心·词典匹配 |\n"
+            "| 4 | 对我们的心理健康有益 | good for our mental health | 组合·渐进组合 |\n"
+            "| 5 | 鸟鸣有益于我们的心理健康。 | Birdsong is good for our mental health. | 完成·完整原句 |\n",
         )
+
+    def test_contextual_report_explains_syntax_and_token_cores(self):
+        analysis = {
+            "sentences": [
+                {
+                    "sentence": "Hurry up now.",
+                    "atoms": [
+                        {
+                            "text": "Hurry up",
+                            "start": 0,
+                            "end": 8,
+                            "source": "syntax",
+                            "lexicon_lemmas": [],
+                            "lexicon_pos": [],
+                            "match_kind": "verb_particle",
+                            "head_pos": "VERB",
+                            "head_dep": "ROOT",
+                            "head_atom": None,
+                            "core": True,
+                        },
+                        {
+                            "text": "now",
+                            "start": 9,
+                            "end": 12,
+                            "source": "token",
+                            "lexicon_lemmas": [],
+                            "lexicon_pos": [],
+                            "match_kind": "none",
+                            "head_pos": "ADV",
+                            "head_dep": "advmod",
+                            "head_atom": 0,
+                            "core": True,
+                        },
+                    ],
+                    "learning_units": [
+                        {
+                            "text": "Hurry up",
+                            "start": 0,
+                            "end": 8,
+                            "kind": "core",
+                            "core_count": 1,
+                        },
+                        {
+                            "text": "now",
+                            "start": 9,
+                            "end": 12,
+                            "kind": "core",
+                            "core_count": 1,
+                        },
+                    ],
+                }
+            ]
+        }
+        annotations = {
+            "sentences": [
+                {
+                    "unit_prompts": ["赶快", "现在"],
+                    "sentence_translation": "现在赶快。",
+                }
+            ]
+        }
+
+        report = render_contextual_report(analysis, annotations)
+
+        self.assertIn("核心·动词 \\+ 小品词", report)
+        self.assertIn("核心·实义词", report)
+
+    def test_contextual_report_labels_noun_phrase_compositions(self):
+        analysis = self.analysis(
+            "Green spaces grow.",
+            analyze=analyze_with_specs(
+                [
+                    ("ADJ", "amod", 1),
+                    ("NOUN", "nsubj", 2),
+                    ("VERB", "ROOT", 2),
+                ]
+            ),
+        )
+        annotations = {
+            "sentences": [
+                {
+                    "unit_prompts": ["绿色的", "空间", "生长", "绿色空间"],
+                    "sentence_translation": "绿色空间在生长。",
+                }
+            ]
+        }
+
+        report = render_contextual_report(analysis, annotations)
+
+        self.assertIn("| 4 | 绿色空间 | Green spaces | 组合·名词短语 |", report)
+
+    def test_contextual_report_uses_one_label_per_learning_unit(self):
+        analysis = {
+            "sentences": [
+                {
+                    "sentence": "Dogs bark.",
+                    "atoms": [
+                        {
+                            "text": "Dogs",
+                            "start": 0,
+                            "end": 4,
+                            "source": "oewn",
+                            "lexicon_lemmas": ["dog|animal"],
+                            "lexicon_pos": ["n"],
+                            "match_kind": "surface",
+                            "head_pos": "NOUN",
+                            "head_dep": "ROOT",
+                            "head_atom": None,
+                            "core": True,
+                        }
+                    ],
+                    "learning_units": [
+                        {
+                            "text": "Dogs",
+                            "start": 0,
+                            "end": 4,
+                            "kind": "core",
+                            "core_count": 1,
+                        }
+                    ],
+                }
+            ]
+        }
+        annotations = {
+            "sentences": [
+                {
+                    "unit_prompts": ["狗"],
+                    "sentence_translation": "狗会吠叫。",
+                }
+            ]
+        }
+
+        report = render_contextual_report(analysis, annotations)
+
+        self.assertIn("| 1 | 狗 | Dogs | 核心·词典匹配 |", report)
+        self.assertNotIn("dog|animal", report)
 
     def test_renders_phraseweave_backup_with_complete_sentences(self):
         analysis = {
@@ -1097,6 +1243,26 @@ class SplitLexicalChunksTests(TestCase):
             self.assertFalse(markdown_path.exists())
             self.assertFalse(phraseweave_path.exists())
 
+    def test_rejects_cli_without_analysis_or_render_mode(self):
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "report.learning-units.md"
+            stderr = StringIO()
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    ["split_lexical_chunks.py", "--output", str(output_path)],
+                ),
+                redirect_stderr(stderr),
+            ):
+                status = cli_main()
+
+            self.assertEqual(status, 1)
+            self.assertIn(
+                "specify --analysis-output or --render-analysis", stderr.getvalue()
+            )
+            self.assertFalse(output_path.exists())
+
     def test_rejects_phraseweave_format_without_annotations(self):
         stderr = StringIO()
         with (
@@ -1120,7 +1286,9 @@ class SplitLexicalChunksTests(TestCase):
             status = cli_main()
 
         self.assertEqual(status, 1)
-        self.assertIn("requires --render-analysis", stderr.getvalue())
+        self.assertIn(
+            "specify --analysis-output or --render-analysis", stderr.getvalue()
+        )
 
     def test_render_validation_failure_does_not_create_report(self):
         with TemporaryDirectory() as directory:
