@@ -12,10 +12,10 @@
       <div
         class="flex w-full min-w-0 flex-1"
         :class="[
-          isPracticePage ? 'max-w-none px-4' : 'max-w-screen-xl px-6',
+          isWideLayoutPage ? 'max-w-none px-4' : 'max-w-screen-xl px-6',
           isExerciseNavigationPage ? 'min-h-0 overflow-hidden' : '',
         ]"
-        :data-testid="isPracticePage ? 'practice-page-shell' : undefined"
+        :data-testid="isWideLayoutPage ? 'exercise-navigation-shell' : undefined"
       >
         <slot></slot>
       </div>
@@ -34,4 +34,5 @@ const isExerciseNavigationPage = computed(
     route.path === "/" || route.path === "/course-pack" || route.path.startsWith("/course-pack/"),
 );
 const isPracticePage = computed(() => route.path.startsWith("/game/"));
+const isWideLayoutPage = computed(() => isExerciseNavigationPage.value || isPracticePage.value);
 </script>
