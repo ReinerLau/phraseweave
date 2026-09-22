@@ -141,6 +141,12 @@ describe("mobile practice layout", () => {
     assertNoVerticalOverflow();
   });
 
+  it("keeps an empty input area easy to focus", () => {
+    cy.get(".question-input-shell").should(($shell) => {
+      expect($shell[0].getBoundingClientRect().height).to.be.at.least(64);
+    });
+  });
+
   it("uses the full available width without a top navigation bar", () => {
     cy.viewport(1280, 800);
     cy.get("header").should("not.exist");
