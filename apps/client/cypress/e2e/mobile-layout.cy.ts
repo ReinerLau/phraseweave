@@ -98,6 +98,15 @@ function assertExerciseNavigationShellIsFullWidth() {
   });
 }
 
+function setNativeInputValue(value: string) {
+  cy.get('input[type="text"]').then(($input) => {
+    const input = $input[0] as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    valueSetter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 describe("mobile practice layout", () => {
   beforeEach(() => {
     cy.viewport(320, 568);
@@ -217,8 +226,31 @@ describe("mobile practice layout", () => {
       .and("have.class", "border-b-fuchsia-500")
       .and("not.have.class", "border-b-gray-300");
 
+    cy.get('input[type="text"]')
+      .type("{leftarrow}{backspace}{enter} ", { force: true })
+      .should("have.value", " ");
+    cy.contains("隐藏答案").should("be.visible");
+
+    cy.get('input[type="text"]').clear({ force: true }).should("have.value", "");
     cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
     cy.get(".question-input-word").first().should("have.text", "this");
+    cy.contains("隐藏答案").should("not.exist");
+  });
+
+  it("filters non-Latin input and keeps the answer visible until a letter is entered", () => {
+    cy.contains("显示答案").click();
+    cy.get('input[type="text"]').click({ force: true }).should("be.focused");
+
+    setNativeInputValue("中文123");
+    cy.get('input[type="text"]').should("have.value", "");
+    cy.contains("隐藏答案").should("be.visible");
+
+    setNativeInputValue(".,?!- ");
+    cy.get('input[type="text"]').should("have.value", ".,?!- ");
+    cy.contains("隐藏答案").should("be.visible");
+
+    setNativeInputValue("中文a123");
+    cy.get('input[type="text"]').should("have.value", "a");
     cy.contains("隐藏答案").should("not.exist");
   });
 
