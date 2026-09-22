@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createWordWidthMeasurer,
   getInputWordWidthCh,
-  getWordBlockWidthCh,
   getWordCapacityCh,
-  WORD_BLOCK_PADDING_CH,
 } from "../questionInputHelper";
 
 // 模拟真实字体：不同字符宽度不同，"0" 宽 10px（即 1ch = 10px）
@@ -62,22 +60,6 @@ describe("createWordWidthMeasurer", () => {
   });
 });
 
-describe("getWordBlockWidthCh", () => {
-  it("块宽等于目标单词实测宽度加左右留白", () => {
-    const blockWidth = getWordBlockWidthCh("wow", (text) => fakeReadWidth(text) / 10);
-
-    expect(blockWidth).toBeCloseTo(4.3 + WORD_BLOCK_PADDING_CH * 2);
-  });
-
-  it("块宽永远不小于目标单词本身，敲完的单词一定放得下", () => {
-    const measureCh = (text: string) => fakeReadWidth(text) / 10;
-
-    for (const word of ["i", "because", "internationalization", "WOW", "don't", "123"]) {
-      expect(getWordBlockWidthCh(word, measureCh)).toBeGreaterThanOrEqual(measureCh(word));
-    }
-  });
-});
-
 describe("getInputWordWidthCh", () => {
   it("按小写测量，大小写作答都能放进同一个块", () => {
     const measureCh = vi.fn((text: string) => fakeReadWidth(text) / 10);
@@ -100,8 +82,8 @@ describe("getWordCapacityCh", () => {
     expect(getWordCapacityCh(7.5, 100)).toBe(7.5);
   });
 
-  it("容器更窄时按容器宽度收窄并扣除留白", () => {
-    expect(getWordCapacityCh(12, 10)).toBeCloseTo(10 - WORD_BLOCK_PADDING_CH * 2);
+  it("容器更窄时按容器宽度收窄", () => {
+    expect(getWordCapacityCh(12, 10)).toBe(10);
   });
 
   it("容量不为负数", () => {

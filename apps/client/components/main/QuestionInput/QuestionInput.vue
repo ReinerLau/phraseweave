@@ -55,7 +55,6 @@ import { useExerciseStore } from "~/store/exercise";
 import {
   createWordWidthMeasurer,
   getInputWordWidthCh,
-  getWordBlockWidthCh,
   getWordCapacityCh,
   useQuestionInput,
 } from "./questionInputHelper";
@@ -206,9 +205,9 @@ function inputChangedCallback(e: KeyboardEvent) {
   }
 }
 
-// 输入块宽度：按目标单词在当前字体下的实测宽度预留，单位 ch
+// 输入块宽度：目标单词在当前字体下的实测宽度，下划线与单词齐平，单位 ch
 function inputWidth(word: string) {
-  return getWordBlockWidthCh(word, measureCh);
+  return measureCh(word);
 }
 
 // 已输入文本的实测宽度，单位 ch
