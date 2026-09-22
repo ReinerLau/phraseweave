@@ -8,7 +8,7 @@ export function useErrorTip() {
     toggle: toggleShowErrorTip,
     isTrue: isShowErrorTip,
     remove: removeShowErrorTip,
-  } = useLocalStorageBoolean(SHOW_ERROR_TIP, true);
+  } = useLocalStorageBoolean(SHOW_ERROR_TIP, false);
 
   return {
     showErrorTip,

@@ -8,9 +8,9 @@ describe("use errorTip", () => {
     removeShowErrorTip();
   });
 
-  it("should return true when localStorage is not defined", () => {
+  it("should return false when no cached setting exists", () => {
     const { isShowErrorTip } = useErrorTip();
-    expect(isShowErrorTip()).toBeTruthy();
+    expect(isShowErrorTip()).toBeFalsy();
   });
 
   it("should be equal to cache value if it exists", () => {
