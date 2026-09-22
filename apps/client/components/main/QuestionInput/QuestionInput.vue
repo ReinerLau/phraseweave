@@ -12,7 +12,7 @@
         :key="i"
       >
         <div
-          class="question-input-word min-h-[4rem] min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none transition-all"
+          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none transition-all"
           :class="getWordsClassNames(i)"
           :style="{ width: `${inputWidth(w)}ch` }"
         >
@@ -326,6 +326,7 @@ function preventCursorMove(event: MouseEvent) {
 }
 
 .question-input-word {
+  min-height: clamp(2.5rem, 12vw, 4rem);
   overflow-wrap: anywhere;
 }
 </style>

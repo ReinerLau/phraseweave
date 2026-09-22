@@ -77,6 +77,14 @@ function assertNoHorizontalOverflow() {
   });
 }
 
+function assertNoVerticalOverflow() {
+  cy.document().then((document) => {
+    expect(document.documentElement.scrollHeight).to.be.at.most(
+      document.documentElement.clientHeight + 1,
+    );
+  });
+}
+
 function assertExerciseNavigationShellIsFullWidth() {
   cy.get('[data-testid="exercise-navigation-shell"]').should(($shell) => {
     const element = $shell[0];
@@ -113,6 +121,7 @@ describe("mobile practice layout", () => {
   it("keeps the question view within the viewport", () => {
     cy.contains(courseTitle).should("be.visible");
     assertNoHorizontalOverflow();
+    assertNoVerticalOverflow();
   });
 
   it("uses the full available width without a top navigation bar", () => {
@@ -167,6 +176,7 @@ describe("mobile practice layout", () => {
       .type("{enter}", { force: true });
     cy.contains("再来一次").should("be.visible");
     assertNoHorizontalOverflow();
+    assertNoVerticalOverflow();
 
     cy.get('[data-tip="练习卡片列表"]').click();
     cy.get("#contents").should("have.class", "show");
@@ -176,6 +186,7 @@ describe("mobile practice layout", () => {
       expect(rect.left).to.be.at.least(0);
     });
     assertNoHorizontalOverflow();
+    assertNoVerticalOverflow();
   });
 
   it("moves the course title to the right without a return tooltip", () => {
