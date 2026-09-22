@@ -32,9 +32,11 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
+DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
 DEFAULT_RULES = Path(__file__).resolve().parents[1] / "rules" / "progression-rules.json"
 ANALYSIS_SCHEMA_VERSION = 6
 ANNOTATION_SCHEMA_VERSION = 6
+PHRASEWEAVE_SCHEMA_VERSION = 1
 RULE_SCHEMA_VERSION = 4
 SENTENCE_PATTERN = re.compile(
     r".*?[.!?]+(?:[\"'’”’\)\]]+)?(?=\s|$)|.+$",
@@ -133,8 +135,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT,
-        help=f"output Markdown path (default: {DEFAULT_OUTPUT})",
+        help=(
+            "primary output path; Markdown by default, PhraseWeave JSON when "
+            "--format phraseweave is selected"
+        ),
+    )
+    parser.add_argument(
+        "--format",
+        choices=("markdown", "phraseweave", "both"),
+        default="markdown",
+        help="output format (default: markdown)",
+    )
+    parser.add_argument(
+        "--phraseweave-output",
+        type=Path,
+        help="optional PhraseWeave JSON path; otherwise derive it from --output",
     )
     return parser.parse_args()
 
@@ -1238,6 +1253,67 @@ def render_contextual_report(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def render_phraseweave_backup(
+    analysis: Mapping[str, Any], annotations: Mapping[str, Any]
+) -> str:
+    statements: list[dict[str, str]] = []
+    for analyzed_sentence, annotated_sentence in zip(
+        analysis["sentences"], annotations["sentences"], strict=True
+    ):
+        for unit, prompt in zip(
+            analyzed_sentence["learning_units"],
+            annotated_sentence["unit_prompts"],
+            strict=True,
+        ):
+            statements.append(
+                {
+                    "chinese": prompt,
+                    "english": unit["text"],
+                    "soundmark": "",
+                }
+            )
+        statements.append(
+            {
+                "chinese": annotated_sentence["sentence_translation"],
+                "english": analyzed_sentence["sentence"],
+                "soundmark": "",
+            }
+        )
+
+    return (
+        json.dumps(
+            {"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    )
+
+
+def phraseweave_path_for(markdown_path: Path) -> Path:
+    name = markdown_path.name
+    if name.endswith(".learning-units.md"):
+        name = f"{name[:-len('.learning-units.md')]}.learning-units.json"
+        return markdown_path.with_name(name)
+    if markdown_path.suffix:
+        return markdown_path.with_suffix(".json")
+    return markdown_path.with_name(f"{name}.json")
+
+
+def output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
+    markdown_path = args.output or DEFAULT_OUTPUT
+    if args.format == "markdown":
+        return markdown_path, None
+
+    if args.format == "phraseweave":
+        return None, args.phraseweave_output or args.output or DEFAULT_PHRASEWEAVE_OUTPUT
+
+    phraseweave_path = args.phraseweave_output or phraseweave_path_for(markdown_path)
+    if markdown_path.expanduser().resolve() == phraseweave_path.expanduser().resolve():
+        raise ConfigurationError("Markdown and PhraseWeave output paths must differ")
+    return markdown_path, phraseweave_path
+
+
 def write_output(requested: Path, content: str) -> Path:
     output = choose_output_path(requested.expanduser()).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -1252,12 +1328,22 @@ def main() -> int:
         try:
             analysis = load_analysis(args.render_analysis)
             annotations = parse_annotations(sys.stdin.read(), analysis)
-            report = render_contextual_report(analysis, annotations)
+            markdown_path, phraseweave_path = output_paths(args)
+            rendered_outputs: list[tuple[Path, str]] = []
+            if markdown_path is not None:
+                rendered_outputs.append(
+                    (markdown_path, render_contextual_report(analysis, annotations))
+                )
+            if phraseweave_path is not None:
+                rendered_outputs.append(
+                    (phraseweave_path, render_phraseweave_backup(analysis, annotations))
+                )
         except ConfigurationError as error:
             print(f"lexical-chunks: {error}", file=sys.stderr)
             return 1
-        output = write_output(args.output, report)
-        print(output)
+        outputs = [write_output(path, content) for path, content in rendered_outputs]
+        for output in outputs:
+            print(output)
         return 0
 
     text = sys.stdin.read()
@@ -1265,6 +1351,13 @@ def main() -> int:
     if not sentences or not any(tokenize(sentence) for sentence in sentences):
         print("No English text was provided on stdin.", file=sys.stderr)
         return 2
+
+    if args.format != "markdown" and args.analysis_output is None:
+        print(
+            "lexical-chunks: phraseweave output requires --render-analysis with aligned Chinese prompts",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         rules = load_rules()
@@ -1288,12 +1381,19 @@ def main() -> int:
             args.analysis_output,
             json.dumps(analysis, ensure_ascii=False, indent=2) + "\n",
         )
-    else:
-        chunks_by_sentence = [
-            [unit["text"] for unit in item["learning_units"]] + [item["sentence"]]
-            for item in analysis["sentences"]
-        ]
-        output = write_output(args.output, render_report(chunks_by_sentence))
+        print(output)
+        return 0
+
+    output = write_output(
+        args.output or DEFAULT_OUTPUT,
+        render_report(
+            [
+                [unit["text"] for unit in item["learning_units"]]
+                + [item["sentence"]]
+                for item in analysis["sentences"]
+            ]
+        ),
+    )
     print(output)
     return 0
 

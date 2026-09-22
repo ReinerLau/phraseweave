@@ -22,6 +22,15 @@ description: 将英文教材按确定性实义核心和渐进组合规则生成�
 
 ## 执行
 
+输出格式由用户选择：
+
+- `markdown`：生成调试和人工查看用的 Markdown，默认模式。
+- `phraseweave`：生成可直接导入 PhraseWeave 的 JSON。
+- `both`：同时生成 Markdown 和 PhraseWeave JSON。
+
+用户未指定时使用 `markdown`；用户要求“导入 PhraseWeave”时使用
+`phraseweave`；用户同时要求调试和导入时使用 `both`。
+
 1. 创建临时目录，将用户粘贴的英文原样传给分析模式：
 
    ```bash
@@ -47,17 +56,33 @@ description: 将英文教材按确定性实义核心和渐进组合规则生成�
 
    `unit_prompts` 的数量和位置必须与分析文件完全一致。实义核心按其当前语境给出简短对应义；组合单元使用完整、自然的中文短语或分句。
 
-3. 将提示 JSON 原样传给渲染模式的标准输入：
+3. 将提示 JSON 原样传给渲染模式的标准输入。根据用户选择传入输出格式：
+
+   Markdown 或 `both` 模式使用 Markdown 路径：
 
    ```bash
    uv run <skill目录>/scripts/split_lexical_chunks.py \
      --render-analysis <实际分析文件> \
+     --format <markdown|both> \
      --output outputs/lexical-chunks/text.learning-units.md
    ```
 
-   渲染器重新验证分析文件的确定性组合结果，再校验提示 schema、句子数、单元数、字段类型和空值。输出已存在时自动使用递增文件名。
+   仅 PhraseWeave 模式使用 JSON 路径，或省略 `--output` 使用默认 JSON 路径：
 
-4. 确认最终文件存在，对话只返回该文件的可点击链接。
+   ```bash
+   uv run <skill目录>/scripts/split_lexical_chunks.py \
+     --render-analysis <实际分析文件> \
+     --format phraseweave \
+     --output outputs/lexical-chunks/text.learning-units.json
+   ```
+
+   `both` 模式可用 `--phraseweave-output <路径>` 覆盖 JSON 路径；未指定时，
+   JSON 使用与 Markdown 同目录、同名但扩展名为 `.json` 的路径。
+   `phraseweave` 模式也可用 `--output` 或 `--phraseweave-output` 指定 JSON 路径。
+   渲染器重新验证分析文件的确定性组合结果，再校验提示 schema、句子数、单元数、字段类型和空值。
+   输出已存在时自动使用递增文件名。
+
+4. 确认所选格式的最终文件存在，对话返回生成文件的可点击链接。
 
 首次运行会下载固定 OEWN 和句法模型，此后复用本地缓存。英文学习单元在相同环境下可复现；模型生成的中文措辞可能不同。
 

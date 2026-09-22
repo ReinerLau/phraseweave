@@ -34,7 +34,9 @@ from split_lexical_chunks import (
     find_sentence_atoms,
     load_rules,
     parse_annotations,
+    phraseweave_path_for,
     render_contextual_report,
+    render_phraseweave_backup,
     render_report,
     select_longest_spans,
     split_sentences,
@@ -896,6 +898,229 @@ class SplitLexicalChunksTests(TestCase):
             "| 4 | 对我们的心理健康有益 | good for our mental health |\n"
             "| 5 | 鸟鸣有益于我们的心理健康。 | Birdsong is good for our mental health. |\n",
         )
+
+    def test_renders_phraseweave_backup_with_complete_sentences(self):
+        analysis = {
+            "sentences": [
+                {
+                    "sentence": "Birdsong is good.",
+                    "learning_units": [
+                        {"text": "Birdsong"},
+                        {"text": "good"},
+                    ],
+                },
+                {
+                    "sentence": "Dogs bark.",
+                    "learning_units": [{"text": "Dogs"}, {"text": "bark"}],
+                },
+            ]
+        }
+        annotations = {
+            "sentences": [
+                {
+                    "unit_prompts": ["鸟鸣", "有益的"],
+                    "sentence_translation": "鸟鸣很好。",
+                },
+                {
+                    "unit_prompts": ["狗", "吠叫"],
+                    "sentence_translation": "狗吠叫。",
+                },
+            ]
+        }
+
+        self.assertEqual(
+            json.loads(render_phraseweave_backup(analysis, annotations)),
+            {
+                "schema_version": 1,
+                "statements": [
+                    {"chinese": "鸟鸣", "english": "Birdsong", "soundmark": ""},
+                    {"chinese": "有益的", "english": "good", "soundmark": ""},
+                    {
+                        "chinese": "鸟鸣很好。",
+                        "english": "Birdsong is good.",
+                        "soundmark": "",
+                    },
+                    {"chinese": "狗", "english": "Dogs", "soundmark": ""},
+                    {"chinese": "吠叫", "english": "bark", "soundmark": ""},
+                    {"chinese": "狗吠叫。", "english": "Dogs bark.", "soundmark": ""},
+                ],
+            },
+        )
+
+    def test_derives_phraseweave_output_path(self):
+        self.assertEqual(
+            phraseweave_path_for(Path("out/text.learning-units.md")),
+            Path("out/text.learning-units.json"),
+        )
+        self.assertEqual(
+            phraseweave_path_for(Path("out/report.md")), Path("out/report.json")
+        )
+        self.assertEqual(
+            phraseweave_path_for(Path("out/report")), Path("out/report.json")
+        )
+
+    def test_renders_phraseweave_format_to_custom_path(self):
+        with TemporaryDirectory() as directory:
+            analysis_path = Path(directory) / "analysis.json"
+            output_path = Path(directory) / "import.json"
+            analysis_path.write_text(
+                json.dumps(self.sample_analysis()), encoding="utf-8"
+            )
+            annotations = self.sample_annotations()
+            stderr = StringIO()
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "split_lexical_chunks.py",
+                        "--render-analysis",
+                        str(analysis_path),
+                        "--format",
+                        "phraseweave",
+                        "--output",
+                        str(output_path),
+                    ],
+                ),
+                patch.object(sys, "stdin", StringIO(json.dumps(annotations))),
+                redirect_stderr(stderr),
+            ):
+                status = cli_main()
+
+            self.assertEqual(status, 0)
+            self.assertEqual(json.loads(output_path.read_text()), {
+                "schema_version": 1,
+                "statements": [
+                    {"chinese": "狗", "english": "Dogs", "soundmark": ""},
+                    {"chinese": "吠叫", "english": "bark", "soundmark": ""},
+                    {
+                        "chinese": "狗会吠叫。",
+                        "english": "Dogs bark.",
+                        "soundmark": "",
+                    },
+                ],
+            })
+            self.assertEqual(stderr.getvalue(), "")
+
+    def test_renders_both_formats_to_separate_paths(self):
+        with TemporaryDirectory() as directory:
+            analysis_path = Path(directory) / "analysis.json"
+            markdown_path = Path(directory) / "report.learning-units.md"
+            phraseweave_path = Path(directory) / "custom-import.json"
+            analysis_path.write_text(
+                json.dumps(self.sample_analysis()), encoding="utf-8"
+            )
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "split_lexical_chunks.py",
+                    "--render-analysis",
+                    str(analysis_path),
+                    "--format",
+                    "both",
+                    "--output",
+                    str(markdown_path),
+                    "--phraseweave-output",
+                    str(phraseweave_path),
+                ],
+            ), patch.object(
+                sys, "stdin", StringIO(json.dumps(self.sample_annotations()))
+            ):
+                status = cli_main()
+
+            self.assertEqual(status, 0)
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(phraseweave_path.exists())
+
+    def test_renders_both_formats_with_derived_phraseweave_path(self):
+        with TemporaryDirectory() as directory:
+            analysis_path = Path(directory) / "analysis.json"
+            markdown_path = Path(directory) / "report.learning-units.md"
+            analysis_path.write_text(
+                json.dumps(self.sample_analysis()), encoding="utf-8"
+            )
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "split_lexical_chunks.py",
+                        "--render-analysis",
+                        str(analysis_path),
+                        "--format",
+                        "both",
+                        "--output",
+                        str(markdown_path),
+                    ],
+                ),
+                patch.object(sys, "stdin", StringIO(json.dumps(self.sample_annotations()))),
+            ):
+                status = cli_main()
+
+            self.assertEqual(status, 0)
+            self.assertTrue(markdown_path.exists())
+            self.assertTrue(Path(directory, "report.learning-units.json").exists())
+
+    def test_both_formats_do_not_write_when_annotation_validation_fails(self):
+        with TemporaryDirectory() as directory:
+            analysis_path = Path(directory) / "analysis.json"
+            markdown_path = Path(directory) / "report.learning-units.md"
+            phraseweave_path = Path(directory) / "report.json"
+            analysis_path.write_text(
+                json.dumps(self.sample_analysis()), encoding="utf-8"
+            )
+            stderr = StringIO()
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "split_lexical_chunks.py",
+                        "--render-analysis",
+                        str(analysis_path),
+                        "--format",
+                        "both",
+                        "--output",
+                        str(markdown_path),
+                        "--phraseweave-output",
+                        str(phraseweave_path),
+                    ],
+                ),
+                patch.object(sys, "stdin", StringIO("{")),
+                redirect_stderr(stderr),
+            ):
+                status = cli_main()
+
+            self.assertEqual(status, 1)
+            self.assertIn("not valid JSON", stderr.getvalue())
+            self.assertFalse(markdown_path.exists())
+            self.assertFalse(phraseweave_path.exists())
+
+    def test_rejects_phraseweave_format_without_annotations(self):
+        stderr = StringIO()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["split_lexical_chunks.py", "--format", "phraseweave"],
+            ),
+            patch.object(sys, "stdin", StringIO("Dogs bark.")),
+            patch.object(
+                sys,
+                "stdout",
+                StringIO(),
+            ),
+            redirect_stderr(stderr),
+            patch(
+                "split_lexical_chunks.load_syntax_model",
+                side_effect=ConfigurationError("not expected to load analysis"),
+            ),
+        ):
+            status = cli_main()
+
+        self.assertEqual(status, 1)
+        self.assertIn("requires --render-analysis", stderr.getvalue())
 
     def test_render_validation_failure_does_not_create_report(self):
         with TemporaryDirectory() as directory:
