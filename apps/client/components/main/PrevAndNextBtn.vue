@@ -1,29 +1,29 @@
 <template>
   <div class="flex items-center justify-center gap-1">
     <!-- left arrow button: go to previous question -->
-    <div class="h-8 w-8 shrink-0">
+    <div class="h-10 w-10 shrink-0">
       <button
-        class="arrow-btn tooltip grid h-8 w-8 place-items-center"
+        class="arrow-btn tooltip grid h-10 w-10 place-items-center"
         :data-tip="PREV_BTN_TIP"
         @click="goToPreviousQuestion"
         v-show="courseStore.statementIndex !== 0"
       >
-        <span class="i-ph-caret-left h-5 w-5"></span>
+        <span class="i-ph-caret-left h-6 w-6"></span>
       </button>
     </div>
 
     <slot />
 
     <!-- right arrow button: go to next question -->
-    <div class="h-8 w-8 shrink-0">
+    <div class="h-10 w-10 shrink-0">
       <button
-        class="arrow-btn tooltip grid h-8 w-8 place-items-center"
+        class="arrow-btn tooltip grid h-10 w-10 place-items-center"
         @click="goToNextQuestion"
         :data-tip="NEXT_BTN_TIP"
         totalQuestionsCount
         v-show="courseStore.statementIndex + 1 !== courseStore.totalQuestionsCount"
       >
-        <span class="i-ph-caret-right h-5 w-5"></span>
+        <span class="i-ph-caret-right h-6 w-6"></span>
       </button>
     </div>
   </div>
