@@ -4,14 +4,12 @@ import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
 
 export enum SHORTCUT_KEY_TYPES {
   SOUND = "sound",
-  ANSWER = "answer",
   SKIP = "skip",
   PREVIOUS = "previous",
 }
 export const SHORTCUT_KEYS = "shortcutKeys";
 export const DEFAULT_SHORTCUT_KEYS = {
   sound: "Ctrl+'",
-  answer: "Ctrl+;",
   skip: "ArrowRight",
   previous: "ArrowLeft",
 };
@@ -74,6 +72,8 @@ export function useShortcutKeyMode() {
     if (localKeys) {
       const storedKeys = JSON.parse(localKeys);
       const migratedKeys = { ...storedKeys };
+
+      delete migratedKeys.answer;
 
       if (migratedKeys.skip === LEGACY_NAVIGATION_SHORTCUT_KEYS.skip) {
         migratedKeys.skip = DEFAULT_SHORTCUT_KEYS.skip;

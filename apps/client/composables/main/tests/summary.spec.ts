@@ -1,9 +1,26 @@
 import { flushPromises } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as toolApi from "~/api/tool";
 import { useSetup } from "~/tests/helper/component";
 import { resetSentenceLoading, useDailySentence, useSummary } from "../summary";
+
+const { runtimeConfig, useRuntimeConfigMock } = vi.hoisted(() => {
+  const runtimeConfig = {
+    public: {
+      backendEndpoint: "https://api.example.com",
+    },
+  };
+
+  return {
+    runtimeConfig,
+    useRuntimeConfigMock: vi.fn(() => runtimeConfig),
+  };
+});
+
+vi.mock("nuxt/app", () => ({
+  useRuntimeConfig: useRuntimeConfigMock,
+}));
 
 vi.mock("~/api/tool");
 
@@ -14,11 +31,13 @@ describe("summary", () => {
       zh: "zh",
     };
     beforeEach(() => {
+      runtimeConfig.public.backendEndpoint = "https://api.example.com";
       vi.mocked(toolApi.fetchDailySentence).mockResolvedValue(dummyRes);
-      return () => {
-        resetSentenceLoading();
-        vi.resetAllMocks();
-      };
+    });
+
+    afterEach(() => {
+      resetSentenceLoading();
+      vi.clearAllMocks();
     });
 
     it("should load the daily sentence", async () => {
@@ -53,6 +72,18 @@ describe("summary", () => {
       await flushPromises();
 
       expect(toolApi.fetchDailySentence).toBeCalledTimes(1);
+    });
+
+    it("skips the optional request when no backend is configured", async () => {
+      runtimeConfig.public.backendEndpoint = "";
+
+      useSetup(() => {
+        useDailySentence();
+      });
+
+      await flushPromises();
+
+      expect(toolApi.fetchDailySentence).not.toBeCalled();
     });
   });
 

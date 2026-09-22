@@ -1,36 +1,21 @@
-## Agent skills
+## Agent guidance
 
 ### Issue tracker
 
-Issues and specs live in GitHub Issues; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Use the default five canonical triage labels. See `docs/agents/triage-labels.md`.
+GitHub Issues are available for requirements, notes, and follow-up work. Use the `gh` CLI when an Issue is useful; see `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
-Use a single-context layout with root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+Use the single-context layout with root `CONTEXT.md` and `docs/adr/` when documenting domain decisions. See `docs/agents/domain.md`.
 
-### Release workflow
+### Manual iteration
 
-Use one GitHub Issue, one Codex conversation, one branch/worktree, and one pull request per requirement. Create the Issue only after Plan Mode has produced the complete implementation plan and the user says `开始开发`. Follow the natural-language delivery commands and gates in `docs/agents/delivery-workflow.md`.
+The delivery loop is intentionally manual: plan, implement, run any useful checks, commit on a working branch, open a pull request, merge it into `main`, and deploy when requested. `main` is a protected branch: code destined for release must reach it through a pull request, and agents must never push directly to `main`. When the user asks to publish, inspect the current branch and changes first, then prepare or update the pull request; do not attempt a direct push to `main`. See `docs/agents/delivery-workflow.md` for the lightweight sequence.
 
-All feature and fix work lands on `dev` through a pull request. Production releases land on `main` through a separate release pull request; treat both branches as protected, including when operating with administrator access.
+### Protected release branch
 
-Every repository change, including documentation, CI, dependency, and refactor work, must be linked to an Issue. Use the mutually exclusive `status:*` labels documented in the delivery workflow; do not use GitHub Projects for delivery state.
-
-The delivery workflow exposes four natural-language commands:
-
-- `开始开发`: create the planned Issue and begin implementation.
-- `发布测试`: run checks, merge the requirement PR into `dev`, deploy `/preview/`, and report the version for acceptance.
-- `验收通过`: record the user's preview acceptance and mark the Issue `status:accepted`.
-- `正式发布`: verify accepted Issues, merge the release PR into `main`, validate production, and close released Issues.
-
-Follow the detailed steps and completion criteria in `docs/agents/delivery-workflow.md`.
+Treat `main` as the production release branch and protected branch. A release consists of merging a pull request into `main`; the existing GitHub Pages workflow then deploys the merged revision. Re-running that workflow manually is allowed for a previously merged revision, but it does not replace the pull request requirement for new code.
 
 ### Worktree and local main synchronization
 
-- A merged pull request updates the remote `main`, not every local checkout or worktree. Never assume the local base worktree is current after merging a PR.
-- Before starting a local dev server from `main`, inspect `git worktree list`, `git status --short --branch`, and fetch `origin/main`; if local `main` is behind, fast-forward it before debugging the app.
-- After merging a worktree branch, return to the base worktree and verify that `HEAD` matches `origin/main` before diagnosing UI behavior.
+When working with multiple worktrees or diagnosing behavior from `main`, inspect `git worktree list`, `git status --short --branch`, and fetch `origin/main` before relying on a local base checkout. After merging changes elsewhere, verify that the checkout being used matches the intended remote revision.

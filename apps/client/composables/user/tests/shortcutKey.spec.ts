@@ -23,7 +23,6 @@ describe("user defined shortcut key", () => {
       const storeShortcutKeys = {
         sound: "Ctrl+s",
         previous: "ArrowLeft",
-        answer: "Ctrl+8",
         skip: "ArrowRight",
       };
 
@@ -45,7 +44,7 @@ describe("user defined shortcut key", () => {
       const { shortcutKeys } = useShortcutKeyMode();
 
       expect(shortcutKeys.value).toEqual({
-        ...storeShortcutKeys,
+        sound: storeShortcutKeys.sound,
         previous: "ArrowLeft",
         skip: "ArrowRight",
       });
@@ -122,97 +121,8 @@ describe("user defined shortcut key", () => {
         [SHORTCUT_KEY_TYPES.SOUND]: "Tab",
       });
       expect(localStorage.getItem(SHORTCUT_KEYS)).toMatchInlineSnapshot(
-        `"{"sound":"Tab","answer":"Ctrl+;","skip":"ArrowRight","previous":"ArrowLeft"}"`,
+        `"{"sound":"Tab","skip":"ArrowRight","previous":"ArrowLeft"}"`,
       );
-    });
-
-    it("should be the shortcut key is set successfully when the dialog is open (combination key)", () => {
-      const { shortcutKeys, handleEdit, handleKeydown } = useShortcutKeyMode();
-
-      handleEdit(SHORTCUT_KEY_TYPES.ANSWER);
-
-      handleKeydown({
-        key: "s",
-        ctrlKey: true,
-        preventDefault: () => {},
-      } as KeyboardEvent);
-      handleKeydown({
-        key: "Enter",
-        preventDefault: () => {},
-      } as KeyboardEvent);
-
-      expect(shortcutKeys.value).toMatchObject({
-        [SHORTCUT_KEY_TYPES.ANSWER]: "Ctrl+s",
-      });
-      expect(localStorage.getItem(SHORTCUT_KEYS)).toMatchInlineSnapshot(
-        `"{"sound":"Ctrl+'","answer":"Ctrl+s","skip":"ArrowRight","previous":"ArrowLeft"}"`,
-      );
-    });
-    it("should be not set successfully with the same shortcut", () => {
-      const { showModal, shortcutKeys, handleEdit, handleKeydown, hasSameShortcutKey } =
-        useShortcutKeyMode();
-
-      handleEdit(SHORTCUT_KEY_TYPES.ANSWER);
-
-      expect(showModal.value).toBeTruthy();
-
-      handleKeydown({
-        key: "s",
-        metaKey: true,
-        preventDefault: () => {},
-      } as KeyboardEvent);
-      handleKeydown({
-        key: "Enter",
-        preventDefault: () => {},
-      } as KeyboardEvent);
-      expect(hasSameShortcutKey.value).toBeFalsy();
-      expect(showModal.value).toBeFalsy();
-      expect(shortcutKeys.value).toMatchObject({
-        [SHORTCUT_KEY_TYPES.ANSWER]: "Command+s",
-      });
-
-      handleEdit(SHORTCUT_KEY_TYPES.SOUND);
-
-      expect(showModal.value).toBeTruthy();
-
-      handleKeydown({
-        key: "s",
-        metaKey: true,
-        preventDefault: () => {},
-      } as KeyboardEvent);
-      handleKeydown({
-        key: "Enter",
-        preventDefault: () => {},
-      } as KeyboardEvent);
-
-      expect(hasSameShortcutKey.value).toBeTruthy();
-      expect(showModal.value).toBeTruthy();
-      expect(shortcutKeys.value).toMatchObject({
-        [SHORTCUT_KEY_TYPES.ANSWER]: "Command+s",
-        [SHORTCUT_KEY_TYPES.SOUND]: "Ctrl+'",
-      });
-    });
-    it("should be the shortcut key is set successfully with the same key", () => {
-      const { showModal, shortcutKeys, handleEdit, handleKeydown, hasSameShortcutKey } =
-        useShortcutKeyMode();
-
-      handleEdit(SHORTCUT_KEY_TYPES.ANSWER);
-
-      expect(showModal.value).toBeTruthy();
-      handleKeydown({
-        key: ";",
-        ctrlKey: true,
-        preventDefault: () => {},
-      } as KeyboardEvent);
-      handleKeydown({
-        key: "Enter",
-        preventDefault: () => {},
-      } as KeyboardEvent);
-      expect(hasSameShortcutKey.value).toBeFalsy();
-      expect(showModal.value).toBeFalsy();
-      expect(shortcutKeys.value).toMatchObject({
-        [SHORTCUT_KEY_TYPES.ANSWER]: "Ctrl+;",
-      });
     });
   });
 });

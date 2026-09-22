@@ -18,9 +18,6 @@
               <h1 class="text-wrap text-2xl font-extrabold leading-normal dark:text-white">
                 PhraseWeave
               </h1>
-              <span class="ml-2 text-xs font-medium text-gray-400 dark:text-gray-500">
-                v{{ appVersion }}
-              </span>
             </div>
           </NuxtLink>
         </div>
@@ -81,7 +78,6 @@ import { useUserStore } from "~/store/user";
 const route = useRoute();
 const runtimeConfig = useRuntimeConfig();
 const logoPath = `${runtimeConfig.app.baseURL}logo.png`;
-const appVersion = runtimeConfig.public.appVersion;
 const userStore = useUserStore();
 const { darkMode, toggleDarkMode } = useDarkMode();
 

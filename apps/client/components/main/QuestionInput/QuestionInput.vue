@@ -1,19 +1,19 @@
 <template>
-  <div class="question-input-shell text-center">
+  <div class="question-input-shell">
     <div
-      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-center gap-2 transition-all"
-      :style="questionInputStyle"
+      ref="questionInputWordsEl"
+      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-start gap-2 text-left"
     >
       <template
         v-for="(w, i) in courseStore.words"
         :key="i"
       >
         <div
-          class="question-input-word min-h-[4rem] min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none transition-all"
+          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
           :class="getWordsClassNames(i)"
           :style="{ width: `${inputWidth(w)}ch` }"
         >
-          {{ userInputWords[i]["userInput"] }}
+          {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
         </div>
       </template>
       <input
@@ -22,37 +22,40 @@
         type="text"
         v-model="inputValue"
         @keydown="handleKeydown"
-        @focus="focusInput"
-        @blur="blurInput"
+        @focus="handleInputFocus"
+        @blur="handleInputBlur"
         @dblclick.prevent
         @mousedown="preventCursorMove"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         autoFocus
       />
+      <span
+        ref="questionInputChProbeEl"
+        class="pointer-events-none absolute h-0 w-[1ch] opacity-0"
+        aria-hidden="true"
+      ></span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
-import { useInput } from "~/composables/main/question";
+import { containsLatinLetter, sanitizeQuestionInput, useInput } from "~/composables/main/question";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
-import { useErrorTip } from "~/composables/user/errorTip";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useShowWordsWidth } from "~/composables/user/words";
 import { useExerciseStore } from "~/store/exercise";
-import { getQuestionInputStyle, getWordWidth, useQuestionInput } from "./questionInputHelper";
+import { getWordWidth, useQuestionInput } from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
 const courseStore = useExerciseStore();
-const questionInputStyle = computed(() => getQuestionInputStyle(courseStore.words));
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
@@ -63,22 +66,31 @@ const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { playRightSound, playErrorSound } = usePlayTipSound();
-const { handleAnswerError, resetCloseTip } = answerError();
 const { isAutoNextQuestion } = useAutoNextQuestion();
-const { isShowErrorTip } = useErrorTip();
+const questionInputWordsEl = ref<HTMLElement>();
+const questionInputChProbeEl = ref<HTMLElement>();
 
-const { inputValue, userInputWords, submitAnswer, setInputValue, handleKeyboardInput, isFixMode } =
+const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
   useInput({
     source: () => courseStore.currentStatement?.english!,
     setInputCursorPosition,
     getInputCursorPosition,
     inputChangedCallback,
+    getInputWordWidth,
+    getInputWordCapacity,
   });
-const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
+const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+
+function handleInputFocus() {
+  focusInput();
+}
+
+function handleInputBlur() {
+  blurInput();
+}
 
 onMounted(() => {
   focusInput();
-  resetCloseTip();
 });
 
 focusInputWhenWIndowFocus();
@@ -86,16 +98,28 @@ focusInputWhenWIndowFocus();
 watch(
   () => inputValue.value,
   (val) => {
-    setInputValue(val);
-    courseTimer.time(String(courseStore.statementIndex));
+    const sanitizedValue = sanitizeQuestionInput(val);
+    if (isAnswerTip() && containsLatinLetter(sanitizedValue)) {
+      hiddenAnswerTip();
+    }
+
+    setInputValue(sanitizedValue);
+    if (!isAnswerTip()) {
+      courseTimer.time(String(courseStore.statementIndex));
+    }
   },
 );
+
+watch(isAnswerTip, (isVisible) => {
+  if (isVisible) {
+    clearInput();
+  }
+});
 
 watch(
   () => courseStore.statementIndex,
   () => {
     focusInput();
-    resetCloseTip();
   },
 );
 
@@ -115,6 +139,16 @@ function focusInputWhenWIndowFocus() {
 
 function getWordsClassNames(index: number) {
   const word = userInputWords[index];
+
+  // 答案提示文字使用占位符样式，但聚焦时仍高亮当前输入位置。
+  if (isAnswerTip()) {
+    if (word.isActive && focusing.value) {
+      return "text-gray-400 border-b-fuchsia-500 dark:text-gray-500 dark:border-b-fuchsia-500";
+    }
+
+    return "text-gray-400 border-b-gray-300 dark:text-gray-500 dark:border-b-gray-400";
+  }
+
   // 当前单词激活 且 聚焦
   if (word.isActive && focusing.value) {
     return "text-fuchsia-500 border-b-fuchsia-500";
@@ -122,8 +156,7 @@ function getWordsClassNames(index: number) {
 
   // 当前单词错误 且 聚焦
   if (word.incorrect && focusing.value) {
-    // Fix 修复模式添加动画
-    return `text-red-500 border-b-red-500 ${isFixMode() && "animate-shake"}`;
+    return "text-red-500 border-b-red-500";
   }
 
   // 默认样式
@@ -146,26 +179,31 @@ function inputWidth(word: string) {
   return getWordWidth(word);
 }
 
-function answerError() {
-  let wrongTimes = 0;
+function getInputWordWidth(word: string) {
+  return Math.max(0, getWordWidth(word) - 1);
+}
 
-  function handleAnswerError() {
-    playErrorSound();
-    wrongTimes++;
-    if (isShowErrorTip() && wrongTimes >= 3) {
-      showAnswerTip();
-    }
-  }
+function getInputWordCapacity(word: string) {
+  const blockCapacity = isShowWordsWidth() ? getInputWordWidth(word) : 4;
+  const wordsEl = questionInputWordsEl.value;
+  const chProbeEl = questionInputChProbeEl.value;
 
-  function resetCloseTip() {
-    wrongTimes = 0;
-    hiddenAnswerTip();
-  }
+  if (!wordsEl || !chProbeEl) return blockCapacity;
 
-  return {
-    handleAnswerError,
-    resetCloseTip,
-  };
+  const chWidth = chProbeEl.getBoundingClientRect().width;
+  if (chWidth <= 0) return blockCapacity;
+
+  const containerWidthInCh = wordsEl.clientWidth / chWidth;
+  const blockWidth = inputWidth(word);
+  const availableBlockWidth = Math.min(blockWidth, containerWidthInCh);
+
+  return isShowWordsWidth()
+    ? Math.max(0, Math.min(blockCapacity, availableBlockWidth - 1))
+    : Math.max(0, Math.min(blockCapacity, availableBlockWidth));
+}
+
+function handleAnswerError() {
+  playErrorSound();
 }
 
 function handleAnswerRight() {
@@ -198,10 +236,24 @@ function handleCompositionEnd() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  // 避免在某些中文输入法中，按下 Ctrl 键时，输入法会将当前的预输入字符上屏
   if (e.ctrlKey) {
     e.preventDefault();
     return;
+  }
+
+  if (isAnswerTip()) {
+    const isLatinLetterKey = /^[A-Za-z]$/.test(e.key) && !e.metaKey && !e.altKey;
+    if (isLatinLetterKey) {
+      hiddenAnswerTip();
+    } else {
+      if (e.code === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.code.startsWith("Arrow")) {
+        handleKeyboardInput(e);
+      }
+      return;
+    }
   }
 
   if (e.code === "Enter" && !isComposing.value) {
@@ -230,26 +282,20 @@ function preventCursorMove(event: MouseEvent) {
 
 <style scoped>
 .question-input-shell {
-  container-type: inline-size;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  max-height: min(60vh, 32rem);
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-inline: 1rem;
+  overflow: hidden;
 }
 
 .question-input-words {
-  font-size: var(--question-max-font-size);
-  font-size: clamp(
-    var(--question-min-font-size),
-    var(--question-fluid-font-size),
-    var(--question-max-font-size)
-  );
+  gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
+  font-size: inherit;
 }
 
 .question-input-word {
+  min-height: 1em;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 </style>

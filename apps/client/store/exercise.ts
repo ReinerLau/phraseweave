@@ -96,7 +96,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   async function setup(coursePackId: string, courseId: string) {
     const coursePack = await getLocalExercise(coursePackId);
     const course = coursePack?.courses.find((item) => item.id === courseId);
-    if (!course) throw new Error("本地找不到该课程");
+    if (!course) throw new Error("本地找不到该练习卡片");
     currentCourse.value = course;
     setupStatement(currentCourse);
   }

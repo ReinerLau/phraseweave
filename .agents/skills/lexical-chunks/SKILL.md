@@ -3,7 +3,7 @@ name: lexical-chunks
 description: 将英文教材按确定性实义核心和渐进组合规则生成中英打字练习；适用于用户提供英文并要求渐进学习单元、语块练习或辅助背诵。
 ---
 
-# 教材渐进学习单元
+# lexical-chunks
 
 脚本使用固定 OEWN、词性模型和版本化规则生成全部英文学习单元。模型只为脚本确定的单元填写自然中文提示，不选择、增删或重排英文。
 
@@ -21,6 +21,14 @@ description: 将英文教材按确定性实义核心和渐进组合规则生成�
 在 `more green spaces and lower speed limits` 中，脚本先生成 `green spaces`、`more green spaces` 和 `lower speed limits`，再组合完整并列短语；不会生成破坏名词短语边界的 `spaces and lower speed limits`。
 
 ## 执行
+
+在开始分析、创建临时目录或生成任何文件之前，必须先询问用户输出格式并等待选择。请提供以下三个选项：
+
+- `markdown`：生成调试和人工查看用的 Markdown。
+- `phraseweave`：生成可直接导入 PhraseWeave 的 JSON。
+- `both`：同时生成 Markdown 和 PhraseWeave JSON。
+
+即使用户的请求中已经包含格式意图，也要先展示这三个选项并确认；未收到选择前不得开始执行。后续严格使用用户选定的格式，不再自行推断或回退到 `markdown`。
 
 1. 创建临时目录，将用户粘贴的英文原样传给分析模式：
 
@@ -47,17 +55,35 @@ description: 将英文教材按确定性实义核心和渐进组合规则生成�
 
    `unit_prompts` 的数量和位置必须与分析文件完全一致。实义核心按其当前语境给出简短对应义；组合单元使用完整、自然的中文短语或分句。
 
-3. 将提示 JSON 原样传给渲染模式的标准输入：
+3. 将提示 JSON 原样传给渲染模式的标准输入。根据用户选择传入输出格式：
+
+   Markdown 或 `both` 模式使用 Markdown 路径：
 
    ```bash
    uv run <skill目录>/scripts/split_lexical_chunks.py \
      --render-analysis <实际分析文件> \
+     --format <markdown|both> \
      --output outputs/lexical-chunks/text.learning-units.md
    ```
 
-   渲染器重新验证分析文件的确定性组合结果，再校验提示 schema、句子数、单元数、字段类型和空值。输出已存在时自动使用递增文件名。
+   仅 PhraseWeave 模式使用 JSON 路径，或省略 `--output` 使用默认 JSON 路径：
 
-4. 确认最终文件存在，对话只返回该文件的可点击链接。
+   ```bash
+   uv run <skill目录>/scripts/split_lexical_chunks.py \
+     --render-analysis <实际分析文件> \
+     --format phraseweave \
+     --output outputs/lexical-chunks/text.learning-units.json
+   ```
+
+   `both` 模式可用 `--phraseweave-output <路径>` 覆盖 JSON 路径；未指定时，
+   JSON 使用与 Markdown 同目录、同名但扩展名为 `.json` 的路径。
+   `phraseweave` 模式也可用 `--output` 或 `--phraseweave-output` 指定 JSON 路径。
+   渲染器重新验证分析文件的确定性组合结果，再校验提示 schema、句子数、单元数、字段类型和空值。
+   输出已存在时自动使用递增文件名。
+
+   Markdown 成品只通过 `--render-analysis` 生成，表格固定包含四列：`步骤`、`中文提示`、`英文答案` 和 `匹配标签`。每个学习单元只输出一个标签：`核心·词典匹配`、`核心·实义词`、`核心·动词 + 小品词`、`组合·名词短语`、`组合·渐进组合` 或 `完成·完整原句`。未指定 `--analysis-output` 或 `--render-analysis` 时不生成兼容的单列 Markdown。
+
+4. 确认所选格式的最终文件存在，对话返回生成文件的可点击链接。
 
 首次运行会下载固定 OEWN 和句法模型，此后复用本地缓存。英文学习单元在相同环境下可复现；模型生成的中文措辞可能不同。
 

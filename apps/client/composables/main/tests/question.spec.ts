@@ -1,8 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { useInput } from "../question";
+import { fitInputToWordWidths, useInput } from "../question";
 
 describe("question", () => {
+  const characterWidth = (word: string) => word.length;
+  const targetCapacity = (word: string) => word.length;
+
+  it("fits each input word to its target word capacity", () => {
+    expect(fitInputToWordWidths("iiiii eate", ["iii", "eat"], characterWidth, targetCapacity)).toBe(
+      "iii eat",
+    );
+  });
+
+  it("keeps spaces between fitted words and filters extra words", () => {
+    expect(fitInputToWordWidths("i eate apple", ["i", "eat"], characterWidth, targetCapacity)).toBe(
+      "i eat",
+    );
+  });
+
+  it("supports weighted character widths and a fixed four-character capacity", () => {
+    const weightedWidth = (word: string) =>
+      word.split("").reduce((total, character) => total + (character === "w" ? 1.5 : 0.5), 0);
+
+    expect(fitInputToWordWidths("wwi", ["ww"], weightedWidth, weightedWidth)).toBe("ww");
+    expect(fitInputToWordWidths("tests", ["word"], characterWidth, () => 4)).toBe("test");
+  });
+
   it("should parse user input correctly", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = () => 0;
@@ -82,28 +105,59 @@ describe("question", () => {
     expect(userInputWords[1].incorrect).toBe(true);
   });
 
-  it.each(["i don‘t", "i don’t", "i don“t", `i don"t`, `i don”t`])(
-    "should be correct when input '%s'",
-    async (input) => {
-      const setInputCursorPosition = () => {};
-      const getInputCursorPosition = () => 0;
+  it("should accept an ASCII apostrophe in the input", async () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
 
-      const { setInputValue, submitAnswer } = useInput({
-        source: () => "i don't",
-        setInputCursorPosition,
-        getInputCursorPosition,
-      });
+    const { setInputValue, submitAnswer } = useInput({
+      source: () => "i don't",
+      setInputCursorPosition,
+      getInputCursorPosition,
+    });
 
-      setInputValue(input);
+    setInputValue("i don't");
 
-      const correctCallback = vi.fn();
-      const wrongCallback = vi.fn();
-      submitAnswer(correctCallback, wrongCallback);
+    const correctCallback = vi.fn();
+    const wrongCallback = vi.fn();
+    submitAnswer(correctCallback, wrongCallback);
 
-      expect(correctCallback).toBeCalled();
-      expect(wrongCallback).not.toBeCalled();
-    },
-  );
+    expect(correctCallback).toBeCalled();
+    expect(wrongCallback).not.toBeCalled();
+  });
+
+  it("should filter input to Latin letters, spaces, and English punctuation", () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
+
+    const { inputValue, userInputWords, setInputValue } = useInput({
+      source: () => "Abe' .?!-",
+      setInputCursorPosition,
+      getInputCursorPosition,
+    });
+
+    setInputValue("A中b1\te' .?!-_");
+
+    expect(inputValue.value).toBe("Abe' .?!-");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["Abe'", ".?!-"]);
+  });
+
+  it("should filter input that exceeds the configured word capacities", () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
+
+    const { inputValue, userInputWords, setInputValue } = useInput({
+      source: () => "iii eat",
+      setInputCursorPosition,
+      getInputCursorPosition,
+      getInputWordWidth: characterWidth,
+      getInputWordCapacity: targetCapacity,
+    });
+
+    setInputValue("iiiii eate");
+
+    expect(inputValue.value).toBe("iii eat");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["iii", "eat"]);
+  });
 
   it("should be the first word should be active", () => {
     const setInputCursorPosition = () => {};
@@ -158,11 +212,11 @@ describe("question", () => {
     expect(userInputWords[0].isActive).toBe(true);
   });
 
-  it("should be cleared the first incorrect word", async () => {
+  it("should allow correcting an incorrect answer and submitting again", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = () => 0;
 
-    const { setInputValue, userInputWords, submitAnswer, fixIncorrectWord } = useInput({
+    const { setInputValue, userInputWords, submitAnswer } = useInput({
       source: () => "i eat",
       setInputCursorPosition,
       getInputCursorPosition,
@@ -170,62 +224,34 @@ describe("question", () => {
 
     setInputValue("he eat");
     submitAnswer();
-    await fixIncorrectWord();
 
-    expect(userInputWords[0].userInput).toBe("");
-    expect(userInputWords[0].isActive).toBe(true);
+    expect(userInputWords[0].incorrect).toBe(true);
+
+    const correctCallback = vi.fn();
+    setInputValue("i eat");
+    submitAnswer(correctCallback);
+
+    expect(correctCallback).toBeCalled();
+    expect(userInputWords.every((word) => !word.incorrect)).toBe(true);
   });
 
-  it("should be cleared the first incorrect word when press submit again", async () => {
+  it("should clear the input and error state when showing an answer tip", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = () => 0;
 
-    const { setInputValue, userInputWords, submitAnswer, fixIncorrectWord } = useInput({
+    const { userInputWords, setInputValue, submitAnswer, clearInput, inputValue } = useInput({
       source: () => "i eat",
       setInputCursorPosition,
       getInputCursorPosition,
     });
 
-    setInputValue("he eat");
+    setInputValue("i like");
     submitAnswer();
-    await fixIncorrectWord();
+    clearInput();
 
-    // to next world by input Space
-    setInputValue(" ");
-    // again submit
-    submitAnswer();
-    await fixIncorrectWord();
-
-    expect(userInputWords[0].isActive).toBe(true);
-  });
-
-  it("should be possible to clear out the wrong words in turn", async () => {
-    const setInputCursorPosition = () => {};
-    const getInputCursorPosition = () => 0;
-
-    const { setInputValue, userInputWords, submitAnswer, fixIncorrectWord } = useInput({
-      source: () => "i eat apple",
-      setInputCursorPosition,
-      getInputCursorPosition,
-    });
-
-    setInputValue("he eats a");
-    submitAnswer();
-
-    await fixIncorrectWord();
-
-    expect(userInputWords[0].userInput).toBe("");
-    expect(userInputWords[0].isActive).toBe(true);
-
-    await fixIncorrectWord();
-
-    expect(userInputWords[1].userInput).toBe("");
-    expect(userInputWords[1].isActive).toBe(true);
-
-    await fixIncorrectWord();
-
-    expect(userInputWords[2].userInput).toBe("");
-    expect(userInputWords[2].isActive).toBe(true);
+    expect(inputValue.value).toBe("");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["", ""]);
+    expect(userInputWords.every((word) => !word.incorrect)).toBe(true);
   });
 
   it("should prevent move", () => {
@@ -257,52 +283,6 @@ describe("question", () => {
     expect(preventDefaultRight).toBeCalled();
   });
 
-  it("should prevent space when fix input", async () => {
-    const setInputCursorPosition = () => {};
-    const getInputCursorPosition = () => 0;
-
-    const { setInputValue, submitAnswer, fixIncorrectWord, handleKeyboardInput } = useInput({
-      source: () => "i eat apple",
-      setInputCursorPosition,
-      getInputCursorPosition,
-    });
-
-    setInputValue("i ea ap");
-    submitAnswer();
-    await fixIncorrectWord();
-
-    const preventDefault = vi.fn();
-    handleKeyboardInput({
-      code: "Space",
-      preventDefault,
-    } as any as KeyboardEvent);
-
-    expect(preventDefault).toBeCalled();
-  });
-
-  it("should prevent backspace when fix input", async () => {
-    const setInputCursorPosition = () => {};
-    const getInputCursorPosition = () => 0;
-
-    const { setInputValue, submitAnswer, fixIncorrectWord, handleKeyboardInput } = useInput({
-      source: () => "i eat apple",
-      setInputCursorPosition,
-      getInputCursorPosition,
-    });
-
-    setInputValue("i ea apple");
-    submitAnswer();
-    await fixIncorrectWord();
-
-    const preventDefault = vi.fn();
-    handleKeyboardInput({
-      code: "Backspace",
-      preventDefault,
-    } as any as KeyboardEvent);
-
-    expect(preventDefault).toBeCalled();
-  });
-
   it("should prevent space when focus on last word", async () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = vi.fn();
@@ -329,35 +309,6 @@ describe("question", () => {
     expect(stopPropagation).toBeCalled();
   });
 
-  it("should back to previous incorrect word", async () => {
-    let getInputCursorPosition = () => 0;
-    let setInputCursorPosition = () => {};
-
-    const {
-      userInputWords,
-      setInputValue,
-      submitAnswer,
-      activePreviousIncorrectWord,
-      fixIncorrectWord,
-    } = useInput({
-      source: () => "i eat apple",
-      setInputCursorPosition,
-      getInputCursorPosition,
-    });
-
-    setInputValue("he eat banana");
-    submitAnswer();
-
-    await fixIncorrectWord();
-    setInputValue("a");
-    await fixIncorrectWord();
-
-    await activePreviousIncorrectWord();
-
-    expect(userInputWords[0].isActive).toBe(true);
-    expect(userInputWords[0].userInput).toBe("a");
-  });
-
   it("should submit answer when enable use space", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = vi.fn();
@@ -374,48 +325,6 @@ describe("question", () => {
 
     const submitAnswerCallback = vi.fn();
 
-    handleKeyboardInput(
-      {
-        code: "Space",
-        preventDefault: () => {},
-        stopPropagation: () => {},
-      } as any as KeyboardEvent,
-      {
-        useSpaceSubmitAnswer: {
-          enable: true,
-          rightCallback: submitAnswerCallback,
-        },
-      },
-    );
-
-    expect(submitAnswerCallback).toBeCalled();
-  });
-
-  it("should submit answer when enable use space and fix the last incorrect word", async () => {
-    const setInputCursorPosition = () => {};
-    const getInputCursorPosition = vi.fn();
-
-    const { setInputValue, userInputWords, submitAnswer, fixIncorrectWord, handleKeyboardInput } =
-      useInput({
-        source: () => "i eat apple",
-        setInputCursorPosition,
-        getInputCursorPosition,
-      });
-
-    const inputValue = "i e apple";
-    getInputCursorPosition.mockReturnValue(inputValue.length);
-    setInputValue(inputValue);
-    submitAnswer();
-
-    await fixIncorrectWord();
-
-    expect(userInputWords[1].userInput).toBe("");
-    expect(userInputWords[1].isActive).toBe(true);
-
-    getInputCursorPosition.mockReturnValue(2);
-    userInputWords[1].userInput = "eat";
-
-    const submitAnswerCallback = vi.fn();
     handleKeyboardInput(
       {
         code: "Space",
@@ -455,114 +364,6 @@ describe("question", () => {
       } as any as KeyboardEvent);
 
       expect(inputChangedCallback).toBeCalledWith({ code: "p" });
-    });
-
-    it("should trigger when press Backspace on fix mode ", () => {
-      const setInputCursorPosition = () => {};
-      const getInputCursorPosition = vi.fn();
-      const inputChangedCallback = vi.fn();
-
-      const { setInputValue, handleKeyboardInput, submitAnswer } = useInput({
-        source: () => "i eat apple",
-        setInputCursorPosition,
-        getInputCursorPosition,
-        inputChangedCallback,
-      });
-
-      const inputValue = "i eat ap";
-      getInputCursorPosition.mockReturnValue(inputValue.length);
-      setInputValue(inputValue);
-
-      submitAnswer();
-
-      handleKeyboardInput({
-        code: "Backspace",
-        preventDefault: () => {},
-      } as any as KeyboardEvent);
-
-      expect(inputChangedCallback).toBeCalledWith(expect.objectContaining({ code: "Backspace" }));
-    });
-
-    it.each([
-      { userInput: "j", isPrevent: false },
-      {
-        userInput: "f",
-        isPrevent: false,
-      },
-
-      {
-        userInput: "Backspace",
-        isPrevent: true,
-      },
-
-      {
-        userInput: "Space",
-        isPrevent: true,
-      },
-    ])(
-      "should fix incorrect world when press $userInput on fix mode ",
-      ({ userInput, isPrevent }) => {
-        const setInputCursorPosition = () => {};
-        const getInputCursorPosition = vi.fn();
-        const inputChangedCallback = vi.fn();
-
-        const { setInputValue, handleKeyboardInput, submitAnswer, userInputWords } = useInput({
-          source: () => "like code",
-          setInputCursorPosition,
-          getInputCursorPosition,
-          inputChangedCallback,
-        });
-
-        const inputValue = "lik co";
-        getInputCursorPosition.mockReturnValue(inputValue.length);
-        setInputValue(inputValue);
-
-        submitAnswer();
-
-        const preventDefault = vi.fn();
-        handleKeyboardInput({
-          code: userInput,
-          preventDefault,
-        } as any as KeyboardEvent);
-        getInputCursorPosition.mockReturnValue(0);
-        setInputValue(userInput);
-
-        expect(userInputWords[0].isActive).toBe(true);
-        expect(userInputWords[0].userInput).toBe(userInput);
-        // preventDefault 意味着是否直接上屏
-        isPrevent ? expect(preventDefault).toBeCalled() : expect(preventDefault).not.toBeCalled();
-      },
-    );
-
-    it("should trigger when press Backspace on fix input mode ", () => {
-      const setInputCursorPosition = () => {};
-      const getInputCursorPosition = vi.fn();
-      const inputChangedCallback = vi.fn();
-
-      const { setInputValue, handleKeyboardInput, submitAnswer } = useInput({
-        source: () => "i eat apple",
-        setInputCursorPosition,
-        getInputCursorPosition,
-        inputChangedCallback,
-      });
-
-      const inputValue = "i eat a";
-      getInputCursorPosition.mockReturnValue(inputValue.length);
-      setInputValue(inputValue);
-
-      submitAnswer();
-
-      handleKeyboardInput({
-        code: "Backspace",
-        preventDefault: () => {},
-      } as any as KeyboardEvent);
-
-      handleKeyboardInput({
-        code: "Backspace",
-        preventDefault: () => {},
-      } as any as KeyboardEvent);
-
-      expect(inputChangedCallback).toBeCalledTimes(2);
     });
   });
 });

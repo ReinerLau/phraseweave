@@ -1,6 +1,7 @@
 <template>
   <dialog
-    :open="isShow"
+    v-if="isShow"
+    open
     class="modal invisible"
   >
     <div

@@ -1,47 +1,35 @@
 <template>
   <div
-    class="relative flex items-center justify-between border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
+    class="relative flex min-w-0 max-w-full items-center justify-between border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
   >
     <!-- 左侧 -->
-    <div class="flex items-center">
+    <div class="flex min-w-0 flex-1 items-center">
       <NuxtLink
         href="/course-pack"
-        class="clickable-item tooltip-item"
-        data-tip="练习列表"
+        class="clickable-item shrink-0"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
+    </div>
+
+    <!-- 右侧 -->
+    <div class="flex min-w-0 max-w-[75%] items-center">
       <div
-        class="clickable-item tooltip-item ml-4"
-        data-tip="课程题目列表"
+        class="clickable-item tooltip-item min-w-0 truncate text-right"
+        data-tip="练习卡片列表"
         @click="toggleContents"
       >
         {{ currentCourseInfo }}
       </div>
     </div>
 
-    <!-- 右侧 -->
-    <div class="flex items-center">
-      <div
-        class="tooltip-item mr-4"
-        data-tip="重置当前课程进度"
-        @click="handleDoAgain"
-      >
-        <span class="clickable-item icon-item i-ph-arrow-counter-clockwise"></span>
-      </div>
-    </div>
-
     <MainContents />
   </div>
 
-  <CommonProgressBar
-    class="h-6 p-[2px]"
-    :percentage="currentPercentage"
-  />
   <MainMessageBox
     class="mt-[-4vh]"
     v-model:isShowModal="showTipModal"
-    content="是否确认重置当前课程进度？"
+    content="是否确认重置当前练习卡片进度？"
     @confirm="handleTipConfirm"
   />
 </template>
@@ -64,18 +52,7 @@ const { toggleContents } = useContent();
 const { showTipModal, handleDoAgain, handleTipConfirm } = useDoAgain();
 
 const currentCourseInfo = computed(() => {
-  return `${courseStore.currentCourse?.title}（${currentSchedule.value}/${courseStore.totalQuestionsCount}）`;
-});
-
-const currentSchedule = computed(() => {
-  return courseStore.statementIndex + 1;
-});
-
-const currentPercentage = computed(() => {
-  if (courseStore.isAllDone()) {
-    return 100;
-  }
-  return ((courseStore.statementIndex / courseStore.totalQuestionsCount) * 100).toFixed(2);
+  return courseStore.currentCourse?.title;
 });
 
 function useDoAgain() {

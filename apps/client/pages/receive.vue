@@ -8,7 +8,7 @@
       <NuxtLink
         class="btn btn-ghost btn-sm"
         to="/course-pack"
-        >返回练习列表</NuxtLink
+        >返回练习清单</NuxtLink
       >
     </div>
 
@@ -34,7 +34,7 @@
         type="button"
         @click="goBack"
       >
-        返回练习列表
+        返回练习清单
       </button>
     </div>
   </section>

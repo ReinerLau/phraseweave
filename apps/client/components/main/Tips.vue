@@ -1,40 +1,47 @@
 <template>
-  <div class="relative flex h-32 items-center justify-center">
-    <div class="z-10 hidden items-center justify-center min-[780px]:flex">
-      <button
-        v-for="keybinding in keybindings"
-        @click="keybinding.eventFn"
-        class="btn btn-ghost"
-      >
-        <div class="flex items-center justify-center gap-2 text-center">
-          <div
-            v-for="keyStr in parseShortcutKeys(keybinding.keys)"
-            class="kbd"
-          >
-            {{ keyStr }}
-          </div>
-        </div>
-        <span>{{ keybinding.text }}</span>
-      </button>
-    </div>
-
-    <MainPrevAndNextBtn />
+  <div
+    class="relative flex min-h-10 w-full items-stretch justify-start gap-2 py-1"
+    data-testid="practice-tips"
+  >
+    <button
+      class="btn btn-outline btn-sm h-12 min-h-12 w-0 min-w-0 flex-1 basis-0"
+      data-testid="show-answer-button"
+      @click="toggleGameMode"
+    >
+      {{ answerTipText }}
+    </button>
+    <button
+      v-if="isAnswer()"
+      class="btn btn-outline btn-sm h-12 min-h-12 w-0 min-w-0 flex-1 basis-0"
+      data-testid="next-question-button"
+      @click="goToNextQuestion"
+    >
+      下一题
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from "vue";
 
+import { useQuestionInput } from "~/components/main/QuestionInput/questionInputHelper";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
+import {
+  useExerciseNavigation,
+  useExerciseNavigationShortcuts,
+} from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
 import { useSummary } from "~/composables/main/summary";
 import { useShortcutKeyMode } from "~/composables/user/shortcutKey";
-import { cancelShortcut, parseShortcutKeys, registerShortcut } from "~/utils/keyboardShortcuts";
+import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const { shortcutKeys } = useShortcutKeyMode();
 usePlaySound(shortcutKeys.value.sound);
-const { toggleGameMode } = useShowAnswer(shortcutKeys.value.answer);
+const { toggleGameMode } = useShowAnswer();
+const { isAnswer } = useGameMode();
+const { goToNextQuestion } = useExerciseNavigation();
+useExerciseNavigationShortcuts();
 
 const answerTipText = computed(() => {
   let text = "";
@@ -50,30 +57,6 @@ const answerTipText = computed(() => {
     }
   }
   return text;
-});
-
-const spaceTipText = computed(() => {
-  const { isAnswer } = useGameMode();
-  if (isAnswer()) {
-    return "下一题";
-  } else {
-    return "修复错误单词";
-  }
-});
-
-const keybindings = computed(() => {
-  return [
-    {
-      keys: shortcutKeys.value.answer,
-      text: answerTipText.value,
-      eventFn: toggleGameMode,
-    },
-    {
-      keys: "Space",
-      text: spaceTipText.value,
-      eventFn: null,
-    },
-  ];
 });
 
 function usePlaySound(key: string) {
@@ -93,25 +76,13 @@ function usePlaySound(key: string) {
   }
 }
 
-function useShowAnswer(key: string) {
+function useShowAnswer() {
+  const { focusInput, blurInput } = useQuestionInput();
   const { showQuestion } = useGameMode();
   const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
 
-  onMounted(() => {
-    registerShortcut(key, handleShowAnswer);
-  });
-
-  onUnmounted(() => {
-    cancelShortcut(key, handleShowAnswer);
-  });
-
-  function handleShowAnswer(e: KeyboardEvent) {
-    e.preventDefault();
-    toggleGameMode();
-  }
-
   function toggleGameMode() {
-    // NOTE: registerShortcut 事件会记住注册时的面板状态，所以这里要重新获取下面板信息
+    // 重新获取当前面板状态，避免按钮点击时使用过期状态。
     const { showModal } = useSummary();
     if (showModal.value) {
       // 结算面板不做切换处理
@@ -122,12 +93,14 @@ function useShowAnswer(key: string) {
     const { isAnswerTip } = useAnswerTip();
     if (isAnswer()) {
       showQuestion();
+      focusInput();
     } else {
       if (isAnswerTip()) {
         hiddenAnswerTip();
       } else {
         showAnswerTip();
       }
+      blurInput();
     }
   }
 

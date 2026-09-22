@@ -32,9 +32,11 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
+DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
 DEFAULT_RULES = Path(__file__).resolve().parents[1] / "rules" / "progression-rules.json"
 ANALYSIS_SCHEMA_VERSION = 6
 ANNOTATION_SCHEMA_VERSION = 6
+PHRASEWEAVE_SCHEMA_VERSION = 1
 RULE_SCHEMA_VERSION = 4
 SENTENCE_PATTERN = re.compile(
     r".*?[.!?]+(?:[\"'’”’\)\]]+)?(?=\s|$)|.+$",
@@ -133,8 +135,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT,
-        help=f"output Markdown path (default: {DEFAULT_OUTPUT})",
+        help=(
+            "primary output path; Markdown by default, PhraseWeave JSON when "
+            "--format phraseweave is selected"
+        ),
+    )
+    parser.add_argument(
+        "--format",
+        choices=("markdown", "phraseweave", "both"),
+        default="markdown",
+        help="output format (default: markdown)",
+    )
+    parser.add_argument(
+        "--phraseweave-output",
+        type=Path,
+        help="optional PhraseWeave JSON path; otherwise derive it from --output",
     )
     return parser.parse_args()
 
@@ -860,13 +875,6 @@ def markdown_content_escape(text: str) -> str:
     return re.sub(r"([`*_{}\[\]()<>#+.!|])", r"\\\1", escaped)
 
 
-def render_report(chunks_by_sentence: Iterable[Iterable[str]]) -> str:
-    lines = ["| 英文语块 |", "|---|"]
-    for chunks in chunks_by_sentence:
-        lines.extend(f"| {markdown_escape(chunk)} |" for chunk in chunks)
-    return "\n".join(lines) + "\n"
-
-
 def _require_exact_keys(
     value: Mapping[str, Any], expected: set[str], location: str
 ) -> None:
@@ -1198,18 +1206,69 @@ def parse_annotations(text: str, analysis: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def render_contextual_report(
-    analysis: Mapping[str, Any], annotations: Mapping[str, Any]
+    analysis: Mapping[str, Any],
+    annotations: Mapping[str, Any],
+    rules: ProgressionRules | None = None,
 ) -> str:
+    active_rules = rules if rules is not None else load_rules()
+
+    def atoms_for_unit(
+        unit: Mapping[str, Any], atoms: Sequence[Mapping[str, Any]]
+    ) -> list[Mapping[str, Any]]:
+        return [
+            atom
+            for atom in atoms
+            if atom["core"]
+            and atom["start"] >= unit["start"]
+            and atom["end"] <= unit["end"]
+        ]
+
+    def nominal_composition_ranges(
+        atoms: Sequence[Mapping[str, Any]],
+    ) -> set[tuple[int, int]]:
+        ranges: set[tuple[int, int]] = set()
+        for group in _nominal_core_groups(atoms, active_rules):
+            for core_count in range(2, len(group) + 1):
+                first = group[-core_count][1]
+                last = group[-1][1]
+                ranges.add((first["start"], last["end"]))
+        return ranges
+
+    def unit_label(
+        unit: Mapping[str, Any],
+        atoms: Sequence[Mapping[str, Any]],
+        nominal_ranges: set[tuple[int, int]],
+    ) -> str:
+        if unit["kind"] == "composition":
+            if (unit["start"], unit["end"]) in nominal_ranges:
+                return "组合·名词短语"
+            return "组合·渐进组合"
+
+        unit_atoms = atoms_for_unit(unit, atoms)
+        if len(unit_atoms) != 1:
+            raise ConfigurationError(
+                "core learning unit must map to exactly one core atom"
+            )
+        source = unit_atoms[0]["source"]
+        if source == "oewn":
+            return "核心·词典匹配"
+        if source == "syntax":
+            return "核心·动词 + 小品词"
+        if source == "token":
+            return "核心·实义词"
+        raise ConfigurationError(f"unsupported core atom source: {source}")
+
     lines = ["# 渐进学习单元", ""]
     for index, (analyzed_sentence, annotated_sentence) in enumerate(
         zip(analysis["sentences"], annotations["sentences"], strict=True), start=1
     ):
+        nominal_ranges = nominal_composition_ranges(analyzed_sentence["atoms"])
         lines.extend(
             [
                 f"## 第 {index} 句",
                 "",
-                "| 步骤 | 中文提示 | 英文答案 |",
-                "|---:|---|---|",
+                "| 步骤 | 中文提示 | 英文答案 | 匹配标签 |",
+                "|---:|---|---|---|",
             ]
         )
         for step, (unit, prompt) in enumerate(
@@ -1222,7 +1281,8 @@ def render_contextual_report(
         ):
             lines.append(
                 f"| {step} | {markdown_content_escape(prompt)} | "
-                f"{markdown_content_escape(unit['text'])} |"
+                f"{markdown_content_escape(unit['text'])} | "
+                f"{markdown_content_escape(unit_label(unit, analyzed_sentence['atoms'], nominal_ranges))} |"
             )
         final_step = len(analyzed_sentence["learning_units"]) + 1
         lines.extend(
@@ -1230,12 +1290,73 @@ def render_contextual_report(
                 (
                     f"| {final_step} | "
                     f"{markdown_content_escape(annotated_sentence['sentence_translation'])} | "
-                    f"{markdown_escape(analyzed_sentence['sentence'])} |"
+                    f"{markdown_escape(analyzed_sentence['sentence'])} | "
+                    "完成·完整原句 |"
                 ),
                 "",
             ]
         )
     return "\n".join(lines).rstrip() + "\n"
+
+def render_phraseweave_backup(
+    analysis: Mapping[str, Any], annotations: Mapping[str, Any]
+) -> str:
+    statements: list[dict[str, str]] = []
+    for analyzed_sentence, annotated_sentence in zip(
+        analysis["sentences"], annotations["sentences"], strict=True
+    ):
+        for unit, prompt in zip(
+            analyzed_sentence["learning_units"],
+            annotated_sentence["unit_prompts"],
+            strict=True,
+        ):
+            statements.append(
+                {
+                    "chinese": prompt,
+                    "english": unit["text"],
+                    "soundmark": "",
+                }
+            )
+        statements.append(
+            {
+                "chinese": annotated_sentence["sentence_translation"],
+                "english": analyzed_sentence["sentence"],
+                "soundmark": "",
+            }
+        )
+
+    return (
+        json.dumps(
+            {"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n"
+    )
+
+
+def phraseweave_path_for(markdown_path: Path) -> Path:
+    name = markdown_path.name
+    if name.endswith(".learning-units.md"):
+        name = f"{name[:-len('.learning-units.md')]}.learning-units.json"
+        return markdown_path.with_name(name)
+    if markdown_path.suffix:
+        return markdown_path.with_suffix(".json")
+    return markdown_path.with_name(f"{name}.json")
+
+
+def output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
+    markdown_path = args.output or DEFAULT_OUTPUT
+    if args.format == "markdown":
+        return markdown_path, None
+
+    if args.format == "phraseweave":
+        return None, args.phraseweave_output or args.output or DEFAULT_PHRASEWEAVE_OUTPUT
+
+    phraseweave_path = args.phraseweave_output or phraseweave_path_for(markdown_path)
+    if markdown_path.expanduser().resolve() == phraseweave_path.expanduser().resolve():
+        raise ConfigurationError("Markdown and PhraseWeave output paths must differ")
+    return markdown_path, phraseweave_path
 
 
 def write_output(requested: Path, content: str) -> Path:
@@ -1248,16 +1369,37 @@ def write_output(requested: Path, content: str) -> Path:
 def main() -> int:
     args = parse_args()
 
+    if args.render_analysis is None and args.analysis_output is None:
+        print(
+            "lexical-chunks: specify --analysis-output or --render-analysis",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.render_analysis is not None:
         try:
+            rules = load_rules()
             analysis = load_analysis(args.render_analysis)
             annotations = parse_annotations(sys.stdin.read(), analysis)
-            report = render_contextual_report(analysis, annotations)
+            markdown_path, phraseweave_path = output_paths(args)
+            rendered_outputs: list[tuple[Path, str]] = []
+            if markdown_path is not None:
+                rendered_outputs.append(
+                    (
+                        markdown_path,
+                        render_contextual_report(analysis, annotations, rules),
+                    )
+                )
+            if phraseweave_path is not None:
+                rendered_outputs.append(
+                    (phraseweave_path, render_phraseweave_backup(analysis, annotations))
+                )
         except ConfigurationError as error:
             print(f"lexical-chunks: {error}", file=sys.stderr)
             return 1
-        output = write_output(args.output, report)
-        print(output)
+        outputs = [write_output(path, content) for path, content in rendered_outputs]
+        for output in outputs:
+            print(output)
         return 0
 
     text = sys.stdin.read()
@@ -1265,6 +1407,13 @@ def main() -> int:
     if not sentences or not any(tokenize(sentence) for sentence in sentences):
         print("No English text was provided on stdin.", file=sys.stderr)
         return 2
+
+    if args.format != "markdown" and args.analysis_output is None:
+        print(
+            "lexical-chunks: phraseweave output requires --render-analysis with aligned Chinese prompts",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         rules = load_rules()
@@ -1288,14 +1437,10 @@ def main() -> int:
             args.analysis_output,
             json.dumps(analysis, ensure_ascii=False, indent=2) + "\n",
         )
-    else:
-        chunks_by_sentence = [
-            [unit["text"] for unit in item["learning_units"]] + [item["sentence"]]
-            for item in analysis["sentences"]
-        ]
-        output = write_output(args.output, render_report(chunks_by_sentence))
-    print(output)
-    return 0
+        print(output)
+        return 0
+
+    raise AssertionError("analysis-output should have returned before rendering")
 
 
 if __name__ == "__main__":

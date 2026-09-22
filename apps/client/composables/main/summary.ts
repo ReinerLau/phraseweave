@@ -1,3 +1,4 @@
+import { useRuntimeConfig } from "nuxt/app";
 import { onMounted, ref } from "vue";
 
 import { fetchDailySentence } from "~/api/tool";
@@ -29,7 +30,11 @@ const hasLoadingDailySentence = ref(false);
 export const resetSentenceLoading = () => (hasLoadingDailySentence.value = false);
 
 export function useDailySentence() {
+  const runtimeConfig = useRuntimeConfig();
+
   const getDailySentence = async () => {
+    if (!runtimeConfig.public.backendEndpoint) return;
+
     if (!hasLoadingDailySentence.value) {
       hasLoadingDailySentence.value = true;
       const { en, zh } = await fetchDailySentence().catch((err) => {

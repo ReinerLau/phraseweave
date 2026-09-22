@@ -1,16 +1,39 @@
 <template>
   <div
-    class="h-full w-full bg-white text-slate-600 transition-colors dark:bg-theme-dark dark:text-slate-300"
+    :class="[
+      'w-full bg-white pb-[env(safe-area-inset-bottom)] text-slate-600 transition-colors dark:bg-theme-dark dark:text-slate-300',
+      isFullHeightPage ? 'app-dynamic-height overflow-hidden' : 'app-min-height',
+    ]"
   >
-    <div class="m-auto flex h-fit min-h-screen flex-col items-center">
-      <EnvironmentBanner />
-      <Navbar />
-      <div class="flex w-full max-w-screen-xl flex-1 px-6">
+    <div
+      class="m-auto flex w-full flex-col items-center"
+      :class="isFullHeightPage ? 'h-full min-h-0 overflow-hidden' : 'app-min-height'"
+    >
+      <div
+        class="flex w-full min-w-0 flex-1"
+        :class="[
+          isWideLayoutPage ? 'max-w-none px-4' : 'max-w-screen-xl px-6',
+          isFullHeightPage ? 'min-h-0 overflow-hidden' : '',
+        ]"
+        :data-testid="isWideLayoutPage ? 'exercise-navigation-shell' : undefined"
+      >
         <slot></slot>
       </div>
-      <Footer></Footer>
+      <Footer v-if="!isPracticePage"></Footer>
     </div>
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+
+const route = useRoute();
+const isExerciseNavigationPage = computed(
+  () =>
+    route.path === "/" || route.path === "/course-pack" || route.path.startsWith("/course-pack/"),
+);
+const isPracticePage = computed(() => route.path.startsWith("/game/"));
+const isFullHeightPage = computed(() => isExerciseNavigationPage.value || isPracticePage.value);
+const isWideLayoutPage = computed(() => isExerciseNavigationPage.value || isPracticePage.value);
+</script>

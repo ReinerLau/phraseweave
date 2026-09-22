@@ -1,36 +1,29 @@
 <template>
-  <div class="text-center">
-    <div class="ml-8 inline-flex flex-wrap items-center gap-1 text-5xl">
+  <div
+    class="answer-content h-full min-h-0 w-full min-w-0 max-w-full overflow-hidden text-left"
+    :style="questionStyle"
+    data-testid="answer-content"
+  >
+    <div
+      class="answer-prompt dark:text-gray-50"
+      data-testid="answer-prompt"
+    >
+      {{ courseStore.currentStatement?.chinese }}
+    </div>
+    <div
+      class="answer-words flex w-full min-w-0 max-w-full flex-wrap items-start justify-start gap-1"
+    >
       <span
         v-for="word in words"
         :key="word"
-        class="cursor-pointer p-1 hover:text-fuchsia-500"
+        class="max-w-full cursor-pointer break-words p-1 hover:text-fuchsia-500"
         @click="handlePlayWordSound(word)"
         >{{ word }}</span
       >
-      <span
-        class="i-ph-speaker-simple-high ml-1 inline-block h-7 w-7 cursor-pointer text-gray-500 hover:text-fuchsia-500"
-        @click="handlePlayEnglishSound"
-      ></span>
     </div>
-    <div class="my-6 text-xl text-gray-500">
+    <div class="my-2 text-xl text-gray-500">
       {{ courseStore.currentStatement?.soundmark }}
     </div>
-    <div class="my-6 text-xl text-gray-500">
-      {{ courseStore.currentStatement?.chinese }}
-    </div>
-    <button
-      class="btn btn-outline btn-sm"
-      @click="showQuestion"
-    >
-      再来一次
-    </button>
-    <button
-      class="btn btn-outline btn-sm ml-6"
-      @click="goToNextQuestion"
-    >
-      下一题
-    </button>
   </div>
 </template>
 
@@ -39,18 +32,22 @@ import { computed, onMounted, onUnmounted } from "vue";
 
 import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
 import { usePlayWordSound } from "~/composables/main/englishSound/audio";
-import { useGameMode } from "~/composables/main/game";
-import { useSummary } from "~/composables/main/summary";
+import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
+import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useAutoPronunciation } from "~/composables/user/sound";
 import { useExerciseStore } from "~/store/exercise";
 import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const courseStore = useExerciseStore();
 const { handlePlayWordSound } = usePlayWordSound();
-const { handlePlayEnglishSound } = usePlayEnglishSound();
-const { showSummary } = useSummary();
-const { showQuestion } = useGameMode();
+usePlayEnglishSound();
 const { isAutoPlaySound } = useAutoPronunciation();
+const { questionFontSize } = useQuestionFontSize();
+const { goToNextQuestion: navigateToNextQuestion } = useExerciseNavigation();
+
+const questionStyle = computed(() => ({
+  "--question-font-size": `${questionFontSize.value}px`,
+}));
 
 const words = computed(() => courseStore.currentStatement?.english.split(" "));
 
@@ -64,14 +61,6 @@ function usePlayEnglishSound() {
       playSound();
     }
   });
-
-  function handlePlayEnglishSound() {
-    playSound();
-  }
-
-  return {
-    handlePlayEnglishSound,
-  };
 }
 
 function registerShortcutKeyForNextQuestion() {
@@ -91,12 +80,29 @@ function registerShortcutKeyForNextQuestion() {
 }
 
 function goToNextQuestion() {
-  if (courseStore.isAllDone()) {
-    showSummary();
-    return;
-  }
-
-  courseStore.toNextStatement();
-  showQuestion();
+  navigateToNextQuestion();
 }
 </script>
+
+<style scoped>
+.answer-content {
+  --question-font-size: 2.25rem;
+  font-size: var(--question-font-size);
+}
+
+.answer-prompt {
+  margin: 0 0 0.5em;
+  font-size: inherit;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.answer-words {
+  font-size: inherit;
+  line-height: 1.25;
+}
+
+.answer-words span {
+  overflow-wrap: anywhere;
+}
+</style>

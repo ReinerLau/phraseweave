@@ -33,7 +33,7 @@
               class="btn btn-primary btn-sm"
               @click="handleGotoCourseList(coursePack.coursePackId)"
             >
-              练习列表
+              练习清单
             </button>
             <button
               class="btn btn-primary btn-secondary btn-sm"
