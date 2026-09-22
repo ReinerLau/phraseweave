@@ -181,6 +181,25 @@ describe("question", () => {
     expect(userInputWords.every((word) => !word.incorrect)).toBe(true);
   });
 
+  it("should clear the input and error state when showing an answer tip", () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
+
+    const { userInputWords, setInputValue, submitAnswer, clearInput, inputValue } = useInput({
+      source: () => "i eat",
+      setInputCursorPosition,
+      getInputCursorPosition,
+    });
+
+    setInputValue("i like");
+    submitAnswer();
+    clearInput();
+
+    expect(inputValue.value).toBe("");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["", ""]);
+    expect(userInputWords.every((word) => !word.incorrect)).toBe(true);
+  });
+
   it("should prevent move", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = () => 0;

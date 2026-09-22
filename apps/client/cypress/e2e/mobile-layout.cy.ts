@@ -178,6 +178,19 @@ describe("mobile practice layout", () => {
     assertNoHorizontalOverflow();
   });
 
+  it("shows the answer in the input area without opening a popup", () => {
+    cy.get('input[type="text"]').type("wrong", { force: true });
+    cy.contains("显示答案").click();
+
+    cy.get('input[type="text"]').should("have.value", "");
+    cy.get(".question-input-word").first().should("have.text", "this");
+    cy.get(".card").should("not.exist");
+
+    cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
+    cy.get(".question-input-word").first().should("have.text", "this");
+    cy.contains("隐藏答案").should("not.exist");
+  });
+
   it("moves the course title to the right without a return tooltip", () => {
     cy.get('[data-tip="重置当前练习卡片进度"]').should("not.exist");
     cy.get('[data-tip="练习清单"]').should("not.exist");
