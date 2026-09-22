@@ -1,15 +1,13 @@
 <template>
   <div class="relative flex h-32 items-center justify-center">
-    <div class="z-10 flex items-center justify-center">
+    <MainPrevAndNextBtn>
       <button
-        class="btn btn-outline btn-sm"
+        class="btn btn-outline btn-sm z-10"
         @click="toggleGameMode"
       >
         {{ answerTipText }}
       </button>
-    </div>
-
-    <MainPrevAndNextBtn />
+    </MainPrevAndNextBtn>
   </div>
 </template>
 
