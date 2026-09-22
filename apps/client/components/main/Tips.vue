@@ -60,7 +60,7 @@ function usePlaySound(key: string) {
 }
 
 function useShowAnswer() {
-  const { focusInput } = useQuestionInput();
+  const { focusInput, blurInput } = useQuestionInput();
   const { showQuestion } = useGameMode();
   const { showAnswerTip, hiddenAnswerTip } = useAnswerTip();
 
@@ -76,13 +76,14 @@ function useShowAnswer() {
     const { isAnswerTip } = useAnswerTip();
     if (isAnswer()) {
       showQuestion();
+      focusInput();
     } else {
       if (isAnswerTip()) {
         hiddenAnswerTip();
       } else {
         showAnswerTip();
       }
-      focusInput();
+      blurInput();
     }
   }
 
