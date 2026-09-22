@@ -18,7 +18,7 @@
       {{ courseStore.currentStatement?.chinese }}
     </div>
     <button
-      class="btn btn-outline btn-sm ml-6"
+      class="btn btn-outline btn-sm"
       @click="goToNextQuestion"
     >
       下一题

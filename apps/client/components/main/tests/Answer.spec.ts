@@ -60,6 +60,7 @@ describe("Answer", () => {
     expect(wrapper.find(".i-ph-speaker-simple-high").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("再来一次");
     expect(wrapper.text()).toContain("下一题");
+    expect(wrapper.get("button").classes()).not.toContain("ml-6");
 
     await wrapper.find("span").trigger("click");
     expect(handlePlayWordSound).toHaveBeenCalledWith("I");
