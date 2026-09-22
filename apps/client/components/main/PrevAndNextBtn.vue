@@ -3,8 +3,7 @@
     <!-- left arrow button: go to previous question -->
     <div class="h-10 w-10 shrink-0">
       <button
-        class="arrow-btn tooltip grid h-10 w-10 place-items-center"
-        :data-tip="PREV_BTN_TIP"
+        class="arrow-btn grid h-10 w-10 place-items-center"
         @click="goToPreviousQuestion"
         v-show="courseStore.statementIndex !== 0"
       >
@@ -17,9 +16,8 @@
     <!-- right arrow button: go to next question -->
     <div class="h-10 w-10 shrink-0">
       <button
-        class="arrow-btn tooltip grid h-10 w-10 place-items-center"
+        class="arrow-btn grid h-10 w-10 place-items-center"
         @click="goToNextQuestion"
-        :data-tip="NEXT_BTN_TIP"
         totalQuestionsCount
         v-show="courseStore.statementIndex + 1 !== courseStore.totalQuestionsCount"
       >
@@ -41,9 +39,6 @@ const { goToNextQuestion, goToPreviousQuestion } = usePrevAndNextQuestion(
   shortcutKeys.value.previous,
   shortcutKeys.value.skip,
 );
-
-const PREV_BTN_TIP = `上一题（快捷键：${shortcutKeys.value.previous} ）`;
-const NEXT_BTN_TIP = `下一题（快捷键：${shortcutKeys.value.skip} ）`;
 
 const { showQuestion } = useGameMode();
 const courseStore = useExerciseStore();
