@@ -58,6 +58,8 @@ describe("Answer", () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.find(".i-ph-speaker-simple-high").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("再来一次");
+    expect(wrapper.text()).toContain("下一题");
 
     await wrapper.find("span").trigger("click");
     expect(handlePlayWordSound).toHaveBeenCalledWith("I");
