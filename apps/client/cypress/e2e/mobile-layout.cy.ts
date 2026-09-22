@@ -156,6 +156,9 @@ describe("mobile practice layout", () => {
     cy.get('[data-testid="practice-tips"] button').should("have.length", 1);
     cy.get('[data-testid="next-question-button"]').should("not.exist");
     cy.contains("显示答案").should("be.visible");
+    cy.get('[data-testid="practice-tips"] button').should(($buttons) => {
+      expect($buttons[0].getBoundingClientRect().height).to.be.at.least(48);
+    });
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
       const questionTop = $question[0].getBoundingClientRect().top;
@@ -371,6 +374,8 @@ describe("mobile practice layout", () => {
     cy.get('[data-testid="practice-tips"] button')
       .should("have.length", 2)
       .then(($buttons) => {
+        expect($buttons[0].getBoundingClientRect().height).to.be.at.least(48);
+        expect($buttons[1].getBoundingClientRect().height).to.be.at.least(48);
         expect($buttons[0].getBoundingClientRect().width).to.be.closeTo(
           $buttons[1].getBoundingClientRect().width,
           1.5,

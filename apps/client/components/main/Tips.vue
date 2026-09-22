@@ -4,7 +4,7 @@
     data-testid="practice-tips"
   >
     <button
-      class="btn btn-outline btn-sm w-0 min-w-0 flex-1 basis-0"
+      class="btn btn-outline btn-sm h-12 min-h-12 w-0 min-w-0 flex-1 basis-0"
       data-testid="show-answer-button"
       @click="toggleGameMode"
     >
@@ -12,7 +12,7 @@
     </button>
     <button
       v-if="isAnswer()"
-      class="btn btn-outline btn-sm w-0 min-w-0 flex-1 basis-0"
+      class="btn btn-outline btn-sm h-12 min-h-12 w-0 min-w-0 flex-1 basis-0"
       data-testid="next-question-button"
       @click="goToNextQuestion"
     >
