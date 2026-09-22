@@ -340,6 +340,34 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
+  it("focuses from the middle area but not from the top or bottom bars", () => {
+    cy.get('input[type="text"]')
+      .click({ force: true })
+      .should("be.focused")
+      .blur()
+      .should("not.be.focused");
+
+    cy.get('[data-testid="practice-focus-area"]').click("center");
+    cy.get('input[type="text"]').should("be.focused");
+
+    cy.get('input[type="text"]').blur().should("not.be.focused");
+    cy.get('[data-tip="练习卡片列表"]').click();
+    cy.get('input[type="text"]').should("not.be.focused");
+
+    cy.contains("显示答案").click();
+    cy.get('input[type="text"]').should("not.be.focused");
+  });
+
+  it("does not change the answer view when its middle area is clicked", () => {
+    cy.get('input[type="text"]').type(englishSentence, { force: true }).type("{enter}", {
+      force: true,
+    });
+    cy.contains("再来一次").should("be.visible");
+
+    cy.get('[data-testid="practice-focus-area"]').click("center");
+    cy.contains("再来一次").should("be.visible");
+  });
+
   it("filters non-Latin input and keeps the answer visible until a letter is entered", () => {
     cy.contains("显示答案").click();
     cy.get('input[type="text"]').click({ force: true }).should("be.focused");
