@@ -170,7 +170,18 @@ describe("mobile practice layout", () => {
 
     cy.get('[data-tip="练习卡片列表"]').click();
     cy.get("#contents").should("have.class", "show");
+    cy.get("#contents").should(($contents) => {
+      const rect = $contents[0].getBoundingClientRect();
+      expect(rect.right).to.be.at.most(320);
+      expect(rect.left).to.be.at.least(0);
+    });
     assertNoHorizontalOverflow();
+  });
+
+  it("moves the course title to the right and keeps the return tooltip visible", () => {
+    cy.get('[data-tip="重置当前练习卡片进度"]').should("not.exist");
+    cy.get('[data-tip="练习清单"]').trigger("mouseover").should("have.class", "tooltip-bottom");
+    cy.contains(courseTitle).should("be.visible");
   });
 
   it("opens exercise actions from a touch tap", () => {
