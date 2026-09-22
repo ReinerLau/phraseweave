@@ -102,6 +102,47 @@ function assertQuestionInputDoesNotScroll() {
   });
 }
 
+// 用与应用相同的方式（同字体的隐藏探针）测量文字真实渲染宽度
+function measureTextWidth(block: HTMLElement) {
+  const styles = window.getComputedStyle(block);
+  const probe = block.ownerDocument.createElement("span");
+  probe.style.cssText =
+    "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;white-space:pre;";
+  probe.style.fontStyle = styles.fontStyle;
+  probe.style.fontWeight = styles.fontWeight;
+  probe.style.fontSize = styles.fontSize;
+  probe.style.fontFamily = styles.fontFamily;
+  probe.style.letterSpacing = styles.letterSpacing;
+  probe.textContent = block.textContent ?? "";
+  block.ownerDocument.body.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width;
+}
+
+// 输入块必须保持单行，且下划线宽度与其显示的文字齐平（差异只允许亚像素级安全余量）
+function assertInputBlocksAlignWithText() {
+  cy.get(".question-input-word").should(($blocks) => {
+    for (const block of Array.from($blocks)) {
+      const styles = window.getComputedStyle(block);
+      const fontSize = parseFloat(styles.fontSize);
+      const rect = block.getBoundingClientRect();
+      const text = block.textContent ?? "";
+      const textWidth = text ? measureTextWidth(block) : 0;
+      const detail = `text="${text}" rect=${rect.width.toFixed(2)}x${rect.height.toFixed(
+        2,
+      )} styleWidth=${block.style.width} computedWidth=${styles.width} shrink=${styles.flexShrink} fontSize=${fontSize} textWidth=${textWidth.toFixed(2)}`;
+
+      expect(rect.height, `block stays on one line; ${detail}`).to.be.at.most(fontSize * 1.5);
+
+      if (!text) continue;
+
+      const difference = rect.width - textWidth;
+      expect(Math.abs(difference), `underline matches text; ${detail}`).to.be.at.most(1.5);
+    }
+  });
+}
+
 function assertExerciseNavigationShellIsFullWidth() {
   cy.get('[data-testid="exercise-navigation-shell"]').should(($shell) => {
     const element = $shell[0];
@@ -190,6 +231,7 @@ describe("mobile practice layout", () => {
       });
 
     cy.get('input[type="text"]').type("thisthis", { force: true }).should("have.value", "this");
+    assertInputBlocksAlignWithText();
 
     cy.get(".question-input-words").should(($words) => {
       const styles = window.getComputedStyle($words[0]);
@@ -242,6 +284,7 @@ describe("mobile practice layout", () => {
       );
       expect(rowTops.size).to.be.greaterThan(1);
     });
+    assertInputBlocksAlignWithText();
     assertQuestionInputDoesNotScroll();
   });
 
@@ -343,6 +386,7 @@ describe("mobile practice layout", () => {
     let questionFontSize = "";
     cy.get('input[type="text"]').type(englishSentence, { force: true });
     cy.wait(100);
+    assertInputBlocksAlignWithText();
 
     cy.get(".question-content").then(($question) => {
       questionFontSize = window
