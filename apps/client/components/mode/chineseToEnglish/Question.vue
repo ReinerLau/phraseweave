@@ -108,7 +108,7 @@ onUnmounted(() => {
 
 <style scoped>
 .question-content {
-  --question-font-size: 2.5rem;
+  --question-font-size: 2.25rem;
   font-size: var(--question-font-size);
 }
 

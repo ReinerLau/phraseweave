@@ -7,8 +7,8 @@ import {
 } from "../questionLayoutHelper";
 
 describe("findLargestFittingFontSize", () => {
-  it("uses 40px as the maximum practice font size", () => {
-    expect(QUESTION_FONT_MAX_SIZE_PX).toBe(40);
+  it("uses 36px as the maximum practice font size", () => {
+    expect(QUESTION_FONT_MAX_SIZE_PX).toBe(36);
   });
 
   it("returns the maximum when the layout fits", () => {
