@@ -16,6 +16,8 @@ interface InputOptions {
   setInputCursorPosition: (position: number) => void;
   getInputCursorPosition: () => number;
   inputChangedCallback?: (e: KeyboardEvent) => void;
+  getInputWordWidth?: (word: string) => number;
+  getInputWordCapacity?: (word: string) => number;
 }
 
 const separator = " ";
@@ -27,6 +29,30 @@ const LATIN_LETTER = /[A-Za-z]/;
 
 export function sanitizeQuestionInput(value: string) {
   return value.replace(QUESTION_INPUT_ALLOWED_CHARACTERS, "");
+}
+
+export function fitInputToWordWidths(
+  value: string,
+  targetWords: string[],
+  getInputWordWidth: (word: string) => number,
+  getInputWordCapacity: (word: string) => number,
+) {
+  return value
+    .split(separator)
+    .slice(0, targetWords.length)
+    .map((word, index) => {
+      const capacity = getInputWordCapacity(targetWords[index]);
+      let fittedWord = "";
+
+      for (const character of word) {
+        const nextWord = fittedWord + character;
+        if (getInputWordWidth(nextWord) > capacity) break;
+        fittedWord = nextWord;
+      }
+
+      return fittedWord;
+    })
+    .join(separator);
 }
 
 export function containsLatinLetter(value: string) {
@@ -42,6 +68,8 @@ export function useInput({
   setInputCursorPosition,
   getInputCursorPosition,
   inputChangedCallback,
+  getInputWordWidth,
+  getInputWordCapacity,
 }: InputOptions) {
   const userInputWords = reactive<Word[]>([]);
 
@@ -49,13 +77,20 @@ export function useInput({
   updateActiveWord(getInputCursorPosition());
 
   function setInputValue(val: string) {
+    const targetWords = source().split(separator);
     const sanitizedValue = sanitizeQuestionInput(val);
-    const cursorPosition = sanitizeQuestionInput(val.slice(0, getInputCursorPosition())).length;
+    const fitInput = (value: string) => {
+      if (!getInputWordWidth || !getInputWordCapacity) return value;
 
-    inputValue.value = sanitizedValue;
+      return fitInputToWordWidths(value, targetWords, getInputWordWidth, getInputWordCapacity);
+    };
+    const fittedValue = fitInput(sanitizedValue);
+    const cursorValue = fitInput(sanitizeQuestionInput(val.slice(0, getInputCursorPosition())));
+
+    inputValue.value = fittedValue;
     resetAllWordUserInput();
     inputSyncUserInputWords();
-    updateActiveWord(sanitizedValue ? cursorPosition : 0);
+    updateActiveWord(fittedValue ? cursorValue.length : 0);
   }
 
   function clearInput() {
