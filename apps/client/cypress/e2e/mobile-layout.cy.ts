@@ -77,6 +77,19 @@ function assertNoHorizontalOverflow() {
   });
 }
 
+function assertExerciseNavigationShellIsFullWidth() {
+  cy.get('[data-testid="exercise-navigation-shell"]').should(($shell) => {
+    const element = $shell[0];
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    expect(rect.left).to.equal(0);
+    expect(rect.right).to.equal(1280);
+    expect(rect.width).to.equal(1280);
+    expect(styles.paddingLeft).to.equal("16px");
+    expect(styles.paddingRight).to.equal("16px");
+  });
+}
+
 describe("mobile practice layout", () => {
   beforeEach(() => {
     cy.viewport(320, 568);
@@ -105,16 +118,23 @@ describe("mobile practice layout", () => {
   it("uses the full available width without a top navigation bar", () => {
     cy.viewport(1280, 800);
     cy.get("header").should("not.exist");
-    cy.get('[data-testid="practice-page-shell"]').should(($shell) => {
-      const element = $shell[0];
-      const rect = element.getBoundingClientRect();
-      const styles = window.getComputedStyle(element);
-      expect(rect.left).to.equal(0);
-      expect(rect.right).to.equal(1280);
-      expect(rect.width).to.equal(1280);
-      expect(styles.paddingLeft).to.equal("16px");
-      expect(styles.paddingRight).to.equal("16px");
-    });
+    assertExerciseNavigationShellIsFullWidth();
+  });
+
+  it("uses the full available width for the exercise list and course list", () => {
+    cy.viewport(1280, 800);
+
+    cy.visit("/");
+    cy.contains("练习清单").should("be.visible");
+    assertExerciseNavigationShellIsFullWidth();
+
+    cy.visit("/course-pack");
+    cy.contains("练习清单").should("be.visible");
+    assertExerciseNavigationShellIsFullWidth();
+
+    cy.visit(`/course-pack/${coursePackId}`);
+    cy.contains("返回练习清单").should("be.visible");
+    assertExerciseNavigationShellIsFullWidth();
   });
 
   it("does not stretch the page when the iOS keyboard shrinks the viewport", () => {
