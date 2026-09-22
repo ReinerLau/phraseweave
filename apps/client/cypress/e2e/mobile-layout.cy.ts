@@ -197,10 +197,23 @@ describe("mobile practice layout", () => {
     cy.get(".question-input-word")
       .first()
       .should("have.text", "this")
-      .and("have.class", "text-gray-400")
-      .and("have.class", "border-b-gray-300")
-      .and("not.have.class", "border-b-gray-500");
+      .and("have.class", "text-gray-400");
     cy.get(".card").should("not.exist");
+
+    cy.get('input[type="text"]').blur();
+    cy.get(".question-input-word")
+      .first()
+      .should("have.text", "this")
+      .and("have.class", "border-b-gray-300")
+      .and("not.have.class", "border-b-fuchsia-500");
+
+    cy.get('input[type="text"]').click({ force: true }).should("be.focused");
+    cy.get(".question-input-word")
+      .first()
+      .should("have.text", "this")
+      .and("have.class", "text-gray-400")
+      .and("have.class", "border-b-fuchsia-500")
+      .and("not.have.class", "border-b-gray-300");
 
     cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
     cy.get(".question-input-word").first().should("have.text", "this");
