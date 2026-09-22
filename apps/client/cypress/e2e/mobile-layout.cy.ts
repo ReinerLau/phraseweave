@@ -183,7 +183,10 @@ describe("mobile practice layout", () => {
     cy.contains("显示答案").click();
 
     cy.get('input[type="text"]').should("have.value", "");
-    cy.get(".question-input-word").first().should("have.text", "this");
+    cy.get(".question-input-word")
+      .first()
+      .should("have.text", "this")
+      .and("have.class", "text-gray-400");
     cy.get(".card").should("not.exist");
 
     cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
