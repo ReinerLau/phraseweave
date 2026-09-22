@@ -9,10 +9,13 @@
       class="m-auto flex w-full flex-col items-center"
       :class="isExerciseNavigationPage ? 'h-full min-h-0 overflow-hidden' : 'app-min-height'"
     >
-      <Navbar />
       <div
-        class="flex w-full min-w-0 max-w-screen-xl flex-1 px-6"
-        :class="isExerciseNavigationPage ? 'min-h-0 overflow-hidden' : ''"
+        class="flex w-full min-w-0 flex-1"
+        :class="[
+          isPracticePage ? 'max-w-none px-4' : 'max-w-screen-xl px-6',
+          isExerciseNavigationPage ? 'min-h-0 overflow-hidden' : '',
+        ]"
+        :data-testid="isPracticePage ? 'practice-page-shell' : undefined"
       >
         <slot></slot>
       </div>
@@ -30,4 +33,5 @@ const isExerciseNavigationPage = computed(
   () =>
     route.path === "/" || route.path === "/course-pack" || route.path.startsWith("/course-pack/"),
 );
+const isPracticePage = computed(() => route.path.startsWith("/game/"));
 </script>

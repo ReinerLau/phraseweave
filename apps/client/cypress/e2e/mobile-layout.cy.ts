@@ -102,6 +102,21 @@ describe("mobile practice layout", () => {
     assertNoHorizontalOverflow();
   });
 
+  it("uses the full available width without a top navigation bar", () => {
+    cy.viewport(1280, 800);
+    cy.get("header").should("not.exist");
+    cy.get('[data-testid="practice-page-shell"]').should(($shell) => {
+      const element = $shell[0];
+      const rect = element.getBoundingClientRect();
+      const styles = window.getComputedStyle(element);
+      expect(rect.left).to.equal(0);
+      expect(rect.right).to.equal(1280);
+      expect(rect.width).to.equal(1280);
+      expect(styles.paddingLeft).to.equal("16px");
+      expect(styles.paddingRight).to.equal("16px");
+    });
+  });
+
   it("does not stretch the page when the iOS keyboard shrinks the viewport", () => {
     cy.get('input[type="text"]').click({ force: true });
     let pageHeightBeforeKeyboard = 0;
