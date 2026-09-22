@@ -30,6 +30,26 @@ describe("ExerciseCard", () => {
     expect(wrapper.classes()).not.toContain("w-72");
   });
 
+  it("wraps long titles and centers the actions beside them", () => {
+    const wrapper = mount(ExerciseCard, {
+      props: {
+        exercise: {
+          id: "exercise-1",
+          title: "这是一个足够长的练习标题用于验证卡片标题能够正常换行",
+          description: "导入的练习",
+          isFree: true,
+          cover: "",
+        },
+      },
+    });
+
+    const title = wrapper.find("h2");
+    const titleRow = title.element.parentElement;
+
+    expect(title.classes()).toEqual(expect.arrayContaining(["min-w-0", "flex-1", "break-words"]));
+    expect(titleRow?.classList).toContain("items-center");
+  });
+
   it("groups exercise actions behind a more menu", async () => {
     const wrapper = mount(ExerciseCard, {
       props: {
