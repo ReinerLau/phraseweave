@@ -4,6 +4,7 @@
     :style="{ '--question-input-viewport-offset': `${inputViewportOffset}px` }"
   >
     <div
+      ref="questionInputWordsEl"
       class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-center gap-2 transition-all"
       :style="questionInputStyle"
     >
@@ -33,6 +34,11 @@
         @compositionend="handleCompositionEnd"
         autoFocus
       />
+      <span
+        ref="questionInputChProbeEl"
+        class="pointer-events-none absolute h-0 w-[1ch] opacity-0"
+        aria-hidden="true"
+      ></span>
     </div>
   </div>
 </template>
@@ -74,6 +80,8 @@ const { playRightSound, playErrorSound } = usePlayTipSound();
 const { handleAnswerError, resetCloseTip } = answerError();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const { isShowErrorTip } = useErrorTip();
+const questionInputWordsEl = ref<HTMLElement>();
+const questionInputChProbeEl = ref<HTMLElement>();
 
 const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
   useInput({
@@ -81,6 +89,8 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     setInputCursorPosition,
     getInputCursorPosition,
     inputChangedCallback,
+    getInputWordWidth,
+    getInputWordCapacity,
   });
 const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 
@@ -245,6 +255,29 @@ function inputWidth(word: string) {
   return getWordWidth(word);
 }
 
+function getInputWordWidth(word: string) {
+  return Math.max(0, getWordWidth(word) - 1);
+}
+
+function getInputWordCapacity(word: string) {
+  const blockCapacity = isShowWordsWidth() ? getInputWordWidth(word) : 4;
+  const wordsEl = questionInputWordsEl.value;
+  const chProbeEl = questionInputChProbeEl.value;
+
+  if (!wordsEl || !chProbeEl) return blockCapacity;
+
+  const chWidth = chProbeEl.getBoundingClientRect().width;
+  if (chWidth <= 0) return blockCapacity;
+
+  const containerWidthInCh = wordsEl.clientWidth / chWidth;
+  const blockWidth = inputWidth(word);
+  const availableBlockWidth = Math.min(blockWidth, containerWidthInCh);
+
+  return isShowWordsWidth()
+    ? Math.max(0, Math.min(blockCapacity, availableBlockWidth - 1))
+    : Math.max(0, Math.min(blockCapacity, availableBlockWidth));
+}
+
 function answerError() {
   let wrongTimes = 0;
 
@@ -367,6 +400,7 @@ function preventCursorMove(event: MouseEvent) {
 }
 
 .question-input-word {
-  overflow-wrap: anywhere;
+  min-height: 1em;
+  white-space: nowrap;
 }
 </style>

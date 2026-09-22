@@ -1,8 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { useInput } from "../question";
+import { fitInputToWordWidths, useInput } from "../question";
 
 describe("question", () => {
+  const characterWidth = (word: string) => word.length;
+  const targetCapacity = (word: string) => word.length;
+
+  it("fits each input word to its target word capacity", () => {
+    expect(fitInputToWordWidths("iiiii eate", ["iii", "eat"], characterWidth, targetCapacity)).toBe(
+      "iii eat",
+    );
+  });
+
+  it("keeps spaces between fitted words and filters extra words", () => {
+    expect(fitInputToWordWidths("i eate apple", ["i", "eat"], characterWidth, targetCapacity)).toBe(
+      "i eat",
+    );
+  });
+
+  it("supports weighted character widths and a fixed four-character capacity", () => {
+    const weightedWidth = (word: string) =>
+      word.split("").reduce((total, character) => total + (character === "w" ? 1.5 : 0.5), 0);
+
+    expect(fitInputToWordWidths("wwi", ["ww"], weightedWidth, weightedWidth)).toBe("ww");
+    expect(fitInputToWordWidths("tests", ["word"], characterWidth, () => 4)).toBe("test");
+  });
+
   it("should parse user input correctly", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = () => 0;
@@ -116,6 +139,24 @@ describe("question", () => {
 
     expect(inputValue.value).toBe("Abe' .?!-");
     expect(userInputWords.map((word) => word.userInput)).toEqual(["Abe'", ".?!-"]);
+  });
+
+  it("should filter input that exceeds the configured word capacities", () => {
+    const setInputCursorPosition = () => {};
+    const getInputCursorPosition = () => 0;
+
+    const { inputValue, userInputWords, setInputValue } = useInput({
+      source: () => "iii eat",
+      setInputCursorPosition,
+      getInputCursorPosition,
+      getInputWordWidth: characterWidth,
+      getInputWordCapacity: targetCapacity,
+    });
+
+    setInputValue("iiiii eate");
+
+    expect(inputValue.value).toBe("iii eat");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["iii", "eat"]);
   });
 
   it("should be the first word should be active", () => {

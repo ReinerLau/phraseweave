@@ -153,7 +153,15 @@ describe("mobile practice layout", () => {
   it("scales the input area with the available viewport", () => {
     let inputBeforeResize = { fontSize: 0, wordHeight: 0 };
 
-    cy.get('input[type="text"]').type("this", { force: true });
+    cy.get(".question-input-word")
+      .first()
+      .should(($word) => {
+        const styles = window.getComputedStyle($word[0]);
+        expect(styles.whiteSpace).to.equal("nowrap");
+        expect($word[0].getBoundingClientRect().height).to.be.greaterThan(0);
+      });
+
+    cy.get('input[type="text"]').type("thisthis", { force: true }).should("have.value", "this");
 
     cy.get(".question-input-words").should(($words) => {
       const styles = window.getComputedStyle($words[0]);
@@ -197,6 +205,12 @@ describe("mobile practice layout", () => {
         expect(rect.top).to.be.at.least(-1);
         expect(rect.bottom).to.be.at.most(289);
       });
+    cy.get(".question-input-word").then(($words) => {
+      const rowTops = new Set(
+        [...$words].map((word) => Math.round(word.getBoundingClientRect().top)),
+      );
+      expect(rowTops.size).to.be.greaterThan(1);
+    });
     assertQuestionInputDoesNotScroll();
   });
 
