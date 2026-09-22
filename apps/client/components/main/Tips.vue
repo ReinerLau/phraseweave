@@ -4,14 +4,15 @@
     data-testid="practice-tips"
   >
     <button
-      class="btn btn-outline btn-sm min-w-0 flex-1"
+      class="btn btn-outline btn-sm h-12 min-h-12 w-0 min-w-0 flex-1 basis-0"
       data-testid="show-answer-button"
       @click="toggleGameMode"
     >
       {{ answerTipText }}
     </button>
     <button
-      class="btn btn-outline btn-sm min-w-0 flex-1"
+      v-if="isAnswer()"
+      class="btn btn-outline btn-sm h-12 min-h-12 w-0 min-w-0 flex-1 basis-0"
       data-testid="next-question-button"
       @click="goToNextQuestion"
     >
@@ -38,6 +39,7 @@ import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 const { shortcutKeys } = useShortcutKeyMode();
 usePlaySound(shortcutKeys.value.sound);
 const { toggleGameMode } = useShowAnswer();
+const { isAnswer } = useGameMode();
 const { goToNextQuestion } = useExerciseNavigation();
 useExerciseNavigationShortcuts();
 
