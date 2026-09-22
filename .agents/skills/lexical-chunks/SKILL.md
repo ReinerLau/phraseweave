@@ -22,14 +22,13 @@ description: 将英文教材按确定性实义核心和渐进组合规则生成�
 
 ## 执行
 
-输出格式由用户选择：
+在开始分析、创建临时目录或生成任何文件之前，必须先询问用户输出格式并等待选择。请提供以下三个选项：
 
-- `markdown`：生成调试和人工查看用的 Markdown，默认模式。
+- `markdown`：生成调试和人工查看用的 Markdown。
 - `phraseweave`：生成可直接导入 PhraseWeave 的 JSON。
 - `both`：同时生成 Markdown 和 PhraseWeave JSON。
 
-用户未指定时使用 `markdown`；用户要求“导入 PhraseWeave”时使用
-`phraseweave`；用户同时要求调试和导入时使用 `both`。
+即使用户的请求中已经包含格式意图，也要先展示这三个选项并确认；未收到选择前不得开始执行。后续严格使用用户选定的格式，不再自行推断或回退到 `markdown`。
 
 1. 创建临时目录，将用户粘贴的英文原样传给分析模式：
 
