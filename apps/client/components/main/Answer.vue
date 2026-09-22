@@ -18,12 +18,6 @@
       {{ courseStore.currentStatement?.chinese }}
     </div>
     <button
-      class="btn btn-outline btn-sm"
-      @click="showQuestion"
-    >
-      再来一次
-    </button>
-    <button
       class="btn btn-outline btn-sm ml-6"
       @click="goToNextQuestion"
     >
