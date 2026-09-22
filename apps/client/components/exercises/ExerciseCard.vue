@@ -65,7 +65,7 @@
           </ul>
         </div>
       </div>
-      <p>{{ exercise.description }}</p>
+      <p v-if="exercise.description">{{ exercise.description }}</p>
     </div>
   </div>
 </template>
