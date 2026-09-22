@@ -178,24 +178,9 @@ describe("mobile practice layout", () => {
     assertNoHorizontalOverflow();
   });
 
-  it("moves the course title to the right and keeps the return tooltip visible", () => {
+  it("moves the course title to the right without a return tooltip", () => {
     cy.get('[data-tip="重置当前练习卡片进度"]').should("not.exist");
-    cy.get('[data-tip="练习清单"]')
-      .trigger("mouseover")
-      .should("have.class", "tooltip-right")
-      .then(($link) => {
-        const link = $link[0];
-        const linkRect = link.getBoundingClientRect();
-        const tooltipStyle = getComputedStyle(link, "::before");
-        const tooltipWidth = Number.parseFloat(tooltipStyle.width);
-        const tooltipLeft = link.classList.contains("tooltip-right")
-          ? linkRect.right
-          : linkRect.left + (linkRect.width - tooltipWidth) / 2;
-
-        expect(tooltipWidth).to.be.greaterThan(0);
-        expect(tooltipLeft).to.be.at.least(0);
-        expect(tooltipLeft + tooltipWidth).to.be.at.most(320);
-      });
+    cy.get('[data-tip="练习清单"]').should("not.exist");
     cy.contains(courseTitle).should("be.visible");
   });
 
