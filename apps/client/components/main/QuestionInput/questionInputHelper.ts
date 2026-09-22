@@ -3,7 +3,7 @@ import { ref } from "vue";
 const inputEl = ref<HTMLInputElement>();
 const focusing = ref(true);
 
-export const QUESTION_INPUT_MIN_FONT_SIZE_REM = 1.25;
+export const QUESTION_INPUT_MIN_FONT_SIZE_REM = 1;
 export const QUESTION_INPUT_MAX_FONT_SIZE_REM = 3;
 
 const QUESTION_INPUT_FIT_FACTOR = 1.67;
@@ -83,7 +83,7 @@ export function getQuestionInputStyle(words: string[]): Record<string, string> {
   return {
     "--question-width": String(textWidth),
     "--question-fluid-font-size": `${((QUESTION_INPUT_FIT_FACTOR * 100) / textWidth).toFixed(4)}cqw`,
-    "--question-min-font-size": `${QUESTION_INPUT_MIN_FONT_SIZE_REM}rem`,
+    "--question-base-min-font-size": `${QUESTION_INPUT_MIN_FONT_SIZE_REM}rem`,
     "--question-max-font-size": `${QUESTION_INPUT_MAX_FONT_SIZE_REM}rem`,
   };
 }

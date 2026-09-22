@@ -150,10 +150,54 @@ describe("mobile practice layout", () => {
     assertNoVerticalOverflow();
   });
 
-  it("keeps an empty input area easy to focus", () => {
-    cy.get(".question-input-shell").should(($shell) => {
-      expect($shell[0].getBoundingClientRect().height).to.be.at.least(64);
+  it("scales the input area with the available viewport", () => {
+    let inputBeforeResize = { fontSize: 0, wordHeight: 0 };
+
+    cy.get('input[type="text"]').type("this", { force: true });
+
+    cy.get(".question-input-words").should(($words) => {
+      const styles = window.getComputedStyle($words[0]);
+      const wordHeight = $words[0]
+        .querySelector<HTMLElement>(".question-input-word")
+        ?.getBoundingClientRect().height;
+      inputBeforeResize = {
+        fontSize: parseFloat(styles.fontSize),
+        wordHeight: wordHeight ?? 0,
+      };
+      expect(inputBeforeResize.fontSize).to.be.greaterThan(0);
+      expect(inputBeforeResize.wordHeight).to.be.greaterThan(0);
     });
+
+    cy.get('input[type="text"]').should(($input) => {
+      const rect = $input[0].getBoundingClientRect();
+      expect(rect.width).to.be.greaterThan(0);
+      expect(rect.height).to.be.greaterThan(0);
+    });
+
+    cy.viewport(320, 288);
+    cy.get(".question-input-words").should(($words) => {
+      const styles = window.getComputedStyle($words[0]);
+      const wordHeight = $words[0]
+        .querySelector<HTMLElement>(".question-input-word")
+        ?.getBoundingClientRect().height;
+      expect(parseFloat(styles.fontSize)).to.be.lessThan(inputBeforeResize.fontSize);
+      expect(wordHeight).to.be.lessThan(inputBeforeResize.wordHeight);
+    });
+    cy.get('input[type="text"]').should(($input) => {
+      const rect = $input[0].getBoundingClientRect();
+      expect(rect.width).to.be.greaterThan(0);
+      expect(rect.height).to.be.greaterThan(0);
+      expect(rect.bottom).to.be.greaterThan(0);
+      expect(rect.top).to.be.lessThan(288);
+    });
+    cy.get(".question-input-word")
+      .first()
+      .should(($word) => {
+        const rect = $word[0].getBoundingClientRect();
+        expect(rect.top).to.be.at.least(-1);
+        expect(rect.bottom).to.be.at.most(289);
+      });
+    assertQuestionInputDoesNotScroll();
   });
 
   it("uses the full available width without a top navigation bar", () => {
@@ -279,6 +323,7 @@ describe("mobile practice layout", () => {
     cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
     cy.get(".question-input-word").first().should("have.text", "this");
     cy.contains("隐藏答案").should("not.exist");
+    assertQuestionInputDoesNotScroll();
   });
 
   it("filters non-Latin input and keeps the answer visible until a letter is entered", () => {

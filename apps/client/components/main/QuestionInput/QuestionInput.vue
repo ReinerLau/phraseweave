@@ -93,7 +93,7 @@ function ensureInputVisible() {
   if (!input) return;
 
   const viewport = window.visualViewport;
-  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const viewportHeight = viewport && viewport.height > 0 ? viewport.height : window.innerHeight;
   const viewportOffsetTop = viewport?.offsetTop ?? 0;
 
   const rect = input.getBoundingClientRect();
@@ -346,7 +346,6 @@ function preventCursorMove(event: MouseEvent) {
   container-type: inline-size;
   width: 100%;
   min-width: 0;
-  min-height: clamp(3.5rem, 12vh, 4rem);
   max-width: 100%;
   overflow: hidden;
   padding-inline: 1rem;
@@ -354,10 +353,15 @@ function preventCursorMove(event: MouseEvent) {
 }
 
 .question-input-words {
-  font-size: var(--question-max-font-size);
+  --question-min-font-size: clamp(
+    0.875rem,
+    min(var(--question-base-min-font-size), 3.5dvh),
+    var(--question-base-min-font-size)
+  );
+  gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
   font-size: clamp(
     var(--question-min-font-size),
-    var(--question-fluid-font-size),
+    min(var(--question-fluid-font-size), 7dvh),
     var(--question-max-font-size)
   );
 }
