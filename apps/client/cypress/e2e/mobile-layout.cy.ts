@@ -349,15 +349,20 @@ describe("mobile practice layout", () => {
     cy.get('[data-testid="show-answer-button"]')
       .should("be.visible")
       .and("have.attr", "aria-label", "显示答案");
-    cy.get(".question-input-row").should(($row) => {
-      const row = $row[0];
-      const button = row.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
-      const rowRect = row.getBoundingClientRect();
+    cy.get(".question-input-words").should(($words) => {
+      const words = $words[0];
+      const inputWords = words.querySelectorAll<HTMLElement>(".question-input-word");
+      const lastInputWord = inputWords[inputWords.length - 1];
+      const button = words.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const lastInputRect = lastInputWord.getBoundingClientRect();
       const buttonRect = button.getBoundingClientRect();
 
       expect(buttonRect.height).to.be.at.least(44);
-      expect(buttonRect.right).to.be.closeTo(rowRect.right, 1);
-      expect(buttonRect.bottom).to.be.at.most(rowRect.bottom + 1);
+      if (Math.abs(buttonRect.top - lastInputRect.top) <= 1) {
+        expect(buttonRect.left).to.be.at.least(lastInputRect.right - 1);
+      } else {
+        expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
+      }
     });
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
@@ -534,15 +539,19 @@ describe("mobile practice layout", () => {
       viewport?.dispatchEvent(new Event("resize"));
     });
 
-    cy.get(".question-input-row").should(($row) => {
-      const row = $row[0];
-      const button = row.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
-      const rowRect = row.getBoundingClientRect();
+    cy.get(".question-input-words").should(($words) => {
+      const words = $words[0];
+      const inputWords = words.querySelectorAll<HTMLElement>(".question-input-word");
+      const lastInputWord = inputWords[inputWords.length - 1];
+      const button = words.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const lastInputRect = lastInputWord.getBoundingClientRect();
       const buttonRect = button.getBoundingClientRect();
 
-      expect(buttonRect.left).to.be.at.least(rowRect.left);
-      expect(buttonRect.right).to.be.at.most(rowRect.right + 1);
-      expect(buttonRect.bottom).to.be.at.most(rowRect.bottom + 1);
+      if (Math.abs(buttonRect.top - lastInputRect.top) <= 1) {
+        expect(buttonRect.left).to.be.at.least(lastInputRect.right - 1);
+      } else {
+        expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
+      }
     });
   });
 

@@ -14,7 +14,7 @@
          唯一差异是不带 border-b-2 —— 答题后布局零偏移，只是没有下划线 -->
     <div
       ref="answerWordsEl"
-      class="answer-words question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-start pr-[52px] text-left"
+      class="answer-words question-input-words relative flex w-full min-w-0 max-w-full flex-wrap items-start justify-start text-left"
     >
       <span
         v-for="(word, index) in words"
