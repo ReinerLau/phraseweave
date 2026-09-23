@@ -344,27 +344,30 @@ describe("mobile practice layout", () => {
   it("keeps the practice controls at the bottom without a version or arrow controls", () => {
     cy.get("footer").should("not.exist");
     cy.get(".arrow-btn").should("not.exist");
-    cy.get('[data-testid="practice-tips"] button').should("have.length", 1);
+    cy.get('[data-testid="practice-tips"]').should("not.exist");
     cy.get('[data-testid="next-question-button"]').should("not.exist");
-    cy.contains("显示答案").should("be.visible");
-    cy.get('[data-testid="practice-tips"] button').should(($buttons) => {
-      expect($buttons[0].getBoundingClientRect().height).to.be.at.least(48);
+    cy.get('[data-testid="show-answer-button"]')
+      .should("be.visible")
+      .and("have.attr", "aria-label", "显示答案");
+    cy.get(".question-input-row").should(($row) => {
+      const row = $row[0];
+      const button = row.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const rowRect = row.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+
+      expect(buttonRect.height).to.be.at.least(44);
+      expect(buttonRect.right).to.be.closeTo(rowRect.right, 1);
+      expect(buttonRect.bottom).to.be.at.most(rowRect.bottom + 1);
     });
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
       const questionTop = $question[0].getBoundingClientRect().top;
       const toolBottom =
         document.querySelector('[data-tip="练习卡片列表"]')?.getBoundingClientRect().bottom ?? 0;
-      const tipsBottom =
-        document.querySelector("[data-testid='practice-tips']")?.getBoundingClientRect().bottom ??
-        0;
       const questionBottom = $question[0].getBoundingClientRect().bottom;
-      const tipsTop =
-        document.querySelector("[data-testid='practice-tips']")?.getBoundingClientRect().top ?? 0;
 
       expect(toolBottom).to.be.at.most(questionTop);
-      expect(questionBottom).to.be.at.most(tipsTop + 1);
-      expect(tipsBottom).to.be.at.most(568);
+      expect(questionBottom).to.be.at.most(568);
     });
   });
 
@@ -516,7 +519,7 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
-  it("keeps a comfortable gap between the input and answer button with the keyboard open", () => {
+  it("keeps the answer button at the input end with the keyboard open", () => {
     cy.get('input[type="text"]').click({ force: true });
     cy.window().then((window) => {
       const viewport = window.visualViewport;
@@ -531,17 +534,15 @@ describe("mobile practice layout", () => {
       viewport?.dispatchEvent(new Event("resize"));
     });
 
-    cy.get(".question-input-word").last().should(($inputWord) => {
-      const inputElement = $inputWord[0];
-      const inputBottom = inputElement.getBoundingClientRect().bottom;
-      const answerButtonTop = inputElement.ownerDocument
-        .querySelector<HTMLElement>('[data-testid="show-answer-button"]')!
-        .getBoundingClientRect().top;
+    cy.get(".question-input-row").should(($row) => {
+      const row = $row[0];
+      const button = row.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const rowRect = row.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
 
-      expect(
-        answerButtonTop - inputBottom,
-        `input bottom=${inputBottom.toFixed(2)} answer button top=${answerButtonTop.toFixed(2)}`,
-      ).to.be.at.least(16);
+      expect(buttonRect.left).to.be.at.least(rowRect.left);
+      expect(buttonRect.right).to.be.at.most(rowRect.right + 1);
+      expect(buttonRect.bottom).to.be.at.most(rowRect.bottom + 1);
     });
   });
 
@@ -675,18 +676,18 @@ describe("mobile practice layout", () => {
       .first()
       .should("have.text", "this")
       .and("have.class", "text-gray-400")
-      .and("have.class", "border-b-gray-300")
-      .and("not.have.class", "border-b-fuchsia-500");
+      .and("have.class", "border-b-fuchsia-500")
+      .and("not.have.class", "border-b-gray-300");
     cy.get(".card").should("not.exist");
 
-    cy.get('input[type="text"]').should("not.be.focused");
+    cy.get('input[type="text"]').should("be.focused");
     cy.get(".question-input-word")
       .first()
       .should("have.text", "this")
-      .and("have.class", "border-b-gray-300")
-      .and("not.have.class", "border-b-fuchsia-500");
+      .and("have.class", "border-b-fuchsia-500")
+      .and("not.have.class", "border-b-gray-300");
 
-    cy.get('input[type="text"]').click({ force: true }).should("be.focused");
+    cy.get('input[type="text"]').should("be.focused");
     cy.get(".question-input-word")
       .first()
       .should("have.text", "this")
@@ -697,12 +698,12 @@ describe("mobile practice layout", () => {
     cy.get('input[type="text"]')
       .type("{leftarrow}{backspace}{enter} ", { force: true })
       .should("have.value", " ");
-    cy.contains("隐藏答案").should("be.visible");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
 
     cy.get('input[type="text"]').clear({ force: true }).should("have.value", "");
     cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
     cy.get(".question-input-word").first().should("have.text", "this");
-    cy.contains("隐藏答案").should("not.exist");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "显示答案");
     assertQuestionInputDoesNotScroll();
   });
 
@@ -721,7 +722,7 @@ describe("mobile practice layout", () => {
     cy.get('input[type="text"]').should("not.be.focused");
 
     cy.get('[data-testid="show-answer-button"]').click({ force: true });
-    cy.get('input[type="text"]').should("not.be.focused");
+    cy.get('input[type="text"]').should("be.focused");
   });
 
   it("does not change the answer view when its middle area is clicked", () => {
@@ -740,15 +741,15 @@ describe("mobile practice layout", () => {
 
     setNativeInputValue("中文123");
     cy.get('input[type="text"]').should("have.value", "");
-    cy.contains("隐藏答案").should("be.visible");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
 
     setNativeInputValue(".,?!- ");
     cy.get('input[type="text"]').should("have.value", ".,?!- ");
-    cy.contains("隐藏答案").should("be.visible");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
 
     setNativeInputValue("中文a123");
     cy.get('input[type="text"]').should("have.value", "a");
-    cy.contains("隐藏答案").should("not.exist");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "显示答案");
   });
 
   it("moves the course title to the right without a return tooltip", () => {

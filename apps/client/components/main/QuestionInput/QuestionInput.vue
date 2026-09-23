@@ -1,52 +1,71 @@
 <template>
   <div class="question-input-shell">
-    <div
-      ref="questionInputWordsEl"
-      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-start gap-2 text-left"
-    >
-      <template
-        v-for="(w, i) in courseStore.words"
-        :key="i"
+    <div class="question-input-row flex min-w-0 max-w-full items-end gap-2">
+      <div
+        ref="questionInputWordsEl"
+        class="question-input-words relative flex min-w-0 max-w-full flex-1 flex-wrap justify-start text-left"
       >
-        <div
-          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
-          :class="getWordsClassNames(i)"
-          :style="{ width: `${inputWidth(i)}em` }"
+        <template
+          v-for="(w, i) in courseStore.words"
+          :key="i"
         >
-          {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
-        </div>
-      </template>
-      <input
-        ref="inputEl"
-        class="absolute h-full w-full opacity-0"
-        type="text"
-        v-model="inputValue"
-        @keydown="handleKeydown"
-        @focus="handleInputFocus"
-        @blur="handleInputBlur"
-        @dblclick.prevent
-        @mousedown="preventCursorMove"
-        @compositionstart="handleCompositionStart"
-        @compositionend="handleCompositionEnd"
-        autoFocus
-      />
-      <!-- 隐藏探针：用真实渲染字体测量文本宽度和当前字号 -->
-      <span
-        ref="questionInputProbeEl"
-        class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
-        aria-hidden="true"
-      ></span>
+          <div
+            class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
+            :class="getWordsClassNames(i)"
+            :style="{ width: `${inputWidth(i)}em` }"
+          >
+            {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
+          </div>
+        </template>
+        <input
+          ref="inputEl"
+          class="absolute h-full w-full opacity-0"
+          type="text"
+          v-model="inputValue"
+          @keydown="handleKeydown"
+          @focus="handleInputFocus"
+          @blur="handleInputBlur"
+          @dblclick.prevent
+          @mousedown="preventCursorMove"
+          @compositionstart="handleCompositionStart"
+          @compositionend="handleCompositionEnd"
+          autoFocus
+        />
+        <!-- 隐藏探针：用真实渲染字体测量文本宽度和当前字号 -->
+        <span
+          ref="questionInputProbeEl"
+          class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
+          aria-hidden="true"
+        ></span>
+      </div>
+      <button
+        class="btn btn-square btn-ghost h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 text-2xl text-gray-500 hover:text-fuchsia-500 dark:text-gray-300"
+        type="button"
+        data-testid="show-answer-button"
+        :aria-label="answerTipText"
+        :title="answerTipText"
+        @mousedown.prevent
+        @click="toggleGameMode"
+      >
+        <span
+          class="h-6 w-6"
+          :class="isAnswerTip() ? 'i-ph-eye-slash' : 'i-ph-eye'"
+          aria-hidden="true"
+        ></span>
+        <span class="sr-only">{{ answerTipText }}</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
 import { containsLatinLetter, sanitizeQuestionInput, useInput } from "~/composables/main/question";
+import { useShowAnswer } from "~/composables/main/showAnswer";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
@@ -66,6 +85,7 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
   useQuestionInput();
 
 const { showAnswer } = useGameMode();
+const { toggleGameMode } = useShowAnswer();
 const { showSummary } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
@@ -93,6 +113,7 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     getInputWordCapacity,
   });
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+const answerTipText = computed(() => (isAnswerTip() ? "隐藏答案" : "显示答案"));
 
 function handleInputFocus() {
   focusInput();
