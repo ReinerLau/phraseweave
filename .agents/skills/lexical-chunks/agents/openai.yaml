@@ -1,4 +1,4 @@
 interface:
   display_name: "lexical-chunks"
-  short_description: "按确定性实义核心和组合规则生成中文提示打字练习"
-  default_prompt: "使用 $lexical-chunks 处理我粘贴的英文教材，先让我选择 Markdown、PhraseWeave JSON 或两者，再生成渐进学习单元报告并只返回报告文件链接。"
+  short_description: "结合确定性核心分析和模型构式编排生成中文提示打字练习"
+  default_prompt: "使用 $lexical-chunks 处理我粘贴的英文教材，先让我选择 Markdown、PhraseWeave JSON 或两者，再由脚本分析核心、大模型编排自然构式、脚本校验后生成渐进学习单元报告，并只返回报告文件链接。"

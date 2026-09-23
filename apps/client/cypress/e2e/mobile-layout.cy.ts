@@ -489,6 +489,35 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
+  it("keeps a comfortable gap between the input and answer button with the keyboard open", () => {
+    cy.get('input[type="text"]').click({ force: true });
+    cy.window().then((window) => {
+      const viewport = window.visualViewport;
+      expect(viewport).to.not.be.null;
+
+      let viewportHeight = window.innerHeight;
+      Object.defineProperty(viewport, "height", {
+        configurable: true,
+        get: () => viewportHeight,
+      });
+      viewportHeight -= 280;
+      viewport?.dispatchEvent(new Event("resize"));
+    });
+
+    cy.get(".question-input-word").last().should(($inputWord) => {
+      const inputElement = $inputWord[0];
+      const inputBottom = inputElement.getBoundingClientRect().bottom;
+      const answerButtonTop = inputElement.ownerDocument
+        .querySelector<HTMLElement>('[data-testid="show-answer-button"]')!
+        .getBoundingClientRect().top;
+
+      expect(
+        answerButtonTop - inputBottom,
+        `input bottom=${inputBottom.toFixed(2)} answer button top=${answerButtonTop.toFixed(2)}`,
+      ).to.be.at.least(16);
+    });
+  });
+
   it("uses the same shrinking font size for the Chinese prompt and input", () => {
     let promptBeforeResize = 0;
     cy.get('[data-testid="question-prompt"]').then(($prompt) => {
