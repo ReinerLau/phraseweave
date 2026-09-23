@@ -4,13 +4,19 @@
     class="question-content h-full min-h-0 w-full min-w-0 overflow-hidden text-left"
     :style="questionStyle"
   >
-    <div
-      class="question-prompt dark:text-gray-50"
-      data-testid="question-prompt"
-    >
-      {{ courseStore.currentStatement?.chinese || "生存还是毁灭，这是一个问题" }}
+    <div class="question-content-flow">
+      <div
+        class="question-prompt dark:text-gray-50"
+        data-testid="question-prompt"
+      >
+        {{ courseStore.currentStatement?.chinese || "生存还是毁灭，这是一个问题" }}
+      </div>
+      <MainQuestionInput />
+      <div
+        class="question-content-bottom-spacer"
+        aria-hidden="true"
+      ></div>
     </div>
-    <MainQuestionInput />
   </div>
 </template>
 
@@ -56,19 +62,13 @@ function contentFits() {
   const root = questionRootEl.value;
   if (!root) return true;
 
-  const prompt = root.querySelector<HTMLElement>(".question-prompt");
-  const inputWords = root.querySelector<HTMLElement>(".question-input-words");
-  if (!prompt || !inputWords) return false;
+  const contentFlow = root.querySelector<HTMLElement>(".question-content-flow");
+  if (!contentFlow) return false;
 
   const rootRect = root.getBoundingClientRect();
   const rootStyles = window.getComputedStyle(root);
-  const bottomInset =
-    parseFloat(rootStyles.paddingBottom) + parseFloat(rootStyles.borderBottomWidth);
-  const availableBottom = rootRect.bottom - bottomInset;
-  const contentBottom = Math.max(
-    prompt.getBoundingClientRect().bottom,
-    inputWords.getBoundingClientRect().bottom,
-  );
+  const availableBottom = rootRect.bottom - parseFloat(rootStyles.borderBottomWidth);
+  const contentBottom = contentFlow.getBoundingClientRect().bottom;
 
   return contentBottom <= availableBottom + 1 && root.scrollWidth <= root.clientWidth + 1;
 }
@@ -124,7 +124,16 @@ onUnmounted(() => {
 .question-content {
   --question-font-size: 2.25rem;
   font-size: var(--question-font-size);
-  padding-bottom: 1rem;
+}
+
+.question-content-flow {
+  width: 100%;
+  min-width: 0;
+}
+
+.question-content-bottom-spacer {
+  width: 100%;
+  height: 1rem;
 }
 
 .question-prompt {
