@@ -174,6 +174,38 @@ function assertBlockShowsFixedHint(word: string) {
     });
 }
 
+// 记录每个输入块的上下边界，用于断言下划线位置不随输入移动
+function captureBlockPositions(): Cypress.Chainable<Map<string, { top: number; bottom: number }>> {
+  return cy.get(".question-input-word").then(($blocks) => {
+    const positions = new Map<string, { top: number; bottom: number }>();
+    Array.from($blocks).forEach((block, index) => {
+      const rect = block.getBoundingClientRect();
+      positions.set(String(index), { top: rect.top, bottom: rect.bottom });
+    });
+    return positions;
+  });
+}
+
+function assertBlockPositionsUnchanged(positions: Map<string, { top: number; bottom: number }>) {
+  cy.get(".question-input-word").should(($blocks) => {
+    Array.from($blocks).forEach((block, index) => {
+      const before = positions.get(String(index));
+      expect(before, `block #${index} existed when positions were captured`).to.exist;
+      if (!before) return;
+
+      const rect = block.getBoundingClientRect();
+      expect(
+        Math.abs(rect.top - before.top),
+        `underline top stays put; before=${before.top} after=${rect.top} ${blockDetail(block)}`,
+      ).to.be.at.most(0.5);
+      expect(
+        Math.abs(rect.bottom - before.bottom),
+        `underline bottom stays put; before=${before.bottom} after=${rect.bottom} ${blockDetail(block)}`,
+      ).to.be.at.most(0.5);
+    });
+  });
+}
+
 function assertExerciseNavigationShellIsFullWidth() {
   cy.get('[data-testid="exercise-navigation-shell"]').should(($shell) => {
     const element = $shell[0];
@@ -246,6 +278,19 @@ describe("mobile practice layout", () => {
       expect(toolBottom).to.be.at.most(questionTop);
       expect(questionBottom).to.be.at.most(tipsTop + 1);
       expect(tipsBottom).to.be.at.most(568);
+    });
+  });
+
+  // 空块必须与有文字的块同高：否则敲入首字符时块被撑高 2px，
+  // flex 行内 stretch 对齐让整行下划线一起下移
+  it("keeps the underlines steady when typing starts", () => {
+    cy.wait(100); // 等题目字号自适应先落定
+    captureBlockPositions().then((positions) => {
+      cy.get('input[type="text"]').type("t", { force: true }).should("have.value", "t");
+      assertBlockPositionsUnchanged(positions);
+
+      cy.get('input[type="text"]').type("his", { force: true }).should("have.value", "this");
+      assertBlockPositionsUnchanged(positions);
     });
   });
 
@@ -454,10 +499,28 @@ describe("mobile practice layout", () => {
     cy.contains("下一题").should("be.visible");
     cy.get('[data-testid="practice-tips"] button')
       .should("have.length", 2)
-      .then(($buttons) => {
-        expect($buttons[0].getBoundingClientRect().height).to.be.at.least(48);
-        expect($buttons[1].getBoundingClientRect().height).to.be.at.least(48);
-        expect($buttons[0].getBoundingClientRect().width).to.be.closeTo(
+      .should(($buttons) => {
+        const detail = Array.from($buttons)
+          .map((button) => {
+            const b = button as HTMLElement;
+            const s = window.getComputedStyle(b);
+            const transforms: string[] = [];
+            let el: HTMLElement | null = b;
+            while (el && transforms.length < 8) {
+              const t = window.getComputedStyle(el).transform;
+              if (t && t !== "none") {
+                transforms.push(`${el.tagName}.${String(el.className).slice(0, 40)}=${t}`);
+              }
+              el = el.parentElement;
+            }
+            const rect = b.getBoundingClientRect();
+            return `rect=${rect.width.toFixed(3)}x${rect.height.toFixed(3)} styleH=${s.height} minH=${s.minHeight} transforms=[${transforms.join(" | ")}]`;
+          })
+          .join(" ~~ ");
+
+        expect($buttons[0].getBoundingClientRect().height, detail).to.be.at.least(48);
+        expect($buttons[1].getBoundingClientRect().height, detail).to.be.at.least(48);
+        expect($buttons[0].getBoundingClientRect().width, detail).to.be.closeTo(
           $buttons[1].getBoundingClientRect().width,
           1.5,
         );
