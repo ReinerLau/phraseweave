@@ -1,4 +1,6 @@
-import { ref } from "vue";
+import type { Ref } from "vue";
+
+import { onMounted, onUnmounted, ref } from "vue";
 
 const inputEl = ref<HTMLInputElement>();
 const focusing = ref(true);
@@ -109,4 +111,83 @@ export function getWordBlockWidthEm(targetWidthEm: number, displayedWidthEm: num
 /** 可输入容量：不超过目标单词实测宽度；容器更窄时不超过容器宽度，单位 em */
 export function getWordCapacityEm(wordWidthEm: number, containerWidthEm: number) {
   return Math.max(0, Math.min(wordWidthEm, containerWidthEm));
+}
+
+/**
+ * 词块宽度测量：输入区与答案区共用，保证答题前后每块宽度/换行点逐像素一致。
+ *
+ * 探针放在行容器内继承同一套字体：挂载后与字体加载完成后重测；
+ * ResizeObserver 监听行容器 —— 题目字号自适应会改变字形步进取整，
+ * 旧字号测的 em 比值在新字号下会偏窄约 0.8%（文字被挤出块外折行），
+ * 因此字号变化（必然改变容器高度）后在新字号下失效重测，rAF 合并同帧通知。
+ */
+export function useWordWidths(rowEl: Ref<HTMLElement | undefined>) {
+  const probeEl = ref<HTMLElement>();
+  const version = ref(0);
+
+  function readWidth(text: string) {
+    const probe = probeEl.value;
+    if (!probe) return 0;
+
+    probe.textContent = text;
+    return probe.getBoundingClientRect().width;
+  }
+
+  function readFontSize() {
+    const probe = probeEl.value;
+    if (!probe) return 0;
+
+    return Number.parseFloat(window.getComputedStyle(probe).fontSize);
+  }
+
+  const measurer = createWordWidthMeasurer(readWidth, readFontSize);
+
+  function invalidate() {
+    measurer.invalidate();
+    version.value += 1;
+  }
+
+  function measureEm(text: string) {
+    // 读取版本号：失效重测后让依赖渲染更新
+    void version.value;
+    return measurer.measureEm(text);
+  }
+
+  /** 词块宽度：与输入态固定提示同一公式（目标单词实测 + 亚像素安全余量） */
+  function wordWidth(word: string) {
+    return getWordBlockWidthEm(measureEm(word), measureEm(""));
+  }
+
+  let observer: ResizeObserver | undefined;
+  let frame: number | undefined;
+
+  onMounted(() => {
+    // 首次渲染时探针 ref 还未挂载，缓存里是退化的按字符数估算，挂载后按真实字体重测
+    invalidate();
+
+    // 字体加载完成后按最终字体重新测量
+    document.fonts?.ready?.then(invalidate).catch(() => undefined);
+
+    const row = rowEl.value;
+    if (row && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        if (frame !== undefined) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = undefined;
+          invalidate();
+        });
+      });
+      observer.observe(row);
+    }
+  });
+
+  onUnmounted(() => {
+    observer?.disconnect();
+    if (frame !== undefined) {
+      window.cancelAnimationFrame(frame);
+      frame = undefined;
+    }
+  });
+
+  return { probeEl, measureEm, fontSizePx: measurer.fontSizePx, invalidate, wordWidth };
 }

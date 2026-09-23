@@ -53,11 +53,11 @@ import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useExerciseStore } from "~/store/exercise";
 import {
-  createWordWidthMeasurer,
   getInputWordWidthEm,
   getWordBlockWidthEm,
   getWordCapacityEm,
   useQuestionInput,
+  useWordWidths,
 } from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
@@ -73,38 +73,12 @@ const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { playRightSound, playErrorSound } = usePlayTipSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
-const questionInputProbeEl = ref<HTMLElement>();
-const measureVersion = ref(0);
-let measureObserver: ResizeObserver | undefined;
-let measureFrame: number | undefined;
-
-function readProbeWidth(text: string) {
-  const probe = questionInputProbeEl.value;
-  if (!probe) return 0;
-
-  probe.textContent = text;
-  return probe.getBoundingClientRect().width;
-}
-
-function readProbeFontSize() {
-  const probe = questionInputProbeEl.value;
-  if (!probe) return 0;
-
-  return Number.parseFloat(window.getComputedStyle(probe).fontSize);
-}
-
-const wordMeasurer = createWordWidthMeasurer(readProbeWidth, readProbeFontSize);
-
-function measureEm(text: string) {
-  // 读取版本号：字体加载完成后失效重测，并让渲染副作用重新测量
-  void measureVersion.value;
-  return wordMeasurer.measureEm(text);
-}
-
-function invalidateMeasurements() {
-  wordMeasurer.invalidate();
-  measureVersion.value += 1;
-}
+// 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
+const {
+  probeEl: questionInputProbeEl,
+  measureEm,
+  fontSizePx,
+} = useWordWidths(questionInputWordsEl);
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -130,38 +104,9 @@ function handleInputBlur() {
 
 onMounted(() => {
   focusInput();
-
-  // 首次渲染时探针 ref 还未挂载，缓存里是退化的按字符数估算，挂载后按真实字体重测
-  invalidateMeasurements();
-
-  // 字体加载完成后按最终字体重新测量
-  document.fonts?.ready?.then(invalidateMeasurements).catch(() => undefined);
-
-  // 字形步进按字号取整，同一文本的 em 比值不随字号线性（实测 36px 与 22.5px 下
-  // 相差约 0.8%）：在旧字号测的宽度换到新字号会偏窄，把文字挤出块外折行。
-  // 题目字号自适应必然改变容器高度，用 ResizeObserver 在变化后于新字号下重测，
-  // rAF 合并同帧的多次通知，避免连续失效。
-  const wordsEl = questionInputWordsEl.value;
-  if (wordsEl && typeof ResizeObserver !== "undefined") {
-    measureObserver = new ResizeObserver(() => {
-      if (measureFrame !== undefined) return;
-      measureFrame = window.requestAnimationFrame(() => {
-        measureFrame = undefined;
-        invalidateMeasurements();
-      });
-    });
-    measureObserver.observe(wordsEl);
-  }
 });
 
 focusInputWhenWIndowFocus();
-onUnmounted(() => {
-  measureObserver?.disconnect();
-  if (measureFrame !== undefined) {
-    window.cancelAnimationFrame(measureFrame);
-    measureFrame = undefined;
-  }
-});
 onUnmounted(cancelErrorReset);
 
 watch(
@@ -258,7 +203,7 @@ function getInputWordCapacity(word: string) {
   const wordsEl = questionInputWordsEl.value;
   if (!wordsEl) return wordWidthEm;
 
-  const fontPx = wordMeasurer.fontSizePx();
+  const fontPx = fontSizePx();
   if (fontPx <= 0) return wordWidthEm;
 
   return getWordCapacityEm(wordWidthEm, wordsEl.clientWidth / fontPx);
@@ -356,27 +301,12 @@ function preventCursorMove(event: MouseEvent) {
 </script>
 
 <style scoped>
+/* 词块样式（.question-input-words / .question-input-word）已迁移到
+   assets/css/globals.css，与答案区共用同一套规则，保证答题前后零偏移。 */
 .question-input-shell {
   width: 100%;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-}
-
-.question-input-words {
-  gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
-  font-size: inherit;
-}
-
-.question-input-word {
-  /* border-box 下 min-height 包含 border-b-2 的 2px。空块也必须预留
-     行高(1em)+下划线(2px)，与输入文字后的自然高度一致；否则敲入首字符时
-     块被撑高 2px，flex 行内 stretch 对齐会让整行下划线一起下移。
-     2px 对应模板上的 border-b-2。 */
-  min-height: calc(1em + 2px);
-  overflow-wrap: anywhere;
-  white-space: normal;
-  /* 行内放不下时单词整体换到下一行，而不是压缩块宽把文字挤成两行 */
-  flex-shrink: 0;
 }
 </style>
