@@ -12,10 +12,6 @@
         {{ courseStore.currentStatement?.chinese || "生存还是毁灭，这是一个问题" }}
       </div>
       <MainQuestionInput />
-      <div
-        class="question-content-bottom-spacer"
-        aria-hidden="true"
-      ></div>
     </div>
   </div>
 </template>
@@ -67,7 +63,10 @@ function contentFits() {
 
   const rootRect = root.getBoundingClientRect();
   const rootStyles = window.getComputedStyle(root);
-  const availableBottom = rootRect.bottom - parseFloat(rootStyles.borderBottomWidth);
+  const availableBottom =
+    rootRect.bottom -
+    parseFloat(rootStyles.borderBottomWidth) -
+    parseFloat(rootStyles.paddingBottom);
   const contentBottom = contentFlow.getBoundingClientRect().bottom;
 
   return contentBottom <= availableBottom + 1 && root.scrollWidth <= root.clientWidth + 1;
@@ -123,17 +122,14 @@ onUnmounted(() => {
 <style scoped>
 .question-content {
   --question-font-size: 2.25rem;
+  --question-content-bottom-space: 1rem;
   font-size: var(--question-font-size);
+  padding-bottom: var(--question-content-bottom-space);
 }
 
 .question-content-flow {
   width: 100%;
   min-width: 0;
-}
-
-.question-content-bottom-spacer {
-  width: 100%;
-  height: 1rem;
 }
 
 .question-prompt {
