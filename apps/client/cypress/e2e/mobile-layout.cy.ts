@@ -3,8 +3,12 @@ const courseId = "mobile-overflow-course";
 const courseTitle = "一个非常非常长的练习标题用于验证窄屏布局";
 const englishSentence =
   "this is a deliberately long sentence that should wrap inside the mobile practice page";
+const veryLongEnglishSentence =
+  `${"this deliberately long sentence contains enough words to exercise every available line in the mobile practice area while keeping the answer action after the final input block "}`.repeat(
+    20,
+  );
 
-function seedLocalExercise() {
+function seedLocalExercise(english = englishSentence) {
   return cy.window().then(
     (window) =>
       new Cypress.Promise<void>((resolve, reject) => {
@@ -48,7 +52,7 @@ function seedLocalExercise() {
                     id: "mobile-overflow-statement",
                     order: 1,
                     chinese: "这是一个测试句子",
-                    english: englishSentence,
+                    english,
                     soundmark: "/ðɪs/",
                   },
                 ],
@@ -339,6 +343,26 @@ describe("mobile practice layout", () => {
     cy.contains(courseTitle).should("be.visible");
     assertNoHorizontalOverflow();
     assertNoVerticalOverflow();
+  });
+
+  it("keeps a very long question within the viewport", () => {
+    seedLocalExercise(veryLongEnglishSentence);
+    cy.reload();
+
+    cy.get(".question-content").then(($question) => {
+      const root = $question[0];
+      const words = root.querySelectorAll<HTMLElement>(".question-input-word");
+      expect(words.length, "long question renders every word block").to.be.greaterThan(100);
+      expect(root.ownerDocument.defaultView?.getComputedStyle(root).overflowY).to.equal("auto");
+      expect(root.scrollHeight).to.be.greaterThan(root.clientHeight);
+
+      root.scrollTop = root.scrollHeight;
+      const action = root.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      expect(action.getBoundingClientRect().bottom).to.be.at.most(
+        root.getBoundingClientRect().bottom + 1,
+      );
+      assertNoVerticalOverflow();
+    });
   });
 
   it("keeps the practice controls at the bottom without a version or arrow controls", () => {

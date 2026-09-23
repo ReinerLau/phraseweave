@@ -1,7 +1,7 @@
 <template>
   <div
     ref="questionRootEl"
-    class="question-content h-full min-h-0 w-full min-w-0 overflow-hidden text-left"
+    class="question-content h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden text-left"
     :style="questionStyle"
   >
     <div
