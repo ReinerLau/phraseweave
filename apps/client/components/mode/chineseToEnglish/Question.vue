@@ -56,7 +56,21 @@ function contentFits() {
   const root = questionRootEl.value;
   if (!root) return true;
 
-  return root.scrollHeight <= root.clientHeight + 1 && root.scrollWidth <= root.clientWidth + 1;
+  const prompt = root.querySelector<HTMLElement>(".question-prompt");
+  const inputWords = root.querySelector<HTMLElement>(".question-input-words");
+  if (!prompt || !inputWords) return false;
+
+  const rootRect = root.getBoundingClientRect();
+  const rootStyles = window.getComputedStyle(root);
+  const bottomInset =
+    parseFloat(rootStyles.paddingBottom) + parseFloat(rootStyles.borderBottomWidth);
+  const availableBottom = rootRect.bottom - bottomInset;
+  const contentBottom = Math.max(
+    prompt.getBoundingClientRect().bottom,
+    inputWords.getBoundingClientRect().bottom,
+  );
+
+  return contentBottom <= availableBottom + 1 && root.scrollWidth <= root.clientWidth + 1;
 }
 
 function setQuestionFontSize(size: number) {
