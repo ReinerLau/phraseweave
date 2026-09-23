@@ -138,3 +138,21 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #cecacac7;
 }
+
+/* 练习词块：输入区（QuestionInput）与答案区（Answer）共用同一套规则，
+   保证答题前后词块的间隙、行高、换行点、总高完全一致（零偏移）。
+   不分层放置：与原 scoped 样式的层叠行为保持一致（gap 不被 Tailwind gap-* 工具类覆盖）。
+   词块的 border-box 高度 = 行高 1em + 下划线 2px（min-height 含边框）；
+   答案区不带 border-b-2，同样占 1em+2px（2px 留空）—— 唯一差异是没有下划线。 */
+.question-input-words {
+  gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
+  font-size: inherit;
+}
+
+.question-input-word {
+  min-height: calc(1em + 2px);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  /* 行内放不下时单词整体换到下一行，而不是压缩块宽把文字挤成两行 */
+  flex-shrink: 0;
+}

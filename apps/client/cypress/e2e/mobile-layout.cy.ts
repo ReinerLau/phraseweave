@@ -102,6 +102,182 @@ function assertQuestionInputDoesNotScroll() {
   });
 }
 
+// 用与应用相同的方式（同字体的隐藏探针）测量文字真实渲染宽度；可指定任意文本
+function measureTextWidth(block: HTMLElement, text?: string) {
+  const styles = window.getComputedStyle(block);
+  const probe = block.ownerDocument.createElement("span");
+  probe.style.cssText =
+    "position:absolute;left:-9999px;top:0;visibility:hidden;pointer-events:none;white-space:pre;";
+  probe.style.fontStyle = styles.fontStyle;
+  probe.style.fontWeight = styles.fontWeight;
+  probe.style.fontSize = styles.fontSize;
+  probe.style.fontFamily = styles.fontFamily;
+  probe.style.letterSpacing = styles.letterSpacing;
+  probe.textContent = text ?? block.textContent ?? "";
+  block.ownerDocument.body.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width;
+}
+
+function blockDetail(block: HTMLElement) {
+  const styles = window.getComputedStyle(block);
+  const rect = block.getBoundingClientRect();
+  return `text="${block.textContent ?? ""}" rect=${rect.width.toFixed(2)}x${rect.height.toFixed(
+    2,
+  )} styleWidth=${block.style.width} fontSize=${styles.fontSize}`;
+}
+
+// 答题前后布局对比：prompt + 每个词块的 rect，逐项误差 ≤1px 才算零偏移
+interface PracticeBlockRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+interface PracticeState {
+  prompt: PracticeBlockRect;
+  blocks: PracticeBlockRect[];
+}
+
+function readRect(element: HTMLElement): PracticeBlockRect {
+  const rect = element.getBoundingClientRect();
+  return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+}
+
+function rectDrift(a: PracticeBlockRect, b: PracticeBlockRect) {
+  return Math.max(
+    Math.abs(a.top - b.top),
+    Math.abs(a.left - b.left),
+    Math.abs(a.width - b.width),
+    Math.abs(a.height - b.height),
+  );
+}
+
+function captureQuestionState(): Cypress.Chainable<PracticeState> {
+  return cy.get(".question-content").then(($root) => {
+    const prompt = $root[0].querySelector<HTMLElement>('[data-testid="question-prompt"]')!;
+    const blocks = Array.from($root[0].querySelectorAll<HTMLElement>(".question-input-word"));
+    expect(blocks.length, "question view renders word blocks").to.be.greaterThan(0);
+
+    const underline = window.getComputedStyle(blocks[0]).borderBottomWidth;
+    expect(underline, `input block keeps its underline; ${blockDetail(blocks[0])}`).to.equal("2px");
+
+    return { prompt: readRect(prompt), blocks: blocks.map(readRect) };
+  });
+}
+
+// 答案词块必须与输入态逐块对齐，且是"去掉下划线"的同一款样式
+function assertAnswerStateMatches(before: PracticeState) {
+  cy.get(".answer-content").then(($root) => {
+    const root = $root[0];
+    const prompt = root.querySelector<HTMLElement>('[data-testid="answer-prompt"]')!;
+    const blocks = Array.from(
+      root.querySelectorAll<HTMLElement>(".answer-words > span:not([aria-hidden])"),
+    );
+    expect(blocks.length, "answer view renders word blocks").to.be.greaterThan(0);
+    expect(blocks.length, "answer has one block per input block").to.equal(before.blocks.length);
+
+    const promptRect = readRect(prompt);
+    expect(
+      rectDrift(promptRect, before.prompt),
+      `answer prompt matches question prompt; before=${JSON.stringify(before.prompt)} after=${JSON.stringify(promptRect)}`,
+    ).to.be.at.most(1);
+
+    blocks.forEach((block, index) => {
+      const rect = readRect(block);
+      expect(
+        rectDrift(rect, before.blocks[index]),
+        `answer block #${index} aligns with input block; before=${JSON.stringify(
+          before.blocks[index],
+        )} after=${JSON.stringify(rect)} ${blockDetail(block)}`,
+      ).to.be.at.most(1);
+
+      const underline = window.getComputedStyle(block).borderBottomWidth;
+      expect(underline, `answer block has no underline; ${blockDetail(block)}`).to.equal("0px");
+    });
+  });
+}
+
+// 输入块必须保持单行（单词整体换行，绝不在块内折断）
+function assertInputBlocksStaySingleLine() {
+  cy.get(".question-input-word").should(($blocks) => {
+    for (const block of Array.from($blocks)) {
+      const fontSize = parseFloat(window.getComputedStyle(block).fontSize);
+      expect(
+        block.getBoundingClientRect().height,
+        `block stays on one line; ${blockDetail(block)}`,
+      ).to.be.at.most(fontSize * 1.5);
+    }
+  });
+}
+
+// 整词输入完成后，下划线与其实测文字宽度齐平（差异只允许亚像素级安全余量）
+function assertInputBlocksAlignWithText() {
+  assertInputBlocksStaySingleLine();
+  cy.get(".question-input-word").should(($blocks) => {
+    for (const block of Array.from($blocks)) {
+      const text = block.textContent ?? "";
+      if (!text) continue;
+
+      const textWidth = measureTextWidth(block);
+      const difference = block.getBoundingClientRect().width - textWidth;
+      expect(
+        Math.abs(difference),
+        `underline matches text; ${blockDetail(block)} textWidth=${textWidth.toFixed(2)}`,
+      ).to.be.at.most(1.5);
+    }
+  });
+}
+
+// 固定长度提示：输入过程中块宽保持目标单词的实测宽度，不随输入生长
+function assertBlockShowsFixedHint(word: string) {
+  cy.get(".question-input-word")
+    .first()
+    .should(($block) => {
+      const block = $block[0];
+      const hintWidth = measureTextWidth(block, word);
+      const difference = block.getBoundingClientRect().width - hintWidth;
+      expect(
+        Math.abs(difference),
+        `block keeps fixed hint of "${word}"; ${blockDetail(block)} hintWidth=${hintWidth.toFixed(2)}`,
+      ).to.be.at.most(1.5);
+    });
+}
+
+// 记录每个输入块的上下边界，用于断言下划线位置不随输入移动
+function captureBlockPositions(): Cypress.Chainable<Map<string, { top: number; bottom: number }>> {
+  return cy.get(".question-input-word").then(($blocks) => {
+    const positions = new Map<string, { top: number; bottom: number }>();
+    Array.from($blocks).forEach((block, index) => {
+      const rect = block.getBoundingClientRect();
+      positions.set(String(index), { top: rect.top, bottom: rect.bottom });
+    });
+    return positions;
+  });
+}
+
+function assertBlockPositionsUnchanged(positions: Map<string, { top: number; bottom: number }>) {
+  cy.get(".question-input-word").should(($blocks) => {
+    Array.from($blocks).forEach((block, index) => {
+      const before = positions.get(String(index));
+      expect(before, `block #${index} existed when positions were captured`).to.exist;
+      if (!before) return;
+
+      const rect = block.getBoundingClientRect();
+      expect(
+        Math.abs(rect.top - before.top),
+        `underline top stays put; before=${before.top} after=${rect.top} ${blockDetail(block)}`,
+      ).to.be.at.most(0.5);
+      expect(
+        Math.abs(rect.bottom - before.bottom),
+        `underline bottom stays put; before=${before.bottom} after=${rect.bottom} ${blockDetail(block)}`,
+      ).to.be.at.most(0.5);
+    });
+  });
+}
+
 function assertExerciseNavigationShellIsFullWidth() {
   cy.get('[data-testid="exercise-navigation-shell"]').should(($shell) => {
     const element = $shell[0];
@@ -177,6 +353,19 @@ describe("mobile practice layout", () => {
     });
   });
 
+  // 空块必须与有文字的块同高：否则敲入首字符时块被撑高 2px，
+  // flex 行内 stretch 对齐让整行下划线一起下移
+  it("keeps the underlines steady when typing starts", () => {
+    cy.wait(100); // 等题目字号自适应先落定
+    captureBlockPositions().then((positions) => {
+      cy.get('input[type="text"]').type("t", { force: true }).should("have.value", "t");
+      assertBlockPositionsUnchanged(positions);
+
+      cy.get('input[type="text"]').type("his", { force: true }).should("have.value", "this");
+      assertBlockPositionsUnchanged(positions);
+    });
+  });
+
   it("scales the input area with the available viewport", () => {
     let inputBeforeResize = { fontSize: 0, wordHeight: 0 };
 
@@ -189,7 +378,14 @@ describe("mobile practice layout", () => {
         expect($word[0].getBoundingClientRect().height).to.be.greaterThan(0);
       });
 
-    cy.get('input[type="text"]').type("thisthis", { force: true }).should("have.value", "this");
+    // 输入过程中块宽保持目标单词的固定长度提示，不随输入生长
+    cy.get('input[type="text"]').type("thi", { force: true }).should("have.value", "thi");
+    assertBlockShowsFixedHint("this");
+    assertInputBlocksStaySingleLine();
+
+    // 继续输入触发容量截断，最终停在 "this"
+    cy.get('input[type="text"]').type("shisthis", { force: true }).should("have.value", "this");
+    assertInputBlocksAlignWithText();
 
     cy.get(".question-input-words").should(($words) => {
       const styles = window.getComputedStyle($words[0]);
@@ -242,6 +438,7 @@ describe("mobile practice layout", () => {
       );
       expect(rowTops.size).to.be.greaterThan(1);
     });
+    assertInputBlocksAlignWithText();
     assertQuestionInputDoesNotScroll();
   });
 
@@ -343,6 +540,7 @@ describe("mobile practice layout", () => {
     let questionFontSize = "";
     cy.get('input[type="text"]').type(englishSentence, { force: true });
     cy.wait(100);
+    assertInputBlocksAlignWithText();
 
     cy.get(".question-content").then(($question) => {
       questionFontSize = window
@@ -353,6 +551,11 @@ describe("mobile practice layout", () => {
         .getBoundingClientRect().top;
       const inputTop = $question.find(".question-input-words")[0].getBoundingClientRect().top;
       expect(promptTop).to.be.at.most(inputTop);
+    });
+
+    let questionState: PracticeState | undefined;
+    captureQuestionState().then((state) => {
+      questionState = state;
     });
 
     cy.get('input[type="text"]').type("{enter}", { force: true });
@@ -369,14 +572,36 @@ describe("mobile practice layout", () => {
       expect(answerFontSize).to.equal(questionFontSize);
       expect(promptTop).to.be.at.most(wordsTop);
     });
+    cy.then(() => {
+      expect(questionState, "question state captured before submit").to.exist;
+      assertAnswerStateMatches(questionState!);
+    });
     cy.contains("再来一次").should("be.visible");
     cy.contains("下一题").should("be.visible");
     cy.get('[data-testid="practice-tips"] button')
       .should("have.length", 2)
-      .then(($buttons) => {
-        expect($buttons[0].getBoundingClientRect().height).to.be.at.least(48);
-        expect($buttons[1].getBoundingClientRect().height).to.be.at.least(48);
-        expect($buttons[0].getBoundingClientRect().width).to.be.closeTo(
+      .should(($buttons) => {
+        const detail = Array.from($buttons)
+          .map((button) => {
+            const b = button as HTMLElement;
+            const s = window.getComputedStyle(b);
+            const transforms: string[] = [];
+            let el: HTMLElement | null = b;
+            while (el && transforms.length < 8) {
+              const t = window.getComputedStyle(el).transform;
+              if (t && t !== "none") {
+                transforms.push(`${el.tagName}.${String(el.className).slice(0, 40)}=${t}`);
+              }
+              el = el.parentElement;
+            }
+            const rect = b.getBoundingClientRect();
+            return `rect=${rect.width.toFixed(3)}x${rect.height.toFixed(3)} styleH=${s.height} minH=${s.minHeight} transforms=[${transforms.join(" | ")}]`;
+          })
+          .join(" ~~ ");
+
+        expect($buttons[0].getBoundingClientRect().height, detail).to.be.at.least(48);
+        expect($buttons[1].getBoundingClientRect().height, detail).to.be.at.least(48);
+        expect($buttons[0].getBoundingClientRect().width, detail).to.be.closeTo(
           $buttons[1].getBoundingClientRect().width,
           1.5,
         );

@@ -11,7 +11,7 @@
         <div
           class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
           :class="getWordsClassNames(i)"
-          :style="{ width: `${inputWidth(w)}ch` }"
+          :style="{ width: `${inputWidth(i)}em` }"
         >
           {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
         </div>
@@ -30,9 +30,10 @@
         @compositionend="handleCompositionEnd"
         autoFocus
       />
+      <!-- 隐藏探针：用真实渲染字体测量文本宽度和当前字号 -->
       <span
-        ref="questionInputChProbeEl"
-        class="pointer-events-none absolute h-0 w-[1ch] opacity-0"
+        ref="questionInputProbeEl"
+        class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
         aria-hidden="true"
       ></span>
     </div>
@@ -50,9 +51,14 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
-import { useShowWordsWidth } from "~/composables/user/words";
 import { useExerciseStore } from "~/store/exercise";
-import { getWordWidth, useQuestionInput } from "./questionInputHelper";
+import {
+  getInputWordWidthEm,
+  getWordBlockWidthEm,
+  getWordCapacityEm,
+  useQuestionInput,
+  useWordWidths,
+} from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
 
 const courseStore = useExerciseStore();
@@ -61,14 +67,21 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 
 const { showAnswer } = useGameMode();
 const { showSummary } = useSummary();
-const { isShowWordsWidth } = useShowWordsWidth();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { playRightSound, playErrorSound } = usePlayTipSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
-const questionInputChProbeEl = ref<HTMLElement>();
+// 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
+const {
+  probeEl: questionInputProbeEl,
+  measureEm,
+  fontSizePx,
+} = useWordWidths(questionInputWordsEl);
+
+const ERROR_FEEDBACK_DURATION_MS = 300;
+let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
 
 const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
   useInput({
@@ -94,6 +107,7 @@ onMounted(() => {
 });
 
 focusInputWhenWIndowFocus();
+onUnmounted(cancelErrorReset);
 
 watch(
   () => inputValue.value,
@@ -169,44 +183,50 @@ function inputChangedCallback(e: KeyboardEvent) {
   }
 }
 
-// 输入宽度
-function inputWidth(word: string) {
-  if (!isShowWordsWidth()) {
-    // 不显示对应单词宽度，默认 4 字符宽度
-    return 4;
-  }
+// 输入块宽度 = 目标单词实测宽度的固定长度提示，不随输入生长；
+// 仅当实际显示文字更宽（如大小写差异）时才撑开，避免文字被挤出块外换行。单位 em。
+function inputWidth(index: number) {
+  const targetWord = courseStore.words[index] ?? "";
+  const typedWord = isAnswerTip() ? "" : userInputWords[index]?.userInput ?? "";
 
-  return getWordWidth(word);
+  return getWordBlockWidthEm(measureEm(targetWord), measureEm(typedWord));
 }
 
-function getInputWordWidth(word: string) {
-  return Math.max(0, getWordWidth(word) - 1);
+// 已输入文本的实测宽度，单位 em
+function getInputWordWidth(text: string) {
+  return getInputWordWidthEm(text, measureEm);
 }
 
+// 可输入容量：不超过目标单词的实测宽度，保证敲完目标单词一定放得下
 function getInputWordCapacity(word: string) {
-  const blockCapacity = isShowWordsWidth() ? getInputWordWidth(word) : 4;
+  const wordWidthEm = getInputWordWidth(word);
   const wordsEl = questionInputWordsEl.value;
-  const chProbeEl = questionInputChProbeEl.value;
+  if (!wordsEl) return wordWidthEm;
 
-  if (!wordsEl || !chProbeEl) return blockCapacity;
+  const fontPx = fontSizePx();
+  if (fontPx <= 0) return wordWidthEm;
 
-  const chWidth = chProbeEl.getBoundingClientRect().width;
-  if (chWidth <= 0) return blockCapacity;
+  return getWordCapacityEm(wordWidthEm, wordsEl.clientWidth / fontPx);
+}
 
-  const containerWidthInCh = wordsEl.clientWidth / chWidth;
-  const blockWidth = inputWidth(word);
-  const availableBlockWidth = Math.min(blockWidth, containerWidthInCh);
+function cancelErrorReset() {
+  if (errorResetTimer === undefined) return;
 
-  return isShowWordsWidth()
-    ? Math.max(0, Math.min(blockCapacity, availableBlockWidth - 1))
-    : Math.max(0, Math.min(blockCapacity, availableBlockWidth));
+  clearTimeout(errorResetTimer);
+  errorResetTimer = undefined;
 }
 
 function handleAnswerError() {
   playErrorSound();
+  cancelErrorReset();
+  errorResetTimer = setTimeout(() => {
+    errorResetTimer = undefined;
+    clearInput();
+  }, ERROR_FEEDBACK_DURATION_MS);
 }
 
 function handleAnswerRight() {
+  cancelErrorReset();
   courseTimer.timeEnd(String(courseStore.statementIndex)); // 停止当前题目的计时
   playRightSound();
 
@@ -281,21 +301,12 @@ function preventCursorMove(event: MouseEvent) {
 </script>
 
 <style scoped>
+/* 词块样式（.question-input-words / .question-input-word）已迁移到
+   assets/css/globals.css，与答案区共用同一套规则，保证答题前后零偏移。 */
 .question-input-shell {
   width: 100%;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-}
-
-.question-input-words {
-  gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
-  font-size: inherit;
-}
-
-.question-input-word {
-  min-height: 1em;
-  overflow-wrap: anywhere;
-  white-space: normal;
 }
 </style>
