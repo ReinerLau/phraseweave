@@ -55,8 +55,8 @@ import { useExerciseStore } from "~/store/exercise";
 import {
   createWordWidthMeasurer,
   getInputWordWidthEm,
+  getWordBlockWidthEm,
   getWordCapacityEm,
-  SUBPIXEL_SAFETY_EM,
   useQuestionInput,
 } from "./questionInputHelper";
 import { usePlayTipSound, useTypingSound } from "./useTypingSound";
@@ -213,13 +213,13 @@ function inputChangedCallback(e: KeyboardEvent) {
   }
 }
 
-// 输入块宽度 = 实际显示内容的实测宽度，保证下划线与文字齐平、文字不会被挤出块外；
-// 未输入时回退到目标单词宽度，保留答案长度提示。单位 em（随字号缩放，避开 ch 单位的度量偏差）。
+// 输入块宽度 = 目标单词实测宽度的固定长度提示，不随输入生长；
+// 仅当实际显示文字更宽（如大小写差异）时才撑开，避免文字被挤出块外换行。单位 em。
 function inputWidth(index: number) {
   const targetWord = courseStore.words[index] ?? "";
   const typedWord = isAnswerTip() ? "" : userInputWords[index]?.userInput ?? "";
 
-  return measureEm(typedWord || targetWord) + SUBPIXEL_SAFETY_EM;
+  return getWordBlockWidthEm(measureEm(targetWord), measureEm(typedWord));
 }
 
 // 已输入文本的实测宽度，单位 em

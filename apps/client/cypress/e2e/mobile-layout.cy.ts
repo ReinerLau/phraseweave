@@ -102,8 +102,8 @@ function assertQuestionInputDoesNotScroll() {
   });
 }
 
-// 用与应用相同的方式（同字体的隐藏探针）测量文字真实渲染宽度
-function measureTextWidth(block: HTMLElement) {
+// 用与应用相同的方式（同字体的隐藏探针）测量文字真实渲染宽度；可指定任意文本
+function measureTextWidth(block: HTMLElement, text?: string) {
   const styles = window.getComputedStyle(block);
   const probe = block.ownerDocument.createElement("span");
   probe.style.cssText =
@@ -113,34 +113,65 @@ function measureTextWidth(block: HTMLElement) {
   probe.style.fontSize = styles.fontSize;
   probe.style.fontFamily = styles.fontFamily;
   probe.style.letterSpacing = styles.letterSpacing;
-  probe.textContent = block.textContent ?? "";
+  probe.textContent = text ?? block.textContent ?? "";
   block.ownerDocument.body.appendChild(probe);
   const width = probe.getBoundingClientRect().width;
   probe.remove();
   return width;
 }
 
-// 输入块必须保持单行，且下划线宽度与其显示的文字齐平（差异只允许亚像素级安全余量）
-function assertInputBlocksAlignWithText() {
+function blockDetail(block: HTMLElement) {
+  const styles = window.getComputedStyle(block);
+  const rect = block.getBoundingClientRect();
+  return `text="${block.textContent ?? ""}" rect=${rect.width.toFixed(2)}x${rect.height.toFixed(
+    2,
+  )} styleWidth=${block.style.width} fontSize=${styles.fontSize}`;
+}
+
+// 输入块必须保持单行（单词整体换行，绝不在块内折断）
+function assertInputBlocksStaySingleLine() {
   cy.get(".question-input-word").should(($blocks) => {
     for (const block of Array.from($blocks)) {
-      const styles = window.getComputedStyle(block);
-      const fontSize = parseFloat(styles.fontSize);
-      const rect = block.getBoundingClientRect();
-      const text = block.textContent ?? "";
-      const textWidth = text ? measureTextWidth(block) : 0;
-      const detail = `text="${text}" rect=${rect.width.toFixed(2)}x${rect.height.toFixed(
-        2,
-      )} styleWidth=${block.style.width} computedWidth=${styles.width} shrink=${styles.flexShrink} fontSize=${fontSize} textWidth=${textWidth.toFixed(2)}`;
-
-      expect(rect.height, `block stays on one line; ${detail}`).to.be.at.most(fontSize * 1.5);
-
-      if (!text) continue;
-
-      const difference = rect.width - textWidth;
-      expect(Math.abs(difference), `underline matches text; ${detail}`).to.be.at.most(1.5);
+      const fontSize = parseFloat(window.getComputedStyle(block).fontSize);
+      expect(
+        block.getBoundingClientRect().height,
+        `block stays on one line; ${blockDetail(block)}`,
+      ).to.be.at.most(fontSize * 1.5);
     }
   });
+}
+
+// 整词输入完成后，下划线与其实测文字宽度齐平（差异只允许亚像素级安全余量）
+function assertInputBlocksAlignWithText() {
+  assertInputBlocksStaySingleLine();
+  cy.get(".question-input-word").should(($blocks) => {
+    for (const block of Array.from($blocks)) {
+      const text = block.textContent ?? "";
+      if (!text) continue;
+
+      const textWidth = measureTextWidth(block);
+      const difference = block.getBoundingClientRect().width - textWidth;
+      expect(
+        Math.abs(difference),
+        `underline matches text; ${blockDetail(block)} textWidth=${textWidth.toFixed(2)}`,
+      ).to.be.at.most(1.5);
+    }
+  });
+}
+
+// 固定长度提示：输入过程中块宽保持目标单词的实测宽度，不随输入生长
+function assertBlockShowsFixedHint(word: string) {
+  cy.get(".question-input-word")
+    .first()
+    .should(($block) => {
+      const block = $block[0];
+      const hintWidth = measureTextWidth(block, word);
+      const difference = block.getBoundingClientRect().width - hintWidth;
+      expect(
+        Math.abs(difference),
+        `block keeps fixed hint of "${word}"; ${blockDetail(block)} hintWidth=${hintWidth.toFixed(2)}`,
+      ).to.be.at.most(1.5);
+    });
 }
 
 function assertExerciseNavigationShellIsFullWidth() {
@@ -230,7 +261,13 @@ describe("mobile practice layout", () => {
         expect($word[0].getBoundingClientRect().height).to.be.greaterThan(0);
       });
 
-    cy.get('input[type="text"]').type("thisthis", { force: true }).should("have.value", "this");
+    // 输入过程中块宽保持目标单词的固定长度提示，不随输入生长
+    cy.get('input[type="text"]').type("thi", { force: true }).should("have.value", "thi");
+    assertBlockShowsFixedHint("this");
+    assertInputBlocksStaySingleLine();
+
+    // 继续输入触发容量截断，最终停在 "this"
+    cy.get('input[type="text"]').type("shisthis", { force: true }).should("have.value", "this");
     assertInputBlocksAlignWithText();
 
     cy.get(".question-input-words").should(($words) => {

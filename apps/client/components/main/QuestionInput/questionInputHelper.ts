@@ -95,6 +95,17 @@ export function getInputWordWidthEm(text: string, measureEm: (text: string) => n
   return measureEm(text.toLocaleLowerCase());
 }
 
+/**
+ * 输入块宽度，单位 em。
+ *
+ * 取目标单词与实际显示文字的较大者再加安全余量：
+ * 正常输入时恒等于目标单词宽度 —— 下划线是固定长度提示，不随输入生长；
+ * 仅当显示文字更宽（如目标是小写、实际敲了大写）时才撑开，避免文字被挤出块外换行。
+ */
+export function getWordBlockWidthEm(targetWidthEm: number, displayedWidthEm: number) {
+  return Math.max(targetWidthEm, displayedWidthEm) + SUBPIXEL_SAFETY_EM;
+}
+
 /** 可输入容量：不超过目标单词实测宽度；容器更窄时不超过容器宽度，单位 em */
 export function getWordCapacityEm(wordWidthEm: number, containerWidthEm: number) {
   return Math.max(0, Math.min(wordWidthEm, containerWidthEm));
