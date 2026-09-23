@@ -1,5 +1,5 @@
 export const QUESTION_FONT_MAX_SIZE_PX = 36;
-export const QUESTION_FONT_MIN_SIZE_PX = 12;
+export const QUESTION_FONT_MIN_SIZE_PX = 8;
 
 /**
  * Finds the largest font size that satisfies the current layout constraints.
