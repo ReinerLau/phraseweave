@@ -34,6 +34,7 @@ from split_lexical_chunks import (
     find_sentence_atoms,
     load_rules,
     parse_annotations,
+    parse_model_plan,
     phraseweave_path_for,
     render_contextual_report,
     render_phraseweave_backup,
@@ -876,6 +877,168 @@ class SplitLexicalChunksTests(TestCase):
         with self.assertRaisesRegex(ConfigurationError, "unknown keys"):
             parse_annotations(json.dumps(payload), self.sample_analysis())
 
+    def test_parses_model_plan_with_context_bound_construction(self):
+        sentence = "Sleeping with a light on could be bad for you."
+        analysis = {
+            "schema_version": 6,
+            "sentences": [
+                {
+                    "sentence": sentence,
+                    "atoms": [
+                        {"start": 0, "end": 13, "core": True},
+                        {"start": 14, "end": 15, "core": False},
+                        {"start": 16, "end": 21, "core": True},
+                        {"start": 22, "end": 24, "core": False},
+                        {"start": 25, "end": 30, "core": False},
+                        {"start": 31, "end": 33, "core": False},
+                        {"start": 34, "end": 37, "core": True},
+                        {"start": 38, "end": 41, "core": False},
+                        {"start": 42, "end": 45, "core": False},
+                    ],
+                }
+            ],
+        }
+        for atom in analysis["sentences"][0]["atoms"]:
+            atom.update(
+                {
+                    "source": "token",
+                    "lexicon_lemmas": [],
+                    "lexicon_pos": [],
+                    "match_kind": "none",
+                    "head_pos": "NOUN" if atom["core"] else "ADP",
+                    "head_dep": "ROOT",
+                    "head_atom": None,
+                }
+            )
+        plan = {
+            "schema_version": 1,
+            "sentences": [
+                {
+                    "sentence": sentence,
+                    "units": [
+                        {
+                            "start": 0,
+                            "end": 13,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                        {
+                            "start": 16,
+                            "end": 21,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                        {
+                            "start": 34,
+                            "end": 37,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                        {
+                            "start": 0,
+                            "end": 24,
+                            "kind": "construction",
+                            "construction_family": "state_frame",
+                        },
+                    ],
+                    "unit_prompts": [
+                        "开着灯睡觉",
+                        "光线",
+                        "不好的",
+                        "开着灯睡觉",
+                    ],
+                    "sentence_translation": "开着灯睡觉可能对你不好。",
+                }
+            ],
+        }
+
+        normalized_analysis, annotations = parse_model_plan(
+            json.dumps(plan), analysis
+        )
+
+        self.assertEqual(
+            normalized_analysis["sentences"][0]["learning_units"][-1],
+            {
+                "text": "Sleeping with a light on",
+                "start": 0,
+                "end": 24,
+                "kind": "construction",
+                "core_count": 2,
+                "construction_family": "state_frame",
+            },
+        )
+        report = render_contextual_report(normalized_analysis, annotations)
+        self.assertIn(
+            "| 4 | 开着灯睡觉 | Sleeping with a light on | 组合·句式构式 |",
+            report,
+        )
+
+    def test_rejects_model_plan_with_invalid_source_range(self):
+        analysis = self.sample_analysis()
+        plan = {
+            "schema_version": 1,
+            "sentences": [
+                {
+                    "sentence": "Dogs bark.",
+                    "units": [
+                        {
+                            "start": 0,
+                            "end": 3,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                        {
+                            "start": 5,
+                            "end": 9,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                    ],
+                    "unit_prompts": ["狗", "吠叫"],
+                    "sentence_translation": "狗会吠叫。",
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(ConfigurationError, "token boundaries"):
+            parse_model_plan(json.dumps(plan), analysis)
+
+    def test_rejects_model_plan_with_complete_sentence_as_intermediate_unit(self):
+        analysis = self.sample_analysis()
+        plan = {
+            "schema_version": 1,
+            "sentences": [
+                {
+                    "sentence": "Dogs bark.",
+                    "units": [
+                        {
+                            "start": 0,
+                            "end": 4,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                        {
+                            "start": 5,
+                            "end": 9,
+                            "kind": "core",
+                            "construction_family": None,
+                        },
+                        {
+                            "start": 0,
+                            "end": 10,
+                            "kind": "construction",
+                            "construction_family": "clause_frame",
+                        },
+                    ],
+                    "unit_prompts": ["狗", "吠叫", "狗会吠叫"],
+                    "sentence_translation": "狗会吠叫。",
+                }
+            ],
+        }
+
+        with self.assertRaisesRegex(ConfigurationError, "complete sentence"):
+            parse_model_plan(json.dumps(plan), analysis)
+
     def test_renders_script_units_and_appends_complete_sentence(self):
         analysis = self.analysis(
             "Birdsong is good for our mental health.",
@@ -1148,6 +1311,60 @@ class SplitLexicalChunksTests(TestCase):
             })
             self.assertEqual(stderr.getvalue(), "")
 
+    def test_renders_model_plan(self):
+        with TemporaryDirectory() as directory:
+            analysis_path = Path(directory) / "analysis.json"
+            output_path = Path(directory) / "report.learning-units.md"
+            analysis_path.write_text(
+                json.dumps(self.sample_analysis()), encoding="utf-8"
+            )
+            plan = {
+                "schema_version": 1,
+                "sentences": [
+                    {
+                        "sentence": "Dogs bark.",
+                        "units": [
+                            {
+                                "start": 0,
+                                "end": 4,
+                                "kind": "core",
+                                "construction_family": None,
+                            },
+                            {
+                                "start": 5,
+                                "end": 9,
+                                "kind": "core",
+                                "construction_family": None,
+                            },
+                        ],
+                        "unit_prompts": ["狗", "吠叫"],
+                        "sentence_translation": "狗会吠叫。",
+                    }
+                ],
+            }
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "split_lexical_chunks.py",
+                        "--render-model-plan",
+                        str(analysis_path),
+                        "--output",
+                        str(output_path),
+                    ],
+                ),
+                patch.object(sys, "stdin", StringIO(json.dumps(plan))),
+            ):
+                status = cli_main()
+
+            self.assertEqual(status, 0)
+            self.assertIn("| 1 | 狗 | Dogs | 核心·词典匹配 |", output_path.read_text())
+            self.assertIn(
+                "| 3 | 狗会吠叫。 | Dogs bark. | 完成·完整原句 |",
+                output_path.read_text(),
+            )
+
     def test_renders_both_formats_to_separate_paths(self):
         with TemporaryDirectory() as directory:
             analysis_path = Path(directory) / "analysis.json"
@@ -1259,7 +1476,8 @@ class SplitLexicalChunksTests(TestCase):
 
             self.assertEqual(status, 1)
             self.assertIn(
-                "specify --analysis-output or --render-analysis", stderr.getvalue()
+                "specify --analysis-output, --render-analysis, or --render-model-plan",
+                stderr.getvalue(),
             )
             self.assertFalse(output_path.exists())
 
@@ -1287,7 +1505,8 @@ class SplitLexicalChunksTests(TestCase):
 
         self.assertEqual(status, 1)
         self.assertIn(
-            "specify --analysis-output or --render-analysis", stderr.getvalue()
+            "specify --analysis-output, --render-analysis, or --render-model-plan",
+            stderr.getvalue(),
         )
 
     def test_render_validation_failure_does_not_create_report(self):

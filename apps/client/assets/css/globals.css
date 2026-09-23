@@ -145,7 +145,7 @@ body {
    词块的 border-box 高度 = 行高 1em + 下划线 2px（min-height 含边框）；
    答案区不带 border-b-2，同样占 1em+2px（2px 留空）—— 唯一差异是没有下划线。 */
 .question-input-words {
-  gap: clamp(0.25rem, min(2vw, 1dvh), 0.5rem);
+  gap: clamp(0.5rem, max(0.5rem, min(2vw, 1dvh)), 0.75rem);
   font-size: inherit;
 }
 

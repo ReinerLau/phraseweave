@@ -9,7 +9,7 @@
 # ]
 # ///
 
-"""Build deterministic progressive units from lexical content cores."""
+"""Build and render progressive units from lexical content cores."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.js
 DEFAULT_RULES = Path(__file__).resolve().parents[1] / "rules" / "progression-rules.json"
 ANALYSIS_SCHEMA_VERSION = 6
 ANNOTATION_SCHEMA_VERSION = 6
+MODEL_PLAN_SCHEMA_VERSION = 1
 PHRASEWEAVE_SCHEMA_VERSION = 1
 RULE_SCHEMA_VERSION = 4
 SENTENCE_PATTERN = re.compile(
@@ -117,8 +118,8 @@ class TrieNode:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Analyze deterministic progressive learning units from English stdin "
-            "or render their validated Chinese prompts."
+            "Analyze lexical cores from English stdin or render validated "
+            "deterministic/model learning-unit plans."
         )
     )
     mode = parser.add_mutually_exclusive_group()
@@ -131,6 +132,14 @@ def parse_args() -> argparse.Namespace:
         "--render-analysis",
         type=Path,
         help="load analysis JSON and read aligned Chinese prompts JSON from stdin",
+    )
+    mode.add_argument(
+        "--render-model-plan",
+        type=Path,
+        help=(
+            "load deterministic analysis JSON and read a model composition plan "
+            "with aligned Chinese prompts from stdin"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -1146,6 +1155,232 @@ def load_analysis(path: Path) -> dict[str, Any]:
     return validate_analysis(payload)
 
 
+def _unit_core_indexes(
+    unit: Mapping[str, Any], atoms: Sequence[Mapping[str, Any]]
+) -> list[int]:
+    core_atoms = [atom for atom in atoms if atom["core"]]
+    return [
+        index
+        for index, atom in enumerate(core_atoms)
+        if atom["start"] >= unit["start"]
+        and atom["end"] <= unit["end"]
+    ]
+
+
+def _core_atom_for_index(
+    core_index: int, atoms: Sequence[Mapping[str, Any]]
+) -> Mapping[str, Any]:
+    core_atoms = [atom for atom in atoms if atom["core"]]
+    return core_atoms[core_index]
+
+
+def _validate_model_unit(
+    sentence: str,
+    raw_unit: Any,
+    atoms: Sequence[Mapping[str, Any]],
+    token_boundaries: set[int],
+    location: str,
+) -> dict[str, Any]:
+    if not isinstance(raw_unit, dict):
+        raise ConfigurationError(f"{location} must be an object")
+    _require_exact_keys(
+        raw_unit,
+        {"start", "end", "kind", "construction_family"},
+        location,
+    )
+    start = _require_int(raw_unit["start"], f"{location}.start")
+    end = _require_int(raw_unit["end"], f"{location}.end")
+    if start not in token_boundaries or end not in token_boundaries:
+        raise ConfigurationError(
+            f"{location} must start and end on original token boundaries"
+        )
+    _, _, text = _validate_range_text(
+        sentence,
+        {"start": start, "end": end, "text": sentence[start:end]},
+        location,
+    )
+    kind = raw_unit["kind"]
+    if kind not in {"core", "composition", "construction"}:
+        raise ConfigurationError(f"{location}.kind is unsupported")
+    construction_family = raw_unit["construction_family"]
+    if kind == "construction":
+        if not isinstance(construction_family, str) or not construction_family.strip():
+            raise ConfigurationError(
+                f"{location}.construction_family must be non-empty for constructions"
+            )
+        construction_family = construction_family.strip()
+    elif construction_family is not None:
+        raise ConfigurationError(
+            f"{location}.construction_family must be null for {kind} units"
+        )
+
+    unit = {
+        "text": text,
+        "start": start,
+        "end": end,
+        "kind": kind,
+        "core_count": 0,
+    }
+    core_indexes = _unit_core_indexes(unit, atoms)
+    if not core_indexes:
+        raise ConfigurationError(f"{location} must contain at least one core atom")
+    if kind == "core":
+        if len(core_indexes) != 1:
+            raise ConfigurationError(f"{location} core units must contain one core atom")
+        matching_core = _core_atom_for_index(core_indexes[0], atoms)
+        if (start, end) != (matching_core["start"], matching_core["end"]):
+            raise ConfigurationError(
+                f"{location} core units must exactly match their core atom"
+            )
+    elif any(
+        (start, end) == (atom["start"], atom["end"])
+        for atom in atoms
+        if atom["core"]
+    ):
+        raise ConfigurationError(
+            f"{location} composition units must not duplicate a core atom"
+        )
+    unit["core_count"] = len(core_indexes)
+    if kind == "construction":
+        unit["construction_family"] = construction_family
+    return unit
+
+
+def parse_model_plan(
+    text: str, analysis: Mapping[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ConfigurationError(f"model plan is not valid JSON: {error}") from error
+    if not isinstance(payload, dict):
+        raise ConfigurationError("model plan must be a JSON object")
+    _require_exact_keys(payload, {"schema_version", "sentences"}, "model plan")
+    if payload["schema_version"] != MODEL_PLAN_SCHEMA_VERSION:
+        raise ConfigurationError(
+            f"model plan must use schema_version {MODEL_PLAN_SCHEMA_VERSION}"
+        )
+    raw_sentences = payload["sentences"]
+    analysis_sentences = analysis["sentences"]
+    if not isinstance(raw_sentences, list):
+        raise ConfigurationError("model plan.sentences must be a list")
+    if len(raw_sentences) != len(analysis_sentences):
+        raise ConfigurationError(
+            "model plan.sentences must contain exactly "
+            f"{len(analysis_sentences)} items; found {len(raw_sentences)}"
+        )
+
+    normalized_analysis_sentences: list[dict[str, Any]] = []
+    normalized_annotation_sentences: list[dict[str, Any]] = []
+    for index, (raw_sentence, analyzed_sentence) in enumerate(
+        zip(raw_sentences, analysis_sentences, strict=True)
+    ):
+        location = f"model plan.sentences[{index}]"
+        if not isinstance(raw_sentence, dict):
+            raise ConfigurationError(f"{location} must be an object")
+        _require_exact_keys(
+            raw_sentence,
+            {"sentence", "units", "unit_prompts", "sentence_translation"},
+            location,
+        )
+        sentence = raw_sentence["sentence"]
+        if sentence != analyzed_sentence["sentence"]:
+            raise ConfigurationError(f"{location}.sentence does not match analysis")
+        raw_units = raw_sentence["units"]
+        prompts = raw_sentence["unit_prompts"]
+        translation = raw_sentence["sentence_translation"]
+        if not isinstance(raw_units, list) or not raw_units:
+            raise ConfigurationError(f"{location}.units must be a non-empty list")
+        if not isinstance(prompts, list) or len(prompts) != len(raw_units):
+            raise ConfigurationError(
+                f"{location}.unit_prompts must align with units"
+            )
+        if not all(isinstance(prompt, str) and prompt.strip() for prompt in prompts):
+            raise ConfigurationError(
+                f"{location}.unit_prompts must contain only non-empty strings"
+            )
+        if not isinstance(translation, str) or not translation.strip():
+            raise ConfigurationError(
+                f"{location}.sentence_translation must be a non-empty string"
+            )
+
+        atoms = analyzed_sentence["atoms"]
+        boundaries = {0, len(sentence)}
+        boundaries.update(token.start for token in tokenize(sentence))
+        boundaries.update(token.end for token in tokenize(sentence))
+        units = [
+            _validate_model_unit(
+                sentence,
+                raw_unit,
+                atoms,
+                boundaries,
+                f"{location}.units[{unit_index}]",
+            )
+            for unit_index, raw_unit in enumerate(raw_units)
+        ]
+        core_atoms = [atom for atom in atoms if atom["core"]]
+        if len(units) < len(core_atoms):
+            raise ConfigurationError(
+                f"{location}.units must preserve every core atom independently"
+            )
+        for unit_index, core_atom in enumerate(core_atoms):
+            unit = units[unit_index]
+            if unit["kind"] != "core" or (
+                unit["start"], unit["end"]
+            ) != (core_atom["start"], core_atom["end"]):
+                raise ConfigurationError(
+                    f"{location}.units must begin with cores in source order"
+                )
+        seen_ranges: set[tuple[int, int]] = set()
+        for unit_index, unit in enumerate(units):
+            identity = (unit["start"], unit["end"])
+            if identity in seen_ranges:
+                raise ConfigurationError(
+                    f"{location}.units[{unit_index}] duplicates an earlier unit"
+                )
+            seen_ranges.add(identity)
+            core_indexes = _unit_core_indexes(unit, atoms)
+            if unit_index >= len(core_atoms) and core_indexes != list(
+                range(core_indexes[0], core_indexes[-1] + 1)
+            ):
+                raise ConfigurationError(
+                    f"{location}.units must cover a contiguous core range"
+                )
+        if any(
+            unit["start"] == 0
+            and unit["end"] == len(sentence)
+            for unit in units
+        ):
+            raise ConfigurationError(
+                f"{location}.units must not contain the complete sentence"
+            )
+
+        normalized_analysis_sentences.append(
+            {
+                "sentence": sentence,
+                "atoms": atoms,
+                "learning_units": units,
+            }
+        )
+        normalized_annotation_sentences.append(
+            {
+                "unit_prompts": [prompt.strip() for prompt in prompts],
+                "sentence_translation": translation.strip(),
+            }
+        )
+
+    return (
+        {
+            "schema_version": analysis["schema_version"],
+            "sentences": normalized_analysis_sentences,
+        },
+        {
+            "schema_version": ANNOTATION_SCHEMA_VERSION,
+            "sentences": normalized_annotation_sentences,
+        },
+    )
+
+
 def parse_annotations(text: str, analysis: Mapping[str, Any]) -> dict[str, Any]:
     try:
         payload = json.loads(text)
@@ -1243,6 +1478,8 @@ def render_contextual_report(
             if (unit["start"], unit["end"]) in nominal_ranges:
                 return "组合·名词短语"
             return "组合·渐进组合"
+        if unit["kind"] == "construction":
+            return "组合·句式构式"
 
         unit_atoms = atoms_for_unit(unit, atoms)
         if len(unit_atoms) != 1:
@@ -1369,18 +1606,27 @@ def write_output(requested: Path, content: str) -> Path:
 def main() -> int:
     args = parse_args()
 
-    if args.render_analysis is None and args.analysis_output is None:
+    if (
+        args.render_analysis is None
+        and args.render_model_plan is None
+        and args.analysis_output is None
+    ):
         print(
-            "lexical-chunks: specify --analysis-output or --render-analysis",
+            "lexical-chunks: specify --analysis-output, --render-analysis, "
+            "or --render-model-plan",
             file=sys.stderr,
         )
         return 1
 
-    if args.render_analysis is not None:
+    if args.render_analysis is not None or args.render_model_plan is not None:
         try:
             rules = load_rules()
-            analysis = load_analysis(args.render_analysis)
-            annotations = parse_annotations(sys.stdin.read(), analysis)
+            analysis_path = args.render_analysis or args.render_model_plan
+            analysis = load_analysis(analysis_path)
+            if args.render_model_plan is not None:
+                analysis, annotations = parse_model_plan(sys.stdin.read(), analysis)
+            else:
+                annotations = parse_annotations(sys.stdin.read(), analysis)
             markdown_path, phraseweave_path = output_paths(args)
             rendered_outputs: list[tuple[Path, str]] = []
             if markdown_path is not None:

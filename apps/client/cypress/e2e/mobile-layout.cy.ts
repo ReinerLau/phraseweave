@@ -231,6 +231,30 @@ function assertInputBlocksAlignWithText() {
   });
 }
 
+function assertWordBlockGapAtLeast(selector: string, minimumGap: number) {
+  cy.get(selector).should(($words) => {
+    const container = $words[0];
+    const styles = window.getComputedStyle(container);
+    const columnGap = parseFloat(styles.columnGap);
+    expect(columnGap, `${selector} column gap`).to.be.at.least(minimumGap);
+
+    const blocks = Array.from(container.querySelectorAll<HTMLElement>(".question-input-word"));
+    const sameRowGaps = blocks.slice(1).flatMap((block, index) => {
+      const previous = blocks[index];
+      const blockRect = block.getBoundingClientRect();
+      const previousRect = previous.getBoundingClientRect();
+      return Math.abs(blockRect.top - previousRect.top) <= 1
+        ? [blockRect.left - previousRect.right]
+        : [];
+    });
+
+    expect(sameRowGaps, `${selector} has adjacent blocks on a row`).to.not.be.empty;
+    sameRowGaps.forEach((gap) => {
+      expect(gap, `${selector} rendered horizontal gap`).to.be.at.least(minimumGap - 0.01);
+    });
+  });
+}
+
 // 固定长度提示：输入过程中块宽保持目标单词的实测宽度，不随输入生长
 function assertBlockShowsFixedHint(word: string) {
   cy.get(".question-input-word")
@@ -433,6 +457,18 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
+  it("keeps at least 8px between word blocks in input and answer views", () => {
+    assertWordBlockGapAtLeast(".question-input-words", 8);
+
+    cy.get('input[type="text"]')
+      .type(englishSentence, { force: true })
+      .type("{enter}", { force: true });
+    cy.get(".answer-content").should("be.visible");
+    assertWordBlockGapAtLeast(".answer-words", 8);
+    assertNoHorizontalOverflow();
+    assertPracticePageDoesNotScroll();
+  });
+
   it("uses the full available width without a top navigation bar", () => {
     cy.viewport(1280, 800);
     cy.get("header").should("not.exist");
@@ -478,6 +514,35 @@ describe("mobile practice layout", () => {
     });
     cy.get('[data-testid="question-prompt"]').contains("这是一个测试句子").should("be.visible");
     assertQuestionInputDoesNotScroll();
+  });
+
+  it("keeps a comfortable gap between the input and answer button with the keyboard open", () => {
+    cy.get('input[type="text"]').click({ force: true });
+    cy.window().then((window) => {
+      const viewport = window.visualViewport;
+      expect(viewport).to.not.be.null;
+
+      let viewportHeight = window.innerHeight;
+      Object.defineProperty(viewport, "height", {
+        configurable: true,
+        get: () => viewportHeight,
+      });
+      viewportHeight -= 280;
+      viewport?.dispatchEvent(new Event("resize"));
+    });
+
+    cy.get(".question-input-word").last().should(($inputWord) => {
+      const inputElement = $inputWord[0];
+      const inputBottom = inputElement.getBoundingClientRect().bottom;
+      const answerButtonTop = inputElement.ownerDocument
+        .querySelector<HTMLElement>('[data-testid="show-answer-button"]')!
+        .getBoundingClientRect().top;
+
+      expect(
+        answerButtonTop - inputBottom,
+        `input bottom=${inputBottom.toFixed(2)} answer button top=${answerButtonTop.toFixed(2)}`,
+      ).to.be.at.least(16);
+    });
   });
 
   it("uses the same shrinking font size for the Chinese prompt and input", () => {
