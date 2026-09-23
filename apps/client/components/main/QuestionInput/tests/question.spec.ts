@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createWordWidthMeasurer,
   getInputWordWidthEm,
+  getWordBlockWidthEm,
   getWordCapacityEm,
   SUBPIXEL_SAFETY_EM,
 } from "../questionInputHelper";
@@ -83,6 +84,25 @@ describe("getInputWordWidthEm", () => {
     expect(getInputWordWidthEm("thist", measureEm)).toBeGreaterThan(
       getInputWordWidthEm("this", measureEm),
     );
+  });
+});
+
+describe("getWordBlockWidthEm", () => {
+  it("未输入时就是目标单词的固定宽度", () => {
+    expect(getWordBlockWidthEm(5, 0)).toBeCloseTo(5 + SUBPIXEL_SAFETY_EM);
+  });
+
+  it("输入未超出目标时块宽不随输入生长", () => {
+    expect(getWordBlockWidthEm(5, 1)).toBeCloseTo(5 + SUBPIXEL_SAFETY_EM);
+    expect(getWordBlockWidthEm(5, 4.9)).toBeCloseTo(5 + SUBPIXEL_SAFETY_EM);
+  });
+
+  it("显示文字比目标更宽时才撑开，块宽不小于其中任何文字", () => {
+    const width = getWordBlockWidthEm(5, 6.2);
+
+    expect(width).toBeCloseTo(6.2 + SUBPIXEL_SAFETY_EM);
+    expect(width).toBeGreaterThanOrEqual(6.2);
+    expect(width).toBeGreaterThanOrEqual(5);
   });
 });
 
