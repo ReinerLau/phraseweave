@@ -1,43 +1,41 @@
 <template>
   <div class="question-input-shell">
-    <div class="question-input-row flex min-w-0 max-w-full items-end gap-2">
-      <div
-        ref="questionInputWordsEl"
-        class="question-input-words relative flex min-w-0 max-w-full flex-1 flex-wrap justify-start text-left"
+    <div
+      ref="questionInputWordsEl"
+      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+    >
+      <template
+        v-for="(w, i) in courseStore.words"
+        :key="i"
       >
-        <template
-          v-for="(w, i) in courseStore.words"
-          :key="i"
+        <div
+          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
+          :class="getWordsClassNames(i)"
+          :style="{ width: `${inputWidth(i)}em` }"
         >
-          <div
-            class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
-            :class="getWordsClassNames(i)"
-            :style="{ width: `${inputWidth(i)}em` }"
-          >
-            {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
-          </div>
-        </template>
-        <input
-          ref="inputEl"
-          class="absolute h-full w-full opacity-0"
-          type="text"
-          v-model="inputValue"
-          @keydown="handleKeydown"
-          @focus="handleInputFocus"
-          @blur="handleInputBlur"
-          @dblclick.prevent
-          @mousedown="preventCursorMove"
-          @compositionstart="handleCompositionStart"
-          @compositionend="handleCompositionEnd"
-          autoFocus
-        />
-        <!-- 隐藏探针：用真实渲染字体测量文本宽度和当前字号 -->
-        <span
-          ref="questionInputProbeEl"
-          class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
-          aria-hidden="true"
-        ></span>
-      </div>
+          {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
+        </div>
+      </template>
+      <input
+        ref="inputEl"
+        class="absolute h-full w-full opacity-0"
+        type="text"
+        v-model="inputValue"
+        @keydown="handleKeydown"
+        @focus="handleInputFocus"
+        @blur="handleInputBlur"
+        @dblclick.prevent
+        @mousedown="preventCursorMove"
+        @compositionstart="handleCompositionStart"
+        @compositionend="handleCompositionEnd"
+        autoFocus
+      />
+      <!-- 隐藏探针：用真实渲染字体测量文本宽度和当前字号 -->
+      <span
+        ref="questionInputProbeEl"
+        class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
+        aria-hidden="true"
+      ></span>
       <button
         class="btn btn-square btn-ghost h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 text-2xl text-gray-500 hover:text-fuchsia-500 dark:text-gray-300"
         type="button"
