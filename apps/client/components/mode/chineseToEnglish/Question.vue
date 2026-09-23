@@ -110,6 +110,7 @@ onUnmounted(() => {
 .question-content {
   --question-font-size: 2.25rem;
   font-size: var(--question-font-size);
+  padding-bottom: 1rem;
 }
 
 .question-prompt {
