@@ -5,7 +5,7 @@ const englishSentence =
   "this is a deliberately long sentence that should wrap inside the mobile practice page";
 const veryLongEnglishSentence =
   `${"this deliberately long sentence contains enough words to exercise every available line in the mobile practice area while keeping the answer action after the final input block "}`.repeat(
-    20,
+    10,
   );
 
 function seedLocalExercise(english = englishSentence) {
@@ -353,10 +353,13 @@ describe("mobile practice layout", () => {
       const root = $question[0];
       const words = root.querySelectorAll<HTMLElement>(".question-input-word");
       expect(words.length, "long question renders every word block").to.be.greaterThan(100);
-      expect(root.ownerDocument.defaultView?.getComputedStyle(root).overflowY).to.equal("auto");
-      expect(root.scrollHeight).to.be.greaterThan(root.clientHeight);
+      const styles = root.ownerDocument.defaultView?.getComputedStyle(root);
+      expect(styles?.overflowY).to.equal("hidden");
+      expect(parseFloat(styles?.fontSize ?? "36px"), "long question scales down").to.be.lessThan(
+        12,
+      );
+      expect(root.scrollHeight).to.be.at.most(root.clientHeight + 1);
 
-      root.scrollTop = root.scrollHeight;
       const action = root.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
       expect(action.getBoundingClientRect().bottom).to.be.at.most(
         root.getBoundingClientRect().bottom + 1,
