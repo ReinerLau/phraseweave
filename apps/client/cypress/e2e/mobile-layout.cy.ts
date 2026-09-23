@@ -231,6 +231,30 @@ function assertInputBlocksAlignWithText() {
   });
 }
 
+function assertWordBlockGapAtLeast(selector: string, minimumGap: number) {
+  cy.get(selector).should(($words) => {
+    const container = $words[0];
+    const styles = window.getComputedStyle(container);
+    const columnGap = parseFloat(styles.columnGap);
+    expect(columnGap, `${selector} column gap`).to.be.at.least(minimumGap);
+
+    const blocks = Array.from(container.querySelectorAll<HTMLElement>(".question-input-word"));
+    const sameRowGaps = blocks.slice(1).flatMap((block, index) => {
+      const previous = blocks[index];
+      const blockRect = block.getBoundingClientRect();
+      const previousRect = previous.getBoundingClientRect();
+      return Math.abs(blockRect.top - previousRect.top) <= 1
+        ? [blockRect.left - previousRect.right]
+        : [];
+    });
+
+    expect(sameRowGaps, `${selector} has adjacent blocks on a row`).to.not.be.empty;
+    sameRowGaps.forEach((gap) => {
+      expect(gap, `${selector} rendered horizontal gap`).to.be.at.least(minimumGap - 0.01);
+    });
+  });
+}
+
 // 固定长度提示：输入过程中块宽保持目标单词的实测宽度，不随输入生长
 function assertBlockShowsFixedHint(word: string) {
   cy.get(".question-input-word")
@@ -440,6 +464,18 @@ describe("mobile practice layout", () => {
     });
     assertInputBlocksAlignWithText();
     assertQuestionInputDoesNotScroll();
+  });
+
+  it("keeps at least 8px between word blocks in input and answer views", () => {
+    assertWordBlockGapAtLeast(".question-input-words", 8);
+
+    cy.get('input[type="text"]')
+      .type(englishSentence, { force: true })
+      .type("{enter}", { force: true });
+    cy.get(".answer-content").should("be.visible");
+    assertWordBlockGapAtLeast(".answer-words", 8);
+    assertNoHorizontalOverflow();
+    assertPracticePageDoesNotScroll();
   });
 
   it("uses the full available width without a top navigation bar", () => {
