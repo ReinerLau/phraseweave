@@ -75,6 +75,8 @@ const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 const questionInputProbeEl = ref<HTMLElement>();
 const measureVersion = ref(0);
+let measureObserver: ResizeObserver | undefined;
+let measureFrame: number | undefined;
 
 function readProbeWidth(text: string) {
   const probe = questionInputProbeEl.value;
@@ -134,9 +136,32 @@ onMounted(() => {
 
   // 字体加载完成后按最终字体重新测量
   document.fonts?.ready?.then(invalidateMeasurements).catch(() => undefined);
+
+  // 字形步进按字号取整，同一文本的 em 比值不随字号线性（实测 36px 与 22.5px 下
+  // 相差约 0.8%）：在旧字号测的宽度换到新字号会偏窄，把文字挤出块外折行。
+  // 题目字号自适应必然改变容器高度，用 ResizeObserver 在变化后于新字号下重测，
+  // rAF 合并同帧的多次通知，避免连续失效。
+  const wordsEl = questionInputWordsEl.value;
+  if (wordsEl && typeof ResizeObserver !== "undefined") {
+    measureObserver = new ResizeObserver(() => {
+      if (measureFrame !== undefined) return;
+      measureFrame = window.requestAnimationFrame(() => {
+        measureFrame = undefined;
+        invalidateMeasurements();
+      });
+    });
+    measureObserver.observe(wordsEl);
+  }
 });
 
 focusInputWhenWIndowFocus();
+onUnmounted(() => {
+  measureObserver?.disconnect();
+  if (measureFrame !== undefined) {
+    window.cancelAnimationFrame(measureFrame);
+    measureFrame = undefined;
+  }
+});
 onUnmounted(cancelErrorReset);
 
 watch(
@@ -344,7 +369,11 @@ function preventCursorMove(event: MouseEvent) {
 }
 
 .question-input-word {
-  min-height: 1em;
+  /* border-box 下 min-height 包含 border-b-2 的 2px。空块也必须预留
+     行高(1em)+下划线(2px)，与输入文字后的自然高度一致；否则敲入首字符时
+     块被撑高 2px，flex 行内 stretch 对齐会让整行下划线一起下移。
+     2px 对应模板上的 border-b-2。 */
+  min-height: calc(1em + 2px);
   overflow-wrap: anywhere;
   white-space: normal;
   /* 行内放不下时单词整体换到下一行，而不是压缩块宽把文字挤成两行 */
