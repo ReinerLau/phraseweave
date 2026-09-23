@@ -327,15 +327,6 @@ function setNativeInputValue(value: string) {
 describe("mobile practice layout", () => {
   beforeEach(() => {
     cy.viewport(320, 568);
-    cy.intercept("GET", "**/tool/dailySentence", {
-      statusCode: 200,
-      body: {
-        data: {
-          content: "This is a test sentence.",
-          note: "这是一个测试句子。",
-        },
-      },
-    });
     cy.visit("/course-pack");
     seedLocalExercise();
     cy.reload();

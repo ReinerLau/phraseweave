@@ -30,12 +30,3 @@ export function useCurrentStatementEnglishSound() {
     },
   };
 }
-
-// 朗读每日一句
-export function readOneSentencePerDayAloud(str: string) {
-  if (!YOUDAO_PRONUNCIATION_ENABLED) return;
-
-  const pronunciationUrl = getPronunciationUrl(str);
-  updateSource(pronunciationUrl);
-  play();
-}

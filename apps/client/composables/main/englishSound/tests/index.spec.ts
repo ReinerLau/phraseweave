@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useExerciseStore } from "~/store/exercise";
 import { play, updateSource } from "../audio";
-import { readOneSentencePerDayAloud, useCurrentStatementEnglishSound } from "../index";
+import { useCurrentStatementEnglishSound } from "../index";
 
 vi.mock("../audio.ts", () => {
   return {
@@ -36,13 +36,6 @@ describe("useCurrentStatementEnglishSound", () => {
 
     playSound();
 
-    expect(play).not.toHaveBeenCalled();
-  });
-
-  it("does not read the daily sentence while Youdao pronunciation is disabled", () => {
-    readOneSentencePerDayAloud("Keep going.");
-
-    expect(updateSource).not.toHaveBeenCalled();
     expect(play).not.toHaveBeenCalled();
   });
 
