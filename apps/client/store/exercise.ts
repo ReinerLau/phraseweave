@@ -3,7 +3,11 @@ import { computed, ref, watchEffect } from "vue";
 
 import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
-import { getLocalExercise, saveLocalExercise } from "~/services/localExerciseDb";
+import {
+  getLocalExercise,
+  saveLocalExercise,
+  saveLocalExerciseProgress,
+} from "~/services/localExerciseDb";
 import { useStatement } from "./statement";
 
 export interface Statement {
@@ -49,19 +53,35 @@ export const useExerciseStore = defineStore("exercise", () => {
   });
 
   function toSpecificStatement(index: number) {
-    statementIndex.value = index;
+    setStatementIndex(index);
   }
 
   function toPreviousStatement() {
-    statementIndex.value = Math.max(0, statementIndex.value - 1);
+    setStatementIndex(statementIndex.value - 1);
   }
 
   function toNextStatement() {
-    statementIndex.value = Math.min(statementIndex.value + 1, totalQuestionsCount.value - 1);
+    setStatementIndex(statementIndex.value + 1);
   }
 
   function resetStatementIndex() {
-    statementIndex.value = 0;
+    setStatementIndex(0);
+  }
+
+  function setStatementIndex(index: number) {
+    const lastIndex = Math.max(0, totalQuestionsCount.value - 1);
+    const nextIndex = Number.isFinite(index)
+      ? Math.min(Math.max(0, Math.trunc(index)), lastIndex)
+      : 0;
+    statementIndex.value = nextIndex;
+
+    const course = currentCourse.value;
+    if (!course) return;
+
+    course.statementIndex = nextIndex;
+    void saveLocalExerciseProgress(course.coursePackId, course.id, nextIndex).catch((error) => {
+      console.error("保存练习进度失败", error);
+    });
   }
 
   function isAllDone() {
@@ -97,6 +117,11 @@ export const useExerciseStore = defineStore("exercise", () => {
     const coursePack = await getLocalExercise(coursePackId);
     const course = coursePack?.courses.find((item) => item.id === courseId);
     if (!course) throw new Error("本地找不到该练习卡片");
+
+    const lastIndex = Math.max(0, course.statements.length - 1);
+    course.statementIndex = Number.isFinite(course.statementIndex)
+      ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
+      : 0;
     currentCourse.value = course;
     setupStatement(currentCourse);
   }

@@ -85,8 +85,6 @@ watch(showModal, (val) => {
   } else {
     // 取消回车键进入下一课
     cancelShortcut("enter", goToNextCourse);
-    // 从显示状态关闭结算面板
-    courseStore.resetStatementIndex();
   }
 });
 

@@ -109,6 +109,31 @@ export async function saveLocalExercise(coursePack: ExerciseResponse) {
   await transactionComplete(transaction);
 }
 
+export async function saveLocalExerciseProgress(
+  coursePackId: string,
+  courseId: string,
+  statementIndex: number,
+) {
+  if (!isSupported()) return;
+
+  const database = await openDatabase();
+  const transaction = database.transaction(PACK_STORE, "readwrite");
+  const transactionDone = transactionComplete(transaction);
+  const store = transaction.objectStore(PACK_STORE);
+  const request = store.get(coursePackId);
+
+  request.onsuccess = () => {
+    const coursePack = request.result as ExerciseResponse | undefined;
+    const course = coursePack?.courses.find((item) => item.id === courseId);
+    if (!coursePack || !course) return;
+
+    course.statementIndex = statementIndex;
+    store.put(coursePack);
+  };
+
+  await transactionDone;
+}
+
 export async function deleteLocalExercise(coursePackId: string) {
   if (!isSupported()) return;
 
