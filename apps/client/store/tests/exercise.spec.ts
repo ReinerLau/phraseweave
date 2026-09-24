@@ -15,6 +15,7 @@ vi.mock("~/services/auth");
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
   saveLocalExercise: vi.fn(),
+  saveLocalExerciseProgress: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("../statement.ts", () => {
   return {
@@ -64,6 +65,7 @@ vi.mocked(getLocalExercise).mockResolvedValue({
 describe("course", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    firstCourse.statementIndex = 0;
 
     const userStore = useUserStore();
     userStore.initUser({
