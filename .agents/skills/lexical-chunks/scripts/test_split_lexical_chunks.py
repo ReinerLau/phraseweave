@@ -2,6 +2,7 @@
 # /// script
 # requires-python = ">=3.10,<3.14"
 # dependencies = [
+#   "click",
 #   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 #   "spacy==3.8.7",
 # ]
@@ -36,6 +37,48 @@ class DependencyLearningUnitTests(TestCase):
 
     def units(self, sentence):
         return self.plan(sentence)["sentences"][0]["units"]
+
+    def test_places_existing_subunits_before_composites(self):
+        self.assertEqual(
+            [unit["text"] for unit in self.units("the USA.")],
+            ["USA", "the USA", "the USA."],
+        )
+
+        sentence = (
+            "Researchers from Tulane University in the USA say any kind of light "
+            "at bedtime could be bad for your heart."
+        )
+        units = self.units(sentence)
+        tokens = [token for token in self.nlp(sentence) if not token.is_punct and not token.is_space]
+
+        def selected_tokens(unit):
+            return {
+                token.i
+                for token in tokens
+                if any(
+                    segment["start"] <= token.idx
+                    and token.idx + len(token.text) <= segment["end"]
+                    for segment in unit["segments"]
+                )
+            }
+
+        selected = [selected_tokens(unit) for unit in units[:-1]]
+        for earlier_index, earlier in enumerate(selected):
+            for later_index, later in enumerate(selected):
+                if later < earlier:
+                    self.assertLess(
+                        later_index,
+                        earlier_index,
+                        f"{units[later_index]['text']} must precede {units[earlier_index]['text']}",
+                    )
+        self.assertEqual(units[-1]["kind"], "sentence")
+
+    def test_rejects_plan_with_previous_unit_order(self):
+        plan = self.plan("the USA.")
+        plan["sentences"][0]["units"][:2] = list(reversed(plan["sentences"][0]["units"][:2]))
+
+        with self.assertRaisesRegex(ConfigurationError, "do not match"):
+            _validate_plan(plan, self.nlp, self.rules, self.rules_digest)
 
     def test_builds_dependency_phrases_without_lexical_core_metadata(self):
         units = self.units("Birdsong is good for our mental health.")
@@ -107,7 +150,7 @@ class DependencyLearningUnitTests(TestCase):
             )
         ]
 
-        self.assertNotIn("of light", texts)
+        self.assertIn("of light", texts)
         self.assertNotIn("kind of light", texts)
         self.assertNotIn("kind of light at bedtime", texts)
         self.assertNotIn("any kind of light at bedtime", texts)
@@ -131,7 +174,7 @@ class DependencyLearningUnitTests(TestCase):
             "schema_version": 8,
             "max_units_per_anchor": 4096,
             "singleton_rules": [
-                {"id": "noun", "priority": 1, "when": {"pos": "NOUN"}},
+                {"id": "noun", "priority": 1, "when": {"pos": ["NOUN", "PROPN"]}},
                 {"id": "verb", "priority": 1, "when": {"pos": "VERB"}},
             ],
             "unit_rules": [],

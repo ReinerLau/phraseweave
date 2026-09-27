@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受，取代 [ADR 0008](0008-node-local-dependency-paths.md)。
+已接受，取代 [ADR 0008](0008-node-local-dependency-paths.md)；结果顺序由 [ADR 0010](0010-prerequisite-learning-unit-order.md) 修订。
 
 ## 背景
 
@@ -24,4 +24,4 @@
 - ADP `prep` 规则可沿两个方向匹配目标节点，例如生成 `light on`、`with light` 和 `for you`。
 - 多方向槽位会为每个符合目标条件的节点分别生成组合；不要求所有方向同时命中。
 - U7 仅依靠 POS 和 dep 条件区分介词组合；因此 `of light` 这类依存关系符合条件时也会生成。
-- 结果顺序由实际后序执行产生；完整原句始终为最后一个单元。
+- 后序执行产生初始顺序；最终结果按 [ADR 0010](0010-prerequisite-learning-unit-order.md) 排列，完整原句始终为最后一个单元。
