@@ -371,7 +371,7 @@ def _build_sentence(sentence_span: Any, rules: Mapping[str, Any]) -> tuple[list[
 def generate_plan(text: str, nlp: Any, rules: Mapping[str, Any], rules_digest: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if not text.strip():
         raise ConfigurationError("No English text was provided on stdin.")
-    document = nlp(text)
+    document = nlp(text.strip())
     sentences: list[dict[str, Any]] = []
     traces: list[dict[str, Any]] = []
     for sentence_span in document.sents:
