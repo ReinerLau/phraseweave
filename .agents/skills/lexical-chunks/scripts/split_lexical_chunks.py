@@ -254,7 +254,23 @@ def _build_sentence(sentence_span: Any, rules: Mapping[str, Any]) -> tuple[list[
     sent = sentence_span
     tokens = [token for token in sent if not token.is_space and not token.is_punct]
     by_id = {token.i: token for token in tokens}
-    trace: dict[str, Any] = {"tokens": [], "rule_matches": [], "unmatched_edges": [], "derivations": []}
+    trace: dict[str, Any] = {
+        "tokens": [],
+        "tree_tokens": [
+            {
+                "index": token.i,
+                "text": token.text,
+                "pos": token.pos_,
+                "dep": token.dep_,
+                "head_index": token.head.i,
+            }
+            for token in sent
+            if not token.is_space
+        ],
+        "rule_matches": [],
+        "unmatched_edges": [],
+        "derivations": [],
+    }
     generated: dict[tuple[int, ...], dict[str, Any]] = {}
     matched_edges: set[tuple[int, int]] = set()
     postorder: dict[int, int] = {}
@@ -494,6 +510,47 @@ def _markdown_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
 
+def _render_dependency_tree(tokens: Sequence[Mapping[str, Any]]) -> str:
+    by_index = {token["index"]: token for token in tokens}
+    children: dict[int, list[int]] = {index: [] for index in by_index}
+    roots = []
+    for index, token in by_index.items():
+        head_index = token["head_index"]
+        if head_index == index or head_index not in by_index:
+            roots.append(index)
+        else:
+            children[head_index].append(index)
+    for child_indices in children.values():
+        child_indices.sort()
+
+    lines: list[str] = []
+    visited: set[int] = set()
+
+    def add_node(index: int, prefix: str, is_last: bool, is_root: bool = False) -> None:
+        if index in visited:
+            return
+        visited.add(index)
+        token = by_index[index]
+        label = "ROOT" if is_root else token["dep"]
+        connector = "" if is_root else ("└── " if is_last else "├── ")
+        lines.append(f"{prefix}{connector}{token['text']} [{label}, {token['pos']}]")
+        descendants = children[index]
+        child_prefix = prefix if is_root else prefix + ("    " if is_last else "│   ")
+        for child_position, child_index in enumerate(descendants):
+            add_node(
+                child_index,
+                child_prefix,
+                child_position == len(descendants) - 1,
+            )
+
+    for root_index in roots:
+        add_node(root_index, "", True, is_root=True)
+    for index in by_index:
+        if index not in visited:
+            add_node(index, "", True, is_root=True)
+    return "\n".join(lines)
+
+
 def render_markdown(
     plan: Mapping[str, Any],
     translations: Mapping[str, Any],
@@ -501,7 +558,20 @@ def render_markdown(
 ) -> str:
     lines = ["# 渐进学习单元", ""]
     for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True), start=1):
-        lines.extend([f"## 第 {sentence_index} 句", "", "| 序号 | 中文提示 | 英文答案 | 规则标签 |", "|---:|---|---|---|"])
+        lines.extend([
+            f"## 第 {sentence_index} 句",
+            "",
+            "### 依存关系树",
+            "",
+            "```text",
+            _render_dependency_tree(traces[sentence_index - 1]["tree_tokens"])
+            if traces is not None
+            else "（依存关系树不可用）",
+            "```",
+            "",
+            "| 序号 | 中文提示 | 英文答案 | 规则标签 |",
+            "|---:|---|---|---|",
+        ])
         unit_rules = traces[sentence_index - 1]["unit_rules"] if traces is not None else [
             {"rules": []} for _ in sentence["units"]
         ]
