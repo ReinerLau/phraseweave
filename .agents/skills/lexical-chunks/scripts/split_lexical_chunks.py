@@ -2,6 +2,7 @@
 # /// script
 # requires-python = ">=3.10,<3.14"
 # dependencies = [
+#   "click",
 #   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 #   "spacy==3.8.7",
 # ]
@@ -461,13 +462,26 @@ def _markdown_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
 
-def render_markdown(plan: Mapping[str, Any], translations: Mapping[str, Any]) -> str:
+def render_markdown(
+    plan: Mapping[str, Any],
+    translations: Mapping[str, Any],
+    traces: Sequence[Mapping[str, Any]] | None = None,
+) -> str:
     lines = ["# 渐进学习单元", ""]
     for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True), start=1):
-        lines.extend([f"## 第 {sentence_index} 句", "", "| 步骤 | 中文提示 | 英文答案 | 类型 |", "|---:|---|---|---|"])
-        for step, (unit, prompt) in enumerate(zip(sentence["units"], translated["unit_prompts"], strict=True), start=1):
-            label = {"base": "单词单元", "composition": "依存路径单元", "sentence": "完整原句"}[unit["kind"]]
-            lines.append(f"| {step} | {_markdown_escape(prompt)} | {_markdown_escape(unit['text'])} | {label} |")
+        lines.extend([f"## 第 {sentence_index} 句", "", "| 序号 | 中文提示 | 英文答案 | 规则标签 |", "|---:|---|---|---|"])
+        unit_rules = traces[sentence_index - 1]["unit_rules"] if traces is not None else [
+            {"rules": []} for _ in sentence["units"]
+        ]
+        for step, (unit, prompt, match) in enumerate(
+            zip(sentence["units"], translated["unit_prompts"], unit_rules, strict=True),
+            start=1,
+        ):
+            labels = [RULE_TAGS.get(rule_id, rule_id) for rule_id in match["rules"]]
+            rules_text = _markdown_escape("、".join(labels))
+            lines.append(
+                f"| {step} | {_markdown_escape(prompt)} | {_markdown_escape(unit['text'])} | {rules_text} |"
+            )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -555,18 +569,19 @@ def main() -> int:
         plan = _validate_plan(raw_plan, nlp, rules, rules_digest)
         translations = _parse_annotations(sys.stdin.read(), plan)
         markdown_path, phraseweave_path = _output_paths(args)
+        traces = []
+        if markdown_path is not None or args.trace_output is not None:
+            for sentence in plan["sentences"]:
+                _, sentence_traces = generate_plan(sentence["sentence"], nlp, rules, rules_digest)
+                traces.extend(sentence_traces)
         outputs: list[tuple[Path, str]] = []
         if markdown_path is not None:
-            outputs.append((markdown_path, render_markdown(plan, translations)))
+            outputs.append((markdown_path, render_markdown(plan, translations, traces)))
         if phraseweave_path is not None:
             outputs.append((phraseweave_path, render_phraseweave(plan, translations)))
         for path, content in outputs:
             print(_write_output(path, content))
         if args.trace_output is not None:
-            traces = []
-            for sentence in plan["sentences"]:
-                _, sentence_traces = generate_plan(sentence["sentence"], nlp, rules, rules_digest)
-                traces.extend(sentence_traces)
             _write_trace(args, traces)
         return 0
     except ConfigurationError as error:

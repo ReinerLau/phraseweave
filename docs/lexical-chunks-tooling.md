@@ -27,7 +27,7 @@ flowchart LR
 - `--plan-output <路径>`：从标准输入读取英文并生成计划。
 - `--render-plan <路径>`：校验计划并根据标准输入中的中文提示渲染。
 - `--rules <路径>`：指定规则文件，默认使用 skill 内置 JSON 规则。
-- `--trace-output <路径>`：输出后序节点、规则命中、路径推导和未匹配边报告。
+- `--trace-output <路径>`：单独输出每个单元的规则标签表；Markdown 学习单元表已包含相同标签。
 - `--format markdown|phraseweave|both`：选择最终格式，默认 `markdown`。
 - `--output <路径>`：Markdown 路径；`phraseweave` 模式下为 JSON 路径。
 - `--phraseweave-output <路径>`：在 `both` 模式下单独指定 JSON 路径。
@@ -57,11 +57,14 @@ flowchart LR
 
 `kind` 为 `base`、`composition` 或 `sentence`。中文提示 JSON 继续使用 schema 1，`unit_prompts` 按每句 `units` 顺序逐项对齐。PhraseWeave 导入数据继续使用 schema 1。
 
+Markdown 学习单元表列为序号、中文提示、英文答案和规则标签。同一单元由多条规则生成时，标签全部列出。
+
 ## 固定依赖与边界
 
 | 依赖 | 版本 | 用途 |
 |---|---:|---|
 | spaCy | `3.8.7` | 分句、词性、形态、依存关系和字符位置 |
 | en_core_web_sm | `3.8.0` | 固定英语分析 |
+| click | 脚本元数据解析的兼容版本 | 支持隔离运行时加载 spaCy 模型 |
 
 每个锚点默认最多生成 4096 个候选，超出时报错，不截断。相同文本、依赖版本和规则文件产生相同计划；中文措辞由模型生成。详细领域决策见 [ADR 0009](adr/0009-postorder-head-only-paths.md)。
