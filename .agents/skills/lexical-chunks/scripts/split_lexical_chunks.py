@@ -216,6 +216,25 @@ def _segments_text(sentence: str, segments: Sequence[Mapping[str, int]]) -> str:
     return " ".join(sentence[item["start"] : item["end"]] for item in segments)
 
 
+def _order_units_by_prerequisites(units: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    token_sets = [set(unit["_tokens"]) for unit in units]
+    ordered: list[dict[str, Any]] = []
+    emitted: set[int] = set()
+
+    def emit(index: int) -> None:
+        if index in emitted:
+            return
+        for prerequisite, tokens in enumerate(token_sets):
+            if tokens < token_sets[index]:
+                emit(prerequisite)
+        emitted.add(index)
+        ordered.append(units[index])
+
+    for index in range(len(units)):
+        emit(index)
+    return ordered
+
+
 def _build_sentence(sentence_span: Any, rules: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     sentence = sentence_span.text.strip()
     sent = sentence_span
@@ -355,6 +374,7 @@ def _build_sentence(sentence_span: Any, rules: Mapping[str, Any]) -> tuple[list[
             unit["_tokens"],
         )
     )
+    units = _order_units_by_prerequisites(units)
     output = [{key: unit[key] for key in ("text", "segments", "kind")} for unit in units]
     output.append({"text": sentence, "segments": [{"start": 0, "end": len(sentence)}], "kind": "sentence"})
     trace["unit_rules"] = [
