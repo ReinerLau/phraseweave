@@ -15,8 +15,7 @@ description: 将用户提供的英文教材按可维护的 spaCy 闭合槽位规
 
    ```bash
    uv run <skill目录>/scripts/split_lexical_chunks.py \
-     --plan-output <临时目录>/learning-units.plan.json \
-     --trace-output <临时目录>/learning-units.trace.md <<'ENGLISH'
+     --plan-output <临时目录>/learning-units.plan.json <<'ENGLISH'
    <原文>
    ENGLISH
    ```
@@ -47,6 +46,8 @@ description: 将用户提供的英文教材按可维护的 spaCy 闭合槽位规
 
    渲染器使用相同规则表重新生成并校验计划、来源片段、规则摘要和提示对齐。需要非默认规则表时，计划和渲染必须都传入同一 `--rules <路径>`。校验失败时根据错误修正提示 JSON 并重试一次；再次失败则不生成成品。
 
+   Markdown 成品将单元清单与规则标签合并为一张表，列为序号、中文提示、英文答案和规则标签；同一单元由多条规则生成时列出全部标签。PhraseWeave 输出保留导入格式。
+
 4. 确认选定格式的输出文件存在，并提供可点击的文件链接。
 
 ## 规则与追踪
@@ -55,7 +56,7 @@ description: 将用户提供的英文教材按可维护的 spaCy 闭合槽位规
 
 每条规则路径直接从依存树读取所需节点；生成的单元不会作为其他规则的输入。
 
-追踪报告以表格列出每个学习单元及简短规则标签；单元由多条路径生成时，表格列出全部标签。规则标签及匹配关系见 `docs/lexical-chunks-rule-labels.md`。节点列表按后序遍历输出，另含路径推导和未匹配依存边。每个锚点默认最多生成 4096 个候选；超出时停止并报告错误，不截断结果。
+Markdown 学习单元表包含简短规则标签；单元由多条路径生成时列出全部标签。规则标签及匹配关系见 `docs/lexical-chunks-rule-labels.md`。需要单独检查规则命中时，可选用 `--trace-output` 输出标签追踪表。每个锚点默认最多生成 4096 个候选；超出时停止并报告错误，不截断结果。
 
 ## 失败处理
 
