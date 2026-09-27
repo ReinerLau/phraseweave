@@ -9,6 +9,8 @@
 # ///
 
 import json
+from copy import deepcopy
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest import main as unittest_main
 
@@ -16,6 +18,7 @@ from split_lexical_chunks import (
     ConfigurationError,
     DEFAULT_RULES,
     _parse_annotations,
+    _slot_target_groups,
     _validate_plan,
     generate_plan,
     load_rules,
@@ -80,6 +83,13 @@ class DependencyLearningUnitTests(TestCase):
         with self.assertRaisesRegex(ConfigurationError, "do not match"):
             _validate_plan(plan, self.nlp, self.rules, self.rules_digest)
 
+    def test_rejects_plan_from_previous_rule_schema(self):
+        plan = self.plan("the USA.")
+        plan["rules_version"] = 8
+
+        with self.assertRaisesRegex(ConfigurationError, "rules do not match"):
+            _validate_plan(plan, self.nlp, self.rules, self.rules_digest)
+
     def test_builds_dependency_phrases_without_lexical_core_metadata(self):
         units = self.units("Birdsong is good for our mental health.")
         texts = [unit["text"] for unit in units]
@@ -101,16 +111,59 @@ class DependencyLearningUnitTests(TestCase):
         self.assertNotIn("more green spaces", texts)
         self.assertNotIn("spaces and lower speed limits", texts)
 
-    def test_generates_units_from_upward_ancestor_paths_only(self):
+    def test_bidirectional_preposition_prefers_combined_unit(self):
         texts = [
             unit["text"]
-            for unit in self.units("Tulane University in the USA.")
+            for unit in self.units(
+                "Researchers from Tulane University in the USA say any kind of light "
+                "at bedtime could be bad for your heart."
+            )
         ]
 
         self.assertIn("Tulane University", texts)
+        self.assertIn("University in USA", texts)
+        self.assertIn("the USA", texts)
+        self.assertNotIn("University in", texts)
+        self.assertNotIn("in USA", texts)
         self.assertNotIn("University in the USA", texts)
         self.assertNotIn("Tulane University in the USA", texts)
         self.assertNotIn("in the USA", texts)
+
+    def test_bidirectional_slot_pairs_each_child_with_the_head(self):
+        head = SimpleNamespace(i=0, pos_="NOUN", dep_="pobj")
+        children = [
+            SimpleNamespace(i=2, pos_="NOUN", dep_="pobj"),
+            SimpleNamespace(i=3, pos_="NOUN", dep_="pobj"),
+        ]
+        anchor = SimpleNamespace(i=1, head=head, children=list(reversed(children)))
+        slot = {
+            "direction": ["child", "head"],
+            "token": {"pos": "NOUN", "dep": "pobj"},
+        }
+
+        groups = _slot_target_groups(anchor, slot, {anchor.i})
+        self.assertEqual(
+            [[(target.i, direction) for target, direction in group] for group in groups],
+            [[(0, "head"), (2, "child")], [(0, "head"), (3, "child")]],
+        )
+
+    def test_bidirectional_candidates_respect_anchor_limit(self):
+        rules = deepcopy(self.rules)
+        rules["max_units_per_anchor"] = 1
+        duplicate = deepcopy(
+            next(rule for rule in rules["unit_rules"] if rule["id"] == "preposition-to-head-or-object")
+        )
+        duplicate["id"] = "second-preposition-rule"
+        rules["unit_rules"].append(duplicate)
+
+        with self.assertRaisesRegex(ConfigurationError, "path rules exceed 1 units"):
+            generate_plan(
+                "Researchers from Tulane University in the USA say any kind of light "
+                "at bedtime could be bad for your heart.",
+                self.nlp,
+                rules,
+                "test-rules",
+            )
 
     def test_compound_phrase_uses_only_the_modifier_to_head_rule(self):
         _, traces = generate_plan(
@@ -142,7 +195,7 @@ class DependencyLearningUnitTests(TestCase):
         self.assertNotIn("↑", report)
         self.assertNotIn("〔", report)
 
-    def test_pair_stage_uses_required_slots_and_preserves_optional_paths(self):
+    def test_required_slots_preserve_optional_paths(self):
         texts = [
             unit["text"]
             for unit in self.units(
@@ -155,6 +208,7 @@ class DependencyLearningUnitTests(TestCase):
         self.assertNotIn("kind of light at bedtime", texts)
         self.assertNotIn("any kind of light at bedtime", texts)
         self.assertIn("Tulane University", texts)
+        self.assertIn("University in USA", texts)
         self.assertNotIn("Researchers from Tulane University", texts)
         self.assertNotIn("Researchers from Tulane University in the USA", texts)
 
@@ -171,7 +225,7 @@ class DependencyLearningUnitTests(TestCase):
 
     def test_nodes_do_not_combine_outputs_from_other_nodes(self):
         rules = {
-            "schema_version": 8,
+            "schema_version": 9,
             "max_units_per_anchor": 4096,
             "singleton_rules": [
                 {"id": "noun", "priority": 1, "when": {"pos": ["NOUN", "PROPN"]}},

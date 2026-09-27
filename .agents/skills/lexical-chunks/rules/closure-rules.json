@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 9,
   "max_units_per_anchor": 4096,
   "singleton_rules": [
     {
