@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受，修订 [ADR 0009](0009-postorder-head-only-paths.md) 的多方向匹配语义。
+已由 [ADR 0012](0012-adjacent-subtree-closure.md) 取代。此前修订 [ADR 0009](0009-postorder-head-only-paths.md) 的多方向匹配语义。
 
 ## 决策
 

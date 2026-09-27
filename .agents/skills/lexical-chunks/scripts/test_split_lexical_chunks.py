@@ -10,18 +10,14 @@
 
 import json
 from copy import deepcopy
-from types import SimpleNamespace
 from unittest import TestCase
 from unittest import main as unittest_main
 
 from split_lexical_chunks import (
     ConfigurationError,
-    DEFAULT_RULES,
     _parse_annotations,
-    _slot_target_groups,
     _validate_plan,
     generate_plan,
-    load_rules,
     load_syntax_model,
     render_markdown,
     render_phraseweave,
@@ -29,296 +25,172 @@ from split_lexical_chunks import (
 )
 
 
-class DependencyLearningUnitTests(TestCase):
+FIRST_SENTENCE = (
+    "Researchers from Tulane University in the USA say any kind of light "
+    "at bedtime could be bad for your heart"
+)
+FIRST_UNITS = """Tulane
+the
+USA
+the USA
+in
+in the USA
+University
+Tulane University
+University in the USA
+Tulane University in the USA
+from
+from Tulane University in the USA
+Researchers
+Researchers from Tulane University in the USA
+any
+light
+of
+of light
+bedtime
+at
+at bedtime
+kind
+any kind
+kind of light
+any kind of light
+any kind of light at bedtime
+could
+your
+heart
+your heart
+for
+for your heart
+bad
+bad for your heart
+be
+could be
+be bad for your heart
+could be bad for your heart
+any kind of light at bedtime could be bad for your heart
+say
+Researchers from Tulane University in the USA say
+say any kind of light at bedtime could be bad for your heart
+Researchers from Tulane University in the USA say any kind of light at bedtime could be bad for your heart""".splitlines()
+
+SECOND_SENTENCE = "The young teacher gave her students a difficult problem after class."
+SECOND_UNITS = """The
+young
+teacher
+young teacher
+The young teacher
+her
+students
+her students
+a
+difficult
+class
+after
+after class
+problem
+difficult problem
+problem after class
+difficult problem after class
+a difficult problem after class
+gave
+The young teacher gave
+gave her students
+The young teacher gave her students
+The young teacher gave her students a difficult problem after class""".splitlines()
+
+
+class AdjacentSubtreeLearningUnitTests(TestCase):
     @classmethod
     def setUpClass(cls):
         cls.nlp = load_syntax_model()
-        cls.rules, cls.rules_digest = load_rules(DEFAULT_RULES)
 
-    def plan(self, sentence):
-        return generate_plan(sentence, self.nlp, self.rules, self.rules_digest)[0]
+    def plan(self, text):
+        return generate_plan(text, self.nlp)[0]
 
-    def units(self, sentence):
-        return self.plan(sentence)["sentences"][0]["units"]
+    def test_matches_manual_postorder_examples(self):
+        for source, expected in ((FIRST_SENTENCE, FIRST_UNITS), (SECOND_SENTENCE, SECOND_UNITS)):
+            with self.subTest(source=source):
+                units = self.plan(source)["sentences"][0]["units"]
+                self.assertEqual([unit["text"] for unit in units], expected)
+                self.assertEqual(units[-1]["kind"], "sentence")
+                self.assertEqual(sum(unit["kind"] == "sentence" for unit in units), 1)
 
-    def test_places_existing_subunits_before_composites(self):
-        self.assertEqual(
-            [unit["text"] for unit in self.units("the USA.")],
-            ["USA", "the USA", "the USA."],
-        )
+    def test_all_word_tokens_appear_and_units_use_one_source_span(self):
+        source = SECOND_SENTENCE
+        units = self.plan(source)["sentences"][0]["units"]
+        self.assertIn("The", [unit["text"] for unit in units])
+        self.assertIn("a", [unit["text"] for unit in units])
+        for unit in units:
+            start, end = unit["span"]["start"], unit["span"]["end"]
+            self.assertEqual(unit["text"], source[start:end])
 
-        sentence = (
-            "Researchers from Tulane University in the USA say any kind of light "
-            "at bedtime could be bad for your heart."
-        )
-        units = self.units(sentence)
-        tokens = [token for token in self.nlp(sentence) if not token.is_punct and not token.is_space]
-
-        def selected_tokens(unit):
-            return {
-                token.i
-                for token in tokens
-                if any(
-                    segment["start"] <= token.idx
-                    and token.idx + len(token.text) <= segment["end"]
-                    for segment in unit["segments"]
-                )
-            }
-
-        selected = [selected_tokens(unit) for unit in units[:-1]]
-        for earlier_index, earlier in enumerate(selected):
-            for later_index, later in enumerate(selected):
-                if later < earlier:
-                    self.assertLess(
-                        later_index,
-                        earlier_index,
-                        f"{units[later_index]['text']} must precede {units[earlier_index]['text']}",
-                    )
-        self.assertEqual(units[-1]["kind"], "sentence")
-
-    def test_rejects_plan_with_previous_unit_order(self):
-        plan = self.plan("the USA.")
-        plan["sentences"][0]["units"][:2] = list(reversed(plan["sentences"][0]["units"][:2]))
-
-        with self.assertRaisesRegex(ConfigurationError, "do not match"):
-            _validate_plan(plan, self.nlp, self.rules, self.rules_digest)
-
-    def test_rejects_plan_from_previous_rule_schema(self):
-        plan = self.plan("the USA.")
-        plan["rules_version"] = 8
-
-        with self.assertRaisesRegex(ConfigurationError, "rules do not match"):
-            _validate_plan(plan, self.nlp, self.rules, self.rules_digest)
-
-    def test_builds_dependency_phrases_without_lexical_core_metadata(self):
-        units = self.units("Birdsong is good for our mental health.")
-        texts = [unit["text"] for unit in units]
-
-        self.assertIn("Birdsong", texts)
-        self.assertIn("mental health", texts)
-        self.assertNotIn("good for our mental health", texts)
-        self.assertEqual(units[-1]["kind"], "sentence")
-        self.assertNotIn("core", {key for unit in units for key in unit})
-
-    def test_does_not_combine_sibling_branches(self):
-        texts = [
-            unit["text"]
-            for unit in self.units("more green spaces and lower speed limits.")
-        ]
-
-        self.assertIn("green spaces", texts)
-        self.assertIn("speed limits", texts)
-        self.assertNotIn("more green spaces", texts)
-        self.assertNotIn("spaces and lower speed limits", texts)
-
-    def test_bidirectional_preposition_prefers_combined_unit(self):
-        texts = [
-            unit["text"]
-            for unit in self.units(
-                "Researchers from Tulane University in the USA say any kind of light "
-                "at bedtime could be bad for your heart."
-            )
-        ]
-
-        self.assertIn("Tulane University", texts)
-        self.assertIn("University in USA", texts)
-        self.assertIn("the USA", texts)
-        self.assertNotIn("University in", texts)
-        self.assertNotIn("in USA", texts)
-        self.assertNotIn("University in the USA", texts)
-        self.assertNotIn("Tulane University in the USA", texts)
-        self.assertNotIn("in the USA", texts)
-
-    def test_bidirectional_slot_pairs_each_child_with_the_head(self):
-        head = SimpleNamespace(i=0, pos_="NOUN", dep_="pobj")
-        children = [
-            SimpleNamespace(i=2, pos_="NOUN", dep_="pobj"),
-            SimpleNamespace(i=3, pos_="NOUN", dep_="pobj"),
-        ]
-        anchor = SimpleNamespace(i=1, head=head, children=list(reversed(children)))
-        slot = {
-            "direction": ["child", "head"],
-            "token": {"pos": "NOUN", "dep": "pobj"},
-        }
-
-        groups = _slot_target_groups(anchor, slot, {anchor.i})
-        self.assertEqual(
-            [[(target.i, direction) for target, direction in group] for group in groups],
-            [[(0, "head"), (2, "child")], [(0, "head"), (3, "child")]],
-        )
-
-    def test_bidirectional_candidates_respect_anchor_limit(self):
-        rules = deepcopy(self.rules)
-        rules["max_units_per_anchor"] = 1
-        duplicate = deepcopy(
-            next(rule for rule in rules["unit_rules"] if rule["id"] == "preposition-to-head-or-object")
-        )
-        duplicate["id"] = "second-preposition-rule"
-        rules["unit_rules"].append(duplicate)
-
-        with self.assertRaisesRegex(ConfigurationError, "path rules exceed 1 units"):
-            generate_plan(
-                "Researchers from Tulane University in the USA say any kind of light "
-                "at bedtime could be bad for your heart.",
-                self.nlp,
-                rules,
-                "test-rules",
-            )
-
-    def test_compound_phrase_uses_only_the_modifier_to_head_rule(self):
-        _, traces = generate_plan(
-            "Tulane University.",
-            self.nlp,
-            self.rules,
-            self.rules_digest,
-        )
-
-        unit_rules = next(
-            match["rules"]
-            for match in traces[0]["unit_rules"]
-            if match["text"] == "Tulane University"
-        )
-        self.assertEqual(unit_rules, ["modifier-to-head"])
-
-    def test_trace_table_lists_matching_rules(self):
-        _, traces = generate_plan(
-            "Tulane University in the USA.",
-            self.nlp,
-            self.rules,
-            self.rules_digest,
-        )
-
-        report = render_trace(traces)
-        self.assertIn("| 序号 | 学习单元 | 规则标签 |", report)
-        self.assertIn("U1", report)
-        self.assertIn("FULL", report)
-        self.assertNotIn("↑", report)
-        self.assertNotIn("〔", report)
-
-    def test_required_slots_preserve_optional_paths(self):
-        texts = [
-            unit["text"]
-            for unit in self.units(
-                "Researchers from Tulane University in the USA say any kind of light at bedtime could be bad for your heart."
-            )
-        ]
-
-        self.assertIn("of light", texts)
-        self.assertNotIn("kind of light", texts)
-        self.assertNotIn("kind of light at bedtime", texts)
-        self.assertNotIn("any kind of light at bedtime", texts)
-        self.assertIn("Tulane University", texts)
-        self.assertIn("University in USA", texts)
-        self.assertNotIn("Researchers from Tulane University", texts)
-        self.assertNotIn("Researchers from Tulane University in the USA", texts)
-
-    def test_generates_nested_units_from_one_explicit_anchor_rule(self):
-        texts = [
-            unit["text"]
-            for unit in self.units("Sleeping with a light on could be bad.")
-        ]
-
-        self.assertNotIn("with a light", texts)
-        self.assertNotIn("Sleeping with a light on", texts)
-        self.assertIn("a light", texts)
-        self.assertIn("with light", texts)
-
-    def test_nodes_do_not_combine_outputs_from_other_nodes(self):
-        rules = {
-            "schema_version": 9,
-            "max_units_per_anchor": 4096,
-            "singleton_rules": [
-                {"id": "noun", "priority": 1, "when": {"pos": ["NOUN", "PROPN"]}},
-                {"id": "verb", "priority": 1, "when": {"pos": "VERB"}},
-            ],
-            "unit_rules": [],
-        }
-        plan, _ = generate_plan("Dogs bark.", self.nlp, rules, "test-rules")
+    def test_internal_punctuation_blocks_local_closure_but_sentence_keeps_comma(self):
+        plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
         texts = [unit["text"] for unit in plan["sentences"][0]["units"]]
+        self.assertIn("He smiled", texts)
+        self.assertIn("she laughed", texts)
+        self.assertEqual(texts[-1], "He smiled, and she laughed")
+        self.assertNotIn("smiled, and", texts)
+        self.assertTrue(traces[0]["blocked"])
 
-        self.assertIn("Dogs", texts)
-        self.assertIn("bark", texts)
-        self.assertNotIn("Dogs bark", texts)
+    def test_coordination_follows_tree_without_special_grouping(self):
+        texts = [unit["text"] for unit in self.plan("He smiled and she laughed.")["sentences"][0]["units"]]
+        self.assertIn("smiled and", texts)
 
-    def test_keeps_complete_sentence_last(self):
-        units = self.units("Sleeping with a light on could be bad for you.")
+    def test_multiple_sentences_keep_independent_units(self):
+        plan = self.plan("Dogs bark. Cats sleep!")
+        self.assertEqual(len(plan["sentences"]), 2)
+        self.assertEqual([sentence["units"][-1]["text"] for sentence in plan["sentences"]], ["Dogs bark", "Cats sleep"])
 
-        texts = [unit["text"] for unit in units]
-        self.assertIn("light on", texts)
-        self.assertIn("a light", texts)
-        self.assertNotIn("with a light", texts)
-        self.assertNotIn("Sleeping with a light", texts)
-        self.assertEqual(units[-1]["kind"], "sentence")
-        self.assertEqual(units[-1]["text"], "Sleeping with a light on could be bad for you.")
-
-    def test_sentence_units_reference_original_segments_in_order(self):
-        sentence = "Researchers from Tulane University in the USA."
-        units = self.units(sentence)
-        previous = units[-1]
-
-        self.assertEqual(previous["text"], sentence)
-        for unit in units[:-1]:
-            pieces = [sentence[segment["start"] : segment["end"]] for segment in unit["segments"]]
-            self.assertEqual(" ".join(pieces), unit["text"])
-            self.assertTrue(all(segment["start"] < segment["end"] for segment in unit["segments"]))
-
-    def test_rejects_tampered_plan_ranges(self):
+    def test_rejects_old_and_tampered_plans(self):
         plan = self.plan("Dogs bark.")
-        plan["sentences"][0]["units"][0]["segments"][0]["start"] += 1
+        old = deepcopy(plan)
+        old["schema_version"] = 2
+        with self.assertRaisesRegex(ConfigurationError, "schema_version 3"):
+            _validate_plan(old, self.nlp)
 
+        wrong_version = deepcopy(plan)
+        wrong_version["algorithm_version"] += 1
+        with self.assertRaisesRegex(ConfigurationError, "generator versions"):
+            _validate_plan(wrong_version, self.nlp)
+
+        wrong_span = deepcopy(plan)
+        wrong_span["sentences"][0]["units"][0]["span"]["start"] += 1
         with self.assertRaisesRegex(ConfigurationError, "does not match"):
-            _validate_plan(plan, self.nlp, self.rules, self.rules_digest)
+            _validate_plan(wrong_span, self.nlp)
 
-    def test_rejects_misaligned_translation_prompts(self):
-        plan = self.plan("Dogs bark.")
-        translations = {
-            "schema_version": 1,
-            "sentences": [{"unit_prompts": ["狗"]}],
-        }
+        wrong_order = deepcopy(plan)
+        wrong_order["sentences"][0]["units"][:2] = reversed(wrong_order["sentences"][0]["units"][:2])
+        with self.assertRaisesRegex(ConfigurationError, "do not match"):
+            _validate_plan(wrong_order, self.nlp)
 
-        with self.assertRaisesRegex(ConfigurationError, "must contain exactly"):
-            _parse_annotations(json.dumps(translations), plan)
-
-    def test_renders_phraseweave_import_schema(self):
+    def test_annotation_alignment_and_phraseweave_import_shape(self):
         plan = self.plan("Birdsong is good.")
-        translations = {
-            "schema_version": 1,
-            "sentences": [{
-                "unit_prompts": [f"提示 {index}" for index, _ in enumerate(plan["sentences"][0]["units"], 1)]
-            }],
-        }
-
-        payload = json.loads(render_phraseweave(plan, translations))
+        prompts = [f"提示 {index}" for index, _ in enumerate(plan["sentences"][0]["units"], 1)]
+        annotations = {"schema_version": 1, "sentences": [{"unit_prompts": prompts}]}
+        parsed = _parse_annotations(json.dumps(annotations), plan)
+        payload = json.loads(render_phraseweave(plan, parsed))
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["statements"]), len(plan["sentences"][0]["units"]))
-        self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good.")
+        self.assertEqual(len(payload["statements"]), len(prompts))
+        self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
+        self.assertEqual(set(payload["statements"][0]), {"chinese", "english", "soundmark"})
 
-    def test_renders_markdown_and_escapes_table_content(self):
-        plan = {
-            "schema_version": 2,
-            "rules_version": 5,
-            "rules_sha256": "test-rules",
-            "sentences": [
-                {
-                    "sentence": "alpha | beta",
-                    "units": [
-                        {
-                            "text": "alpha | beta",
-                            "segments": [{"start": 0, "end": 12}],
-                            "kind": "sentence",
-                        }
-                    ],
-                }
-            ],
-        }
-        translations = {
+        annotations["sentences"][0]["unit_prompts"].pop()
+        with self.assertRaisesRegex(ConfigurationError, "must contain exactly"):
+            _parse_annotations(json.dumps(annotations), plan)
+
+    def test_markdown_and_trace_show_composition_explanations(self):
+        plan, traces = generate_plan("the USA grows.", self.nlp)
+        prompts = {
             "schema_version": 1,
-            "sentences": [{"unit_prompts": ["甲 | 乙"]}],
+            "sentences": [{"unit_prompts": ["提示" for _ in plan["sentences"][0]["units"]]}],
         }
-
-        report = render_markdown(plan, translations)
-        self.assertIn("甲 \\| 乙", report)
-        self.assertIn("alpha \\| beta", report)
+        markdown = render_markdown(plan, prompts, traces)
+        report = render_trace(traces)
+        self.assertIn("| 序号 | 中文提示 | 英文答案 | 组合说明 |", markdown)
+        self.assertIn("中心词 USA；左接 the", markdown)
+        self.assertIn("| 序号 | 学习单元 | 组合说明 |", report)
+        self.assertIn("整句", report)
 
 
 if __name__ == "__main__":

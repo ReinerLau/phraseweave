@@ -1,13 +1,5 @@
 ## 🧩 lexical-chunks 学习单元生成
 
-`lexical-chunks` 使用固定版本的 spaCy 生成依存树，再按规则配置生成英文学习单元。规则配置位于 [closure-rules.json](./.agents/skills/lexical-chunks/rules/closure-rules.json)，规则标签和含义见[对照表](./docs/lexical-chunks-rule-labels.md)，工具接口见[工具说明](./docs/lexical-chunks-tooling.md)。
+`lexical-chunks` 使用固定 spaCy 模型分句并生成依存树，再按原文邻接关系逐层组合英文学习单元。生成器先输出每个非标点词，随后把已经完成的子短语从近到远接到中心词；同层左右分支先分别输出，再合并并继续向外扩展。模型只填写中文提示。
 
-### 生成方式
-
-- 脚本按依存树后序遍历处理节点；后序遍历顺序与槽位的查找方向相互独立。
-- 单词规则根据 POS 生成独立单元；组合规则由锚点条件和槽位条件决定。
-- 槽位沿 `head`、`child` 或两个方向查找目标节点。目标节点的 POS 和 dep 条件可以分别配置；未配置的条件不限制匹配。
-- 每条组合规则最多配置一个必需槽位和一个可选槽位。必需槽位用于当前词对组合，可选槽位留给后续短语组合。
-- 每个节点独立应用自己的规则，不读取其他节点已经生成的单元。相同 token 集合只输出一次，完整原句最后追加。
-
-脚本只依据配置的 POS 和依存标签匹配组合，不使用词元条件。新增或调整规则时，同步更新闭合槽位配置和[标签对照表](./docs/lexical-chunks-rule-labels.md)。
+英文计划使用 schema 3；Markdown 显示依存树和组合说明，PhraseWeave JSON 保持现有导入格式。运行方式、标点处理及计划结构见[工具接口](docs/lexical-chunks-tooling.md)，策略取舍见 [ADR 0012](docs/adr/0012-adjacent-subtree-closure.md)。

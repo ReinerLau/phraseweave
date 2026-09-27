@@ -1,4 +1,4 @@
 interface:
   display_name: "lexical-chunks"
-  short_description: "按依存槽位闭合规则生成英文学习单元"
-  default_prompt: "使用 $lexical-chunks 处理我粘贴的英文教材，先确认 Markdown、PhraseWeave JSON 或两者，再按闭合规则生成学习单元、翻译中文提示并导出。"
+  short_description: "按依存树逐层组合相邻短语，生成英文学习单元"
+  default_prompt: "使用 $lexical-chunks 处理我粘贴的英文教材，按依存树生成渐进学习单元、翻译中文提示并导出。未指定格式时询问 Markdown、PhraseWeave JSON 或两者。"
