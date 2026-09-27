@@ -27,7 +27,7 @@ MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 2
 ANNOTATION_SCHEMA_VERSION = 1
 PHRASEWEAVE_SCHEMA_VERSION = 1
-RULE_SCHEMA_VERSION = 8
+RULE_SCHEMA_VERSION = 9
 RULE_TAGS = {
     "nominal-singleton": "S1",
     "verb-singleton": "S2",
@@ -141,6 +141,8 @@ def load_rules(path: Path) -> tuple[dict[str, Any], str]:
             slot_ids.add(slot["id"])
         if sum(not slot["required"] for slot in rule["slots"]) > 1:
             raise ConfigurationError(f"{location} may define at most one optional slot")
+        if sum(slot["required"] for slot in rule["slots"]) > 1:
+            raise ConfigurationError(f"{location} may define at most one required slot")
     digest = hashlib.sha256(raw).hexdigest()
     return rules, digest
 
@@ -176,20 +178,32 @@ def _matches(token: Any, condition: Mapping[str, Any]) -> bool:
     )
 
 
-def _slot_targets(token: Any, slot: Mapping[str, Any]) -> list[tuple[Any, str]]:
+def _slot_target_groups(
+    token: Any, slot: Mapping[str, Any], selected: set[int]
+) -> list[tuple[tuple[Any, str], ...]]:
     directions = slot["direction"] if isinstance(slot["direction"], list) else [slot["direction"]]
-    matches = []
+    matches: dict[str, list[Any]] = {}
     for direction in directions:
         if direction == "head":
             candidates = [] if token.head.i == token.i else [token.head]
         else:
-            candidates = list(token.children)
-        matches.extend(
-            (candidate, direction)
+            candidates = sorted(token.children, key=lambda child: child.i)
+        matches[direction] = [
+            candidate
             for candidate in candidates
-            if _matches(candidate, slot["token"])
-        )
-    return matches
+            if candidate.i not in selected and _matches(candidate, slot["token"])
+        ]
+    if matches.get("head") and matches.get("child"):
+        return [
+            ((head, "head"), (child, "child"))
+            for head in matches["head"]
+            for child in matches["child"]
+        ]
+    return [
+        ((candidate, direction),)
+        for direction in directions
+        for candidate in matches[direction]
+    ]
 
 
 def _sentence_segments(sentence: str, sent: Any, token_ids: set[int]) -> list[dict[str, int]]:
@@ -292,18 +306,16 @@ def _build_sentence(sentence_span: Any, rules: Mapping[str, Any]) -> tuple[list[
                 expanded: list[dict[str, Any]] = []
                 for state in states:
                     source = state["bindings"][slot["from"]]
-                    for target, direction in _slot_targets(source, slot):
-                        if target.i in state["tokens"]:
-                            continue
-                        edge = (
-                            (target.i, source.i)
-                            if direction == "head"
-                            else (source.i, target.i)
-                        )
+                    for group in _slot_target_groups(source, slot, state["tokens"]):
+                        target_ids = {target.i for target, _ in group}
+                        edges = {
+                            (target.i, source.i) if direction == "head" else (source.i, target.i)
+                            for target, direction in group
+                        }
                         expanded.append({
-                            "bindings": {**state["bindings"], slot["id"]: target},
-                            "tokens": state["tokens"] | {target.i},
-                            "edges": state["edges"] | {edge},
+                            "bindings": state["bindings"],
+                            "tokens": state["tokens"] | target_ids,
+                            "edges": state["edges"] | edges,
                         })
                 states = expanded
                 if len(states) + anchor_state_count > rules["max_units_per_anchor"]:

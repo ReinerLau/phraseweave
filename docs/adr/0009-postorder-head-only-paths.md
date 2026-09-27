@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受，取代 [ADR 0008](0008-node-local-dependency-paths.md)；结果顺序由 [ADR 0010](0010-prerequisite-learning-unit-order.md) 修订。
+已接受，取代 [ADR 0008](0008-node-local-dependency-paths.md)；结果顺序由 [ADR 0010](0010-prerequisite-learning-unit-order.md) 修订；多方向匹配语义由 [ADR 0011](0011-bidirectional-slot-priority.md) 修订。
 
 ## 背景
 
