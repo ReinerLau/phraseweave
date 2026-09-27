@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受
+已被 [ADR 0005](0005-llm-owns-composition.md) 取代；后续决策见 [ADR 0007](0007-dependency-slot-closure.md)
 
 ## 背景
 

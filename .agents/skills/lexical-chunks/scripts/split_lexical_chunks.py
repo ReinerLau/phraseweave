@@ -2,1691 +2,576 @@
 # /// script
 # requires-python = ">=3.10,<3.14"
 # dependencies = [
-#   "click==8.1.8",
 #   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 #   "spacy==3.8.7",
-#   "wn==1.1.1",
 # ]
 # ///
 
-"""Build and render progressive units from lexical content cores."""
+"""Generate learning units from explicit dependency paths."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import re
 import sys
-import unicodedata
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-import wn
-from wn.morphy import Morphy
-
-LEXICON = "oewn:2025"
 SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
+PLAN_SCHEMA_VERSION = 2
+ANNOTATION_SCHEMA_VERSION = 1
+PHRASEWEAVE_SCHEMA_VERSION = 1
+RULE_SCHEMA_VERSION = 8
+RULE_TAGS = {
+    "nominal-singleton": "S1",
+    "verb-singleton": "S2",
+    "adjective-adverb-singleton": "S3",
+    "modifier-to-head": "U1",
+    "object-through-preposition-to-head": "U2",
+    "determiner-through-preposition-to-head": "U3",
+    "possessor-through-preposition-to-head": "U4",
+    "auxiliary-to-head": "U5",
+    "adjective-complement-to-head": "U6",
+    "preposition-to-head-or-object": "U7",
+    "full-sentence": "FULL",
+}
+DEFAULT_RULES = Path(__file__).resolve().parents[1] / "rules" / "closure-rules.json"
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
 DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
-DEFAULT_RULES = Path(__file__).resolve().parents[1] / "rules" / "progression-rules.json"
-ANALYSIS_SCHEMA_VERSION = 6
-ANNOTATION_SCHEMA_VERSION = 6
-MODEL_PLAN_SCHEMA_VERSION = 1
-PHRASEWEAVE_SCHEMA_VERSION = 1
-RULE_SCHEMA_VERSION = 4
-SENTENCE_PATTERN = re.compile(
-    r".*?[.!?]+(?:[\"'’”’\)\]]+)?(?=\s|$)|.+$",
-    re.DOTALL,
-)
-TOKEN_PATTERN = re.compile(
-    r"[A-Za-z]+(?:[’'][A-Za-z]+)*(?:-[A-Za-z]+(?:[’'][A-Za-z]+)*)*"
-    r"|\d+(?:,\d{3})*(?:\.\d+)?"
-)
 
 
 class ConfigurationError(RuntimeError):
-    """Raised when fixed input, dependency, or annotation data is incompatible."""
-
-
-@dataclass(frozen=True)
-class Token:
-    text: str
-    start: int
-    end: int
-
-
-@dataclass(frozen=True)
-class SyntaxToken:
-    text: str
-    start: int
-    end: int
-    pos: str
-    dep: str
-    head: int
-
-
-@dataclass(frozen=True)
-class Segment:
-    start: int
-    end: int
-    source: str
-    lexicon_lemmas: frozenset[str] = frozenset()
-    lexicon_pos: frozenset[str] = frozenset()
-    match_kind: str = "none"
-
-
-@dataclass(frozen=True)
-class LexiconEntry:
-    form: str
-    lemma: str
-    pos: str
-
-
-@dataclass(frozen=True)
-class LexiconMatch:
-    start: int
-    end: int
-    lemmas: frozenset[str]
-    pos: frozenset[str]
-    match_kind: str
-
-
-@dataclass(frozen=True)
-class ProgressionRules:
-    content_pos: frozenset[str]
-    excluded_pos: frozenset[str]
-    excluded_dependencies: frozenset[str]
-    lexical_pos_compatibility: Mapping[str, frozenset[str]]
-    combination_strategy: str
-    nominal_head_pos: frozenset[str]
-    nominal_premodifier_dependencies: frozenset[str]
-    verb_particle_head_pos: frozenset[str]
-    verb_particle_dependencies: frozenset[str]
-
-
-@dataclass
-class TrieNode:
-    children: dict[str, TrieNode] = field(default_factory=dict)
-    terminals: set[tuple[str, str]] = field(default_factory=set)
+    """Raised when rules, plans, annotations, or fixed dependencies are incompatible."""
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Analyze lexical cores from English stdin or render validated "
-            "deterministic/model learning-unit plans."
-        )
+        description="Generate node-local dependency-path learning units or render translations."
     )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--analysis-output",
-        type=Path,
-        help="write structured sentences, atoms, and learning units to this path",
-    )
-    mode.add_argument(
-        "--render-analysis",
-        type=Path,
-        help="load analysis JSON and read aligned Chinese prompts JSON from stdin",
-    )
-    mode.add_argument(
-        "--render-model-plan",
-        type=Path,
-        help=(
-            "load deterministic analysis JSON and read a model composition plan "
-            "with aligned Chinese prompts from stdin"
-        ),
-    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--plan-output", type=Path, help="analyze English from stdin")
+    mode.add_argument("--render-plan", type=Path, help="render a validated plan")
+    parser.add_argument("--rules", type=Path, default=DEFAULT_RULES, help="dependency path rules JSON")
+    parser.add_argument("--trace-output", type=Path, help="write a Markdown derivation trace")
+    parser.add_argument("--output", type=Path, help="Markdown or PhraseWeave output path")
     parser.add_argument(
-        "--output",
-        type=Path,
-        help=(
-            "primary output path; Markdown by default, PhraseWeave JSON when "
-            "--format phraseweave is selected"
-        ),
+        "--format", choices=("markdown", "phraseweave", "both"), default="markdown"
     )
-    parser.add_argument(
-        "--format",
-        choices=("markdown", "phraseweave", "both"),
-        default="markdown",
-        help="output format (default: markdown)",
-    )
-    parser.add_argument(
-        "--phraseweave-output",
-        type=Path,
-        help="optional PhraseWeave JSON path; otherwise derive it from --output",
-    )
+    parser.add_argument("--phraseweave-output", type=Path)
     return parser.parse_args()
-
-
-def split_sentences(text: str) -> list[str]:
-    text = re.sub(r"\\\r?\n", "\n", text)
-    normalized = re.sub(r"\s+", " ", text).strip()
-    if not normalized:
-        return []
-    return [match.group(0).strip() for match in SENTENCE_PATTERN.finditer(normalized)]
-
-
-def tokenize(sentence: str) -> list[Token]:
-    return [
-        Token(match.group(0), match.start(), match.end())
-        for match in TOKEN_PATTERN.finditer(sentence)
-    ]
-
-
-def ensure_lexicon() -> wn.Wordnet:
-    installed = any(
-        lexicon.id == "oewn" and lexicon.version == "2025" for lexicon in wn.lexicons()
-    )
-    if not installed:
-        wn.download(LEXICON)
-    return wn.Wordnet(LEXICON)
 
 
 def load_syntax_model() -> Any:
     try:
-        spacy_version = version("spacy")
-        model_version = version(MODEL_DISTRIBUTION)
+        installed_spacy = version("spacy")
+        installed_model = version(MODEL_DISTRIBUTION)
     except PackageNotFoundError as error:
+        raise ConfigurationError(f"required spaCy dependency is missing: {error.name}") from error
+    if installed_spacy != SPACY_VERSION:
+        raise ConfigurationError(f"spaCy {SPACY_VERSION} is required; found {installed_spacy}")
+    if installed_model != MODEL_VERSION:
         raise ConfigurationError(
-            f"required syntax dependency is missing: {error.name}"
-        ) from error
-    if spacy_version != SPACY_VERSION:
-        raise ConfigurationError(
-            f"spaCy {SPACY_VERSION} is required; found {spacy_version}"
+            f"{MODEL_DISTRIBUTION} {MODEL_VERSION} is required; found {installed_model}"
         )
-    if model_version != MODEL_VERSION:
-        raise ConfigurationError(
-            f"{MODEL_DISTRIBUTION} {MODEL_VERSION} is required; found {model_version}"
-        )
-
     try:
         import en_core_web_sm
 
         return en_core_web_sm.load()
     except Exception as error:
-        raise ConfigurationError(f"cannot load fixed syntax model: {error}") from error
+        raise ConfigurationError(f"cannot load fixed spaCy model: {error}") from error
 
 
-def analyze_sentence(nlp: Any, sentence: str) -> list[SyntaxToken]:
-    return [
-        SyntaxToken(
-            text=token.text,
-            start=token.idx,
-            end=token.idx + len(token.text),
-            pos=token.pos_,
-            dep=token.dep_,
-            head=token.head.i,
-        )
-        for token in nlp(sentence)
-    ]
-
-
-def load_rules(path: Path = DEFAULT_RULES) -> ProgressionRules:
+def load_rules(path: Path) -> tuple[dict[str, Any], str]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.expanduser().read_bytes()
+        rules = json.loads(raw)
     except (OSError, json.JSONDecodeError) as error:
-        raise ConfigurationError(
-            f"cannot load progression rules from {path}: {error}"
-        ) from error
-    if not isinstance(payload, dict):
-        raise ConfigurationError("progression rules must be a JSON object")
-    _require_exact_keys(
-        payload,
-        {
-            "schema_version",
-            "content_pos",
-            "excluded_pos",
-            "excluded_dependencies",
-            "lexical_pos_compatibility",
-            "combination_strategy",
-            "nominal_head_pos",
-            "nominal_premodifier_dependencies",
-            "verb_particle_head_pos",
-            "verb_particle_dependencies",
-        },
-        "progression rules",
+        raise ConfigurationError(f"cannot load dependency-path rules from {path}: {error}") from error
+    _exact_keys(rules, {"schema_version", "max_units_per_anchor", "singleton_rules", "unit_rules"}, "rules")
+    if rules["schema_version"] != RULE_SCHEMA_VERSION:
+        raise ConfigurationError(f"rules must use schema_version {RULE_SCHEMA_VERSION}")
+    if not isinstance(rules["max_units_per_anchor"], int) or rules["max_units_per_anchor"] < 1:
+        raise ConfigurationError("rules.max_units_per_anchor must be a positive integer")
+    if not isinstance(rules["singleton_rules"], list) or not isinstance(rules["unit_rules"], list):
+        raise ConfigurationError("rules.singleton_rules and rules.unit_rules must be lists")
+    for index, rule in enumerate(rules["singleton_rules"]):
+        _exact_keys(rule, {"id", "priority", "when"}, f"rules.singleton_rules[{index}]")
+        if not isinstance(rule["id"], str) or not isinstance(rule["priority"], int) or not isinstance(rule["when"], dict):
+            raise ConfigurationError(f"rules.singleton_rules[{index}] has invalid fields")
+        _validate_condition(rule["when"], f"rules.singleton_rules[{index}].when")
+    for index, rule in enumerate(rules["unit_rules"]):
+        location = f"rules.unit_rules[{index}]"
+        _exact_keys(rule, {"id", "anchor", "slots"}, location)
+        if not isinstance(rule["id"], str):
+            raise ConfigurationError(f"{location}.id must be a string")
+        if not isinstance(rule["anchor"], dict) or not isinstance(rule["slots"], list):
+            raise ConfigurationError(f"{location} needs an anchor condition and slot list")
+        _validate_condition(rule["anchor"], f"{location}.anchor")
+        slot_ids = {"anchor"}
+        required_ids = {"anchor"}
+        for slot_index, slot in enumerate(rule["slots"]):
+            slot_location = f"{location}.slots[{slot_index}]"
+            _exact_keys(slot, {"id", "from", "direction", "token", "required"}, slot_location)
+            if not isinstance(slot["id"], str) or slot["id"] in slot_ids:
+                raise ConfigurationError(f"{slot_location}.id must be unique within its rule")
+            if not isinstance(slot["from"], str) or slot["from"] not in slot_ids:
+                raise ConfigurationError(f"{slot_location}.from must refer to anchor or an earlier slot")
+            if not isinstance(slot["direction"], (str, list)):
+                raise ConfigurationError(f"{slot_location}.direction must be head, child, or a list of both")
+            directions = slot["direction"] if isinstance(slot["direction"], list) else [slot["direction"]]
+            if not directions or not all(isinstance(direction, str) and direction in {"head", "child"} for direction in directions):
+                raise ConfigurationError(f"{slot_location}.direction must contain head and/or child")
+            if len(set(directions)) != len(directions):
+                raise ConfigurationError(f"{slot_location}.direction cannot repeat a direction")
+            if not isinstance(slot["token"], dict):
+                raise ConfigurationError(f"{slot_location}.token must be an object")
+            _validate_condition(slot["token"], f"{slot_location}.token")
+            if not isinstance(slot["required"], bool):
+                raise ConfigurationError(f"{slot_location}.required must be a boolean")
+            if slot["required"]:
+                if slot["from"] not in required_ids:
+                    raise ConfigurationError(f"{slot_location}.from cannot refer to an optional slot")
+                required_ids.add(slot["id"])
+            slot_ids.add(slot["id"])
+        if sum(not slot["required"] for slot in rule["slots"]) > 1:
+            raise ConfigurationError(f"{location} may define at most one optional slot")
+    digest = hashlib.sha256(raw).hexdigest()
+    return rules, digest
+
+
+def _exact_keys(value: Any, keys: set[str], location: str) -> None:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ConfigurationError(f"{location} must contain exactly: {', '.join(sorted(keys))}")
+
+
+def _validate_condition(condition: Mapping[str, Any], location: str) -> None:
+    unsupported = set(condition) - {"pos", "dep"}
+    if unsupported:
+        names = ", ".join(sorted(unsupported))
+        raise ConfigurationError(f"{location} only supports POS and dependency labels; unsupported: {names}")
+    for key, value in condition.items():
+        values = value if isinstance(value, list) else [value]
+        if not values or not all(isinstance(item, str) for item in values):
+            raise ConfigurationError(f"{location}.{key} must be a string or non-empty list of strings")
+
+
+def _values(condition: Mapping[str, Any], key: str) -> set[str] | None:
+    value = condition.get(key)
+    if value is None:
+        return None
+    return set(value if isinstance(value, list) else [value])
+
+
+def _matches(token: Any, condition: Mapping[str, Any]) -> bool:
+    return all(
+        actual in expected
+        for key, actual in (("pos", token.pos_), ("dep", token.dep_))
+        if (expected := _values(condition, key)) is not None
     )
-    if payload["schema_version"] != RULE_SCHEMA_VERSION:
-        raise ConfigurationError(
-            f"progression rules must use schema_version {RULE_SCHEMA_VERSION}"
+
+
+def _slot_targets(token: Any, slot: Mapping[str, Any]) -> list[tuple[Any, str]]:
+    directions = slot["direction"] if isinstance(slot["direction"], list) else [slot["direction"]]
+    matches = []
+    for direction in directions:
+        if direction == "head":
+            candidates = [] if token.head.i == token.i else [token.head]
+        else:
+            candidates = list(token.children)
+        matches.extend(
+            (candidate, direction)
+            for candidate in candidates
+            if _matches(candidate, slot["token"])
         )
-    content_pos = _non_empty_string_set(payload["content_pos"], "content_pos")
-    excluded_pos = _non_empty_string_set(payload["excluded_pos"], "excluded_pos")
-    excluded = _non_empty_string_set(
-        payload["excluded_dependencies"], "excluded_dependencies"
-    )
-    raw_compatibility = payload["lexical_pos_compatibility"]
-    if not isinstance(raw_compatibility, dict) or not raw_compatibility:
-        raise ConfigurationError("lexical_pos_compatibility must be a non-empty object")
-    compatibility: dict[str, frozenset[str]] = {}
-    for lexical_pos, contextual_pos in raw_compatibility.items():
-        if not isinstance(lexical_pos, str) or not lexical_pos:
-            raise ConfigurationError(
-                "lexical_pos_compatibility keys must be non-empty strings"
-            )
-        compatibility[lexical_pos] = _non_empty_string_set(
-            contextual_pos, f"lexical_pos_compatibility.{lexical_pos}"
-        )
-    strategy = payload["combination_strategy"]
-    if strategy != "nominal_phrase_first_right_fold":
-        raise ConfigurationError(
-            "progression rules combination_strategy must be "
-            "nominal_phrase_first_right_fold"
-        )
-    nominal_head_pos = _non_empty_string_set(
-        payload["nominal_head_pos"], "nominal_head_pos"
-    )
-    nominal_dependencies = _non_empty_string_set(
-        payload["nominal_premodifier_dependencies"],
-        "nominal_premodifier_dependencies",
-    )
-    verb_particle_head_pos = _non_empty_string_set(
-        payload["verb_particle_head_pos"], "verb_particle_head_pos"
-    )
-    verb_particle_dependencies = _non_empty_string_set(
-        payload["verb_particle_dependencies"], "verb_particle_dependencies"
-    )
-    return ProgressionRules(
-        content_pos,
-        excluded_pos,
-        excluded,
-        compatibility,
-        strategy,
-        nominal_head_pos,
-        nominal_dependencies,
-        verb_particle_head_pos,
-        verb_particle_dependencies,
-    )
-
-
-def _non_empty_string_set(value: Any, location: str) -> frozenset[str]:
-    if (
-        not isinstance(value, list)
-        or not value
-        or not all(isinstance(item, str) and item for item in value)
-    ):
-        raise ConfigurationError(f"{location} must be a non-empty string list")
-    if len(value) != len(set(value)):
-        raise ConfigurationError(f"{location} must not contain duplicates")
-    return frozenset(value)
-
-
-def build_trie(entries: Iterable[LexiconEntry]) -> TrieNode:
-    root = TrieNode()
-    for entry in entries:
-        parts = tuple(normalize(part) for part in entry.form.replace("_", " ").split())
-        if not parts:
-            continue
-        node = root
-        for part in parts:
-            node = node.children.setdefault(part, TrieNode())
-        node.terminals.add((normalize(entry.lemma), entry.pos))
-    return root
-
-
-def lexicon_entries(wordnet: wn.Wordnet) -> Iterable[LexiconEntry]:
-    seen: set[tuple[str, str, str]] = set()
-    for word in wordnet.words():
-        lemma = normalize(word.lemma())
-        for form in word.forms():
-            normalized = normalize(form)
-            identity = (normalized, lemma, word.pos)
-            if identity not in seen:
-                seen.add(identity)
-                yield LexiconEntry(normalized, lemma, word.pos)
-
-
-def token_variants(token: str, lemmatize: Callable) -> dict[str, bool]:
-    normalized = normalize(token)
-    variants = {normalized: False}
-    for lemmas in lemmatize(normalized).values():
-        for lemma in lemmas:
-            normalized_lemma = normalize(lemma)
-            variants.setdefault(normalized_lemma, normalized_lemma != normalized)
-    return variants
-
-
-def normalize(form: str) -> str:
-    return unicodedata.normalize("NFC", form).casefold()
-
-
-def can_join(sentence: str, left: Token, right: Token) -> bool:
-    return sentence[left.end : right.start].isspace()
-
-
-def find_lexicon_spans(
-    sentence: str,
-    tokens: Sequence[Token],
-    trie: TrieNode,
-    lemmatize: Callable[[str], dict[str | None, set[str]]],
-) -> list[LexiconMatch]:
-    variants = [token_variants(token.text, lemmatize) for token in tokens]
-    matches: list[LexiconMatch] = []
-
-    for start in range(len(tokens)):
-        active_nodes: dict[int, tuple[TrieNode, bool]] = {id(trie): (trie, False)}
-        for end in range(start, len(tokens)):
-            if end > start and not can_join(sentence, tokens[end - 1], tokens[end]):
-                break
-
-            next_nodes: dict[int, tuple[TrieNode, bool]] = {}
-            for node, used_morphy in active_nodes.values():
-                for variant, variant_uses_morphy in variants[end].items():
-                    child = node.children.get(variant)
-                    if child is None:
-                        continue
-                    child_uses_morphy = used_morphy or variant_uses_morphy
-                    existing = next_nodes.get(id(child))
-                    if existing is None or (existing[1] and not child_uses_morphy):
-                        next_nodes[id(child)] = (child, child_uses_morphy)
-            if not next_nodes:
-                break
-
-            terminal_states = [
-                (node, used_morphy)
-                for node, used_morphy in next_nodes.values()
-                if node.terminals
-            ]
-            if terminal_states:
-                best_uses_morphy = all(used for _, used in terminal_states)
-                terminal_states = [
-                    (node, used)
-                    for node, used in terminal_states
-                    if used == best_uses_morphy
-                ]
-                entries = {
-                    entry for node, _ in terminal_states for entry in node.terminals
-                }
-                matches.append(
-                    LexiconMatch(
-                        start=start,
-                        end=end + 1,
-                        lemmas=frozenset(lemma for lemma, _ in entries),
-                        pos=frozenset(pos for _, pos in entries),
-                        match_kind=("morphy" if best_uses_morphy else "surface"),
-                    )
-                )
-            active_nodes = next_nodes
-
     return matches
 
 
-def select_longest_spans(
-    token_count: int, candidates: Iterable[LexiconMatch]
-) -> list[LexiconMatch]:
-    occupied = [False] * token_count
-    selected: list[LexiconMatch] = []
-    for candidate in sorted(
-        candidates,
-        key=lambda match: (
-            -(match.end - match.start),
-            match.start,
-            match.end,
-        ),
-    ):
-        if not any(occupied[candidate.start : candidate.end]):
-            selected.append(candidate)
-            occupied[candidate.start : candidate.end] = [True] * (
-                candidate.end - candidate.start
-            )
-    return sorted(selected, key=lambda match: (match.start, match.end))
-
-
-def find_verb_particle_spans(
-    sentence: str,
-    tokens: Sequence[Token],
-    syntax: Sequence[SyntaxToken],
-    rules: ProgressionRules,
-) -> list[Segment]:
-    token_indexes = {
-        (token.start, token.end): index for index, token in enumerate(tokens)
-    }
-    spans: list[Segment] = []
-    for particle in syntax:
-        if (
-            particle.dep not in rules.verb_particle_dependencies
-            or not 0 <= particle.head < len(syntax)
-        ):
-            continue
-        verb = syntax[particle.head]
-        if verb.pos not in rules.verb_particle_head_pos:
-            continue
-        verb_index = token_indexes.get((verb.start, verb.end))
-        particle_index = token_indexes.get((particle.start, particle.end))
-        if (
-            verb_index is None
-            or particle_index != verb_index + 1
-            or not can_join(sentence, tokens[verb_index], tokens[particle_index])
-        ):
-            continue
-        spans.append(
-            Segment(
-                verb_index,
-                particle_index + 1,
-                "syntax",
-                match_kind="verb_particle",
-            )
-        )
-    return spans
-
-
-def initial_segments(
-    token_count: int,
-    lexicon_spans: Sequence[LexiconMatch],
-    syntax_spans: Sequence[Segment],
-) -> list[Segment]:
-    multiword_lexicon = [
-        match for match in lexicon_spans if match.end - match.start > 1
-    ]
-    accepted_syntax: list[Segment] = []
-    for candidate in sorted(syntax_spans, key=lambda span: (span.start, span.end)):
-        if any(
-            candidate.start < match.end and match.start < candidate.end
-            for match in multiword_lexicon
-        ):
-            continue
-        if any(
-            candidate.start < match.end and match.start < candidate.end
-            for match in accepted_syntax
-        ):
-            continue
-        accepted_syntax.append(candidate)
-
-    multiword_by_start = {match.start: match for match in multiword_lexicon}
-    syntax_by_start = {span.start: span for span in accepted_syntax}
-    single_lexicon_by_start = {
-        match.start: match for match in lexicon_spans if match.end - match.start == 1
-    }
-    segments: list[Segment] = []
-    index = 0
-    while index < token_count:
-        match = multiword_by_start.get(index)
-        if match is not None:
-            segments.append(
-                Segment(
-                    match.start,
-                    match.end,
-                    "oewn",
-                    match.lemmas,
-                    match.pos,
-                    match.match_kind,
-                )
-            )
-            index = match.end
-            continue
-        syntax_span = syntax_by_start.get(index)
-        if syntax_span is not None:
-            segments.append(syntax_span)
-            index = syntax_span.end
-            continue
-        match = single_lexicon_by_start.get(index)
-        if match is not None:
-            segments.append(
-                Segment(
-                    match.start,
-                    match.end,
-                    "oewn",
-                    match.lemmas,
-                    match.pos,
-                    match.match_kind,
-                )
-            )
-            index = match.end
-            continue
-        segments.append(Segment(index, index + 1, "token"))
-        index += 1
-    return segments
-
-
-def _syntax_indexes(
-    segment: Segment, tokens: Sequence[Token], syntax: Sequence[SyntaxToken]
-) -> tuple[int, ...]:
-    start = tokens[segment.start].start
-    end = tokens[segment.end - 1].end
-    return tuple(
-        index
-        for index, item in enumerate(syntax)
-        if item.start < end and item.end > start
-    )
-
-
-def _head_indexes(
-    indexes: Sequence[int], syntax: Sequence[SyntaxToken]
-) -> tuple[int, ...]:
-    members = set(indexes)
-    heads = tuple(
-        index
-        for index in indexes
-        if syntax[index].head not in members or syntax[index].head == index
-    )
-    return heads or tuple(indexes)
-
-
-def _segment_head_index(
-    segment: Segment, tokens: Sequence[Token], syntax: Sequence[SyntaxToken]
-) -> int | None:
-    indexes = _syntax_indexes(segment, tokens, syntax)
-    heads = _head_indexes(indexes, syntax)
-    return heads[0] if heads else None
-
-
-def _segment_head_pos(
-    segment: Segment, tokens: Sequence[Token], syntax: Sequence[SyntaxToken]
-) -> str:
-    head = _segment_head_index(segment, tokens, syntax)
-    return syntax[head].pos if head is not None else ""
-
-
-def _segment_head_dep(
-    segment: Segment, tokens: Sequence[Token], syntax: Sequence[SyntaxToken]
-) -> str:
-    head = _segment_head_index(segment, tokens, syntax)
-    return syntax[head].dep if head is not None else ""
-
-
-def _segment_is_core(
-    segment: Segment,
-    tokens: Sequence[Token],
-    syntax: Sequence[SyntaxToken],
-    rules: ProgressionRules,
-) -> bool:
-    indexes = _syntax_indexes(segment, tokens, syntax)
-    heads = _head_indexes(indexes, syntax)
-    if any(
-        syntax[index].pos in rules.excluded_pos
-        or syntax[index].dep in rules.excluded_dependencies
-        for index in heads
-    ):
-        return False
-
-    if segment.source == "oewn":
-        if segment.end - segment.start > 1:
-            return True
-        if any(
-            syntax[index].pos
-            in rules.lexical_pos_compatibility.get(lexical_pos, frozenset())
-            for index in heads
-            for lexical_pos in segment.lexicon_pos
-        ):
-            return True
-        return segment.match_kind == "surface"
-
-    if segment.source == "syntax":
-        return segment.match_kind == "verb_particle" and any(
-            syntax[index].pos in rules.verb_particle_head_pos for index in heads
-        )
-
-    return any(syntax[index].pos in rules.content_pos for index in heads)
-
-
-def find_sentence_atoms(
-    sentence: str,
-    trie: TrieNode,
-    lemmatize: Callable[[str], dict[str | None, set[str]]],
-    analyze: Callable[[str], Sequence[SyntaxToken]],
-    rules: ProgressionRules,
-) -> list[dict[str, Any]]:
-    tokens = tokenize(sentence)
-    if not tokens:
+def _sentence_segments(sentence: str, sent: Any, token_ids: set[int]) -> list[dict[str, int]]:
+    selected = [token for token in sent if token.i in token_ids and not token.is_punct and not token.is_space]
+    if not selected:
         return []
-    syntax = analyze(sentence)
-    candidates = find_lexicon_spans(sentence, tokens, trie, lemmatize)
-    selected = select_longest_spans(len(tokens), candidates)
-    syntax_spans = find_verb_particle_spans(sentence, tokens, syntax, rules)
-    segments = initial_segments(len(tokens), selected, syntax_spans)
-    syntax_to_atom: dict[int, int] = {}
-    segment_heads: list[int | None] = []
-    for atom_index, segment in enumerate(segments):
-        syntax_indexes = _syntax_indexes(segment, tokens, syntax)
-        for syntax_index in syntax_indexes:
-            syntax_to_atom[syntax_index] = atom_index
-        segment_heads.append(_segment_head_index(segment, tokens, syntax))
-
-    atoms: list[dict[str, Any]] = []
-    for atom_index, segment in enumerate(segments):
-        start = tokens[segment.start].start
-        end = tokens[segment.end - 1].end
-        syntax_head = segment_heads[atom_index]
-        parent_atom = None
-        if syntax_head is not None and syntax[syntax_head].head != syntax_head:
-            parent_atom = syntax_to_atom.get(syntax[syntax_head].head)
-        atoms.append(
-            {
-                "text": sentence[start:end],
-                "start": start,
-                "end": end,
-                "source": segment.source,
-                "lexicon_lemmas": sorted(segment.lexicon_lemmas),
-                "lexicon_pos": sorted(segment.lexicon_pos),
-                "match_kind": segment.match_kind,
-                "head_pos": _segment_head_pos(segment, tokens, syntax),
-                "head_dep": _segment_head_dep(segment, tokens, syntax),
-                "head_atom": parent_atom,
-                "core": _segment_is_core(segment, tokens, syntax, rules),
-            }
-        )
-    return atoms
-
-
-def _modifier_reaches_nominal_head(
-    candidate_index: int,
-    head_index: int,
-    atoms: Sequence[Mapping[str, Any]],
-    rules: ProgressionRules,
-) -> bool:
-    current = candidate_index
-    visited: set[int] = set()
-    while current != head_index:
-        if current in visited:
-            return False
-        visited.add(current)
-        atom = atoms[current]
-        if atom["head_dep"] not in rules.nominal_premodifier_dependencies:
-            return False
-        parent = atom["head_atom"]
-        if not isinstance(parent, int) or parent <= current or parent > head_index:
-            return False
-        current = parent
-    return True
-
-
-def _nominal_core_groups(
-    atoms: Sequence[Mapping[str, Any]], rules: ProgressionRules
-) -> list[list[tuple[int, Mapping[str, Any]]]]:
-    cores = [(index, atom) for index, atom in enumerate(atoms) if atom["core"]]
-    assigned: set[int] = set()
-    phrases: list[list[tuple[int, Mapping[str, Any]]]] = []
-
-    for core_position in range(len(cores) - 1, -1, -1):
-        head_atom_index, head = cores[core_position]
-        if core_position in assigned or head["head_pos"] not in rules.nominal_head_pos:
-            continue
-        start_position = core_position
-        for candidate_position in range(core_position - 1, -1, -1):
-            candidate_atom_index, _ = cores[candidate_position]
-            if candidate_position in assigned or not _modifier_reaches_nominal_head(
-                candidate_atom_index, head_atom_index, atoms, rules
-            ):
-                break
-            start_position = candidate_position
-        if start_position == core_position:
-            continue
-        phrase = cores[start_position : core_position + 1]
-        phrases.append(phrase)
-        assigned.update(range(start_position, core_position + 1))
-
-    by_start = {phrase[0][0]: phrase for phrase in phrases}
-    groups: list[list[tuple[int, Mapping[str, Any]]]] = []
-    atom_position = 0
-    while atom_position < len(atoms):
-        phrase = by_start.get(atom_position)
-        if phrase is not None:
-            groups.append(phrase)
-            atom_position = phrase[-1][0] + 1
-            continue
-        atom = atoms[atom_position]
-        if atom["core"]:
-            groups.append([(atom_position, atom)])
-        atom_position += 1
-    return groups
-
-
-def _composition_unit(
-    sentence: str,
-    left: Mapping[str, Any],
-    right: Mapping[str, Any],
-    core_count: int,
-) -> dict[str, Any]:
-    return {
-        "text": sentence[left["start"] : right["end"]],
-        "start": left["start"],
-        "end": right["end"],
-        "kind": "composition",
-        "core_count": core_count,
-    }
-
-
-def build_learning_units(
-    sentence: str,
-    atoms: Sequence[Mapping[str, Any]],
-    rules: ProgressionRules,
-) -> list[dict[str, Any]]:
-    cores = [atom for atom in atoms if atom["core"]]
-    units = [
+    runs: list[list[Any]] = [[selected[0]]]
+    for token in selected[1:]:
+        if token.i == runs[-1][-1].i + 1:
+            runs[-1].append(token)
+        else:
+            runs.append([token])
+    sentence_start = sent.start_char + (len(sent.text) - len(sent.text.lstrip()))
+    return [
         {
-            "text": core["text"],
-            "start": core["start"],
-            "end": core["end"],
-            "kind": "core",
-            "core_count": 1,
+            "start": run[0].idx - sentence_start,
+            "end": run[-1].idx + len(run[-1].text) - sentence_start,
         }
-        for core in cores
+        for run in runs
     ]
-    if len(cores) < 2:
-        return units
 
-    groups = _nominal_core_groups(atoms, rules)
-    total_core_count = len(cores)
-    composition_ranges: set[tuple[int, int]] = set()
 
-    for group in groups:
-        if len(group) < 2:
-            continue
-        for core_count in range(2, len(group) + 1):
-            phrase_cores = group[-core_count:]
-            if core_count >= total_core_count:
+def _segments_text(sentence: str, segments: Sequence[Mapping[str, int]]) -> str:
+    return " ".join(sentence[item["start"] : item["end"]] for item in segments)
+
+
+def _build_sentence(sentence_span: Any, rules: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    sentence = sentence_span.text.strip()
+    sent = sentence_span
+    tokens = [token for token in sent if not token.is_space and not token.is_punct]
+    by_id = {token.i: token for token in tokens}
+    trace: dict[str, Any] = {"tokens": [], "rule_matches": [], "unmatched_edges": [], "derivations": []}
+    generated: dict[tuple[int, ...], dict[str, Any]] = {}
+    matched_edges: set[tuple[int, int]] = set()
+    postorder: dict[int, int] = {}
+    visited: set[int] = set()
+
+    def record(anchor: Any, token_ids: set[int], rule_id: str, kind: str) -> None:
+        key = tuple(sorted(token_ids))
+        if len(key) == 1 and key[0] not in by_id:
+            return
+        unit = generated.setdefault(
+            key,
+            {"anchor": anchor.i, "tokens": set(token_ids), "rule_ids": [], "kind": kind},
+        )
+        if rule_id not in unit["rule_ids"]:
+            unit["rule_ids"].append(rule_id)
+        trace["rule_matches"].append({"token": anchor.text, "rule": rule_id, "type": kind})
+        trace["derivations"].append(
+            {"anchor": anchor.text, "tokens": list(key), "rules": [rule_id]}
+        )
+
+    def process_node(token: Any) -> None:
+        trace["tokens"].append(
+            {"text": token.text, "pos": token.pos_, "dep": token.dep_, "head": token.head.text}
+        )
+        matches = [rule for rule in rules["singleton_rules"] if _matches(token, rule["when"])]
+        if matches:
+            priority = max(rule["priority"] for rule in matches)
+            winners = [rule for rule in matches if rule["priority"] == priority]
+            if len(winners) > 1:
+                raise ConfigurationError(
+                    f"ambiguous singleton rules for token {token.text!r}: "
+                    + ", ".join(rule["id"] for rule in winners)
+                )
+            record(token, {token.i}, winners[0]["id"], "singleton")
+
+        anchor = token
+        anchor_state_count = 0
+        for rule in rules["unit_rules"]:
+            if not _matches(anchor, rule["anchor"]):
                 continue
-            unit = _composition_unit(
-                sentence, phrase_cores[0][1], phrase_cores[-1][1], core_count
+            states: list[dict[str, Any]] = [{
+                "bindings": {"anchor": anchor},
+                "tokens": {anchor.i},
+                "edges": set(),
+            }]
+            for slot in rule["slots"]:
+                if not slot["required"]:
+                    continue
+                expanded: list[dict[str, Any]] = []
+                for state in states:
+                    source = state["bindings"][slot["from"]]
+                    for target, direction in _slot_targets(source, slot):
+                        if target.i in state["tokens"]:
+                            continue
+                        edge = (
+                            (target.i, source.i)
+                            if direction == "head"
+                            else (source.i, target.i)
+                        )
+                        expanded.append({
+                            "bindings": {**state["bindings"], slot["id"]: target},
+                            "tokens": state["tokens"] | {target.i},
+                            "edges": state["edges"] | {edge},
+                        })
+                states = expanded
+                if len(states) + anchor_state_count > rules["max_units_per_anchor"]:
+                    raise ConfigurationError(
+                        f"path rules exceed {rules['max_units_per_anchor']} units at token {anchor.text!r}"
+                    )
+                if not states:
+                    break
+            for state in states:
+                # An empty required path denotes the anchor itself; reuse an existing singleton.
+                if len(state["tokens"]) > 1 or tuple(sorted(state["tokens"])) not in generated:
+                    record(anchor, state["tokens"], rule["id"], "path")
+                matched_edges.update(state["edges"])
+                anchor_state_count += 1
+                if anchor_state_count > rules["max_units_per_anchor"]:
+                    raise ConfigurationError(
+                        f"path rules exceed {rules['max_units_per_anchor']} units at token {anchor.text!r}"
+                    )
+
+    def visit(token: Any) -> None:
+        if token.i in visited:
+            return
+        visited.add(token.i)
+        for child in sorted(
+            (child for child in token.children if not child.is_punct and not child.is_space),
+            key=lambda child: child.i,
+        ):
+            visit(child)
+        process_node(token)
+        postorder[token.i] = len(postorder)
+
+    for token in tokens:
+        if token.head.i == token.i:
+            visit(token)
+    for token in tokens:
+        visit(token)
+
+    for token in tokens:
+        if token.head.i != token.i and (token.head.i, token.i) not in matched_edges:
+            trace["unmatched_edges"].append(
+                {"head": token.head.text, "child": token.text, "dep": token.dep_}
             )
-            identity = (unit["start"], unit["end"])
-            if identity not in composition_ranges:
-                units.append(unit)
-                composition_ranges.add(identity)
 
-    if len(groups) < 2:
-        return units
-
-    right_end = groups[-1][-1][1]
-    accumulated_core_count = len(groups[-1])
-    for left_group in reversed(groups[:-1]):
-        accumulated_core_count += len(left_group)
-        if accumulated_core_count >= total_core_count:
-            break
-        unit = _composition_unit(
-            sentence,
-            left_group[0][1],
-            right_end,
-            accumulated_core_count,
+    units: list[dict[str, Any]] = []
+    for state in generated.values():
+        segments = _sentence_segments(sentence, sent, state["tokens"])
+        if not segments:
+            continue
+        text = _segments_text(sentence, segments)
+        if text == sentence:
+            continue
+        content_count = sum(
+            by_id[index].pos_ in {"ADJ", "ADV", "NOUN", "NUM", "PROPN", "PRON", "VERB"}
+            for index in state["tokens"]
         )
-        identity = (unit["start"], unit["end"])
-        if identity not in composition_ranges:
-            units.append(unit)
-            composition_ranges.add(identity)
-    return units
-
-
-def find_sentence_units(
-    sentence: str,
-    trie: TrieNode,
-    lemmatize: Callable[[str], dict[str | None, set[str]]],
-    analyze: Callable[[str], Sequence[SyntaxToken]],
-    rules: ProgressionRules,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    atoms = find_sentence_atoms(sentence, trie, lemmatize, analyze, rules)
-    return atoms, build_learning_units(sentence, atoms, rules)
-
-
-def find_chunks(
-    sentence: str,
-    trie: TrieNode,
-    lemmatize: Callable[[str], dict[str | None, set[str]]],
-    analyze: Callable[[str], Sequence[SyntaxToken]],
-    rules: ProgressionRules,
-) -> list[str]:
-    _, units = find_sentence_units(sentence, trie, lemmatize, analyze, rules)
-    chunks = [unit["text"] for unit in units]
-    if not chunks or chunks[-1] != sentence:
-        chunks.append(sentence)
-    return chunks
-
-
-def build_analysis(
-    sentences: Sequence[str],
-    trie: TrieNode,
-    lemmatize: Callable[[str], dict[str | None, set[str]]],
-    analyze: Callable[[str], Sequence[SyntaxToken]],
-    rules: ProgressionRules,
-) -> dict[str, Any]:
-    analyzed_sentences: list[dict[str, Any]] = []
-    for sentence in sentences:
-        atoms, units = find_sentence_units(sentence, trie, lemmatize, analyze, rules)
-        analyzed_sentences.append(
-            {"sentence": sentence, "atoms": atoms, "learning_units": units}
+        units.append({
+            "text": text,
+            "segments": segments,
+            "kind": "base" if content_count <= 1 else "composition",
+            "_anchor": state["anchor"],
+            "_tokens": tuple(sorted(state["tokens"])),
+        })
+    units.sort(
+        key=lambda unit: (
+            postorder.get(unit["_anchor"], 0),
+            len(unit["_tokens"]),
+            unit["segments"][0]["start"],
+            unit["_tokens"],
         )
+    )
+    output = [{key: unit[key] for key in ("text", "segments", "kind")} for unit in units]
+    output.append({"text": sentence, "segments": [{"start": 0, "end": len(sentence)}], "kind": "sentence"})
+    trace["unit_rules"] = [
+        {"text": unit["text"], "rules": generated[unit["_tokens"]]["rule_ids"]}
+        for unit in units
+    ]
+    trace["unit_rules"].append({
+        "text": sentence,
+        "rules": ["full-sentence"],
+    })
+    return output, trace
+
+
+def generate_plan(text: str, nlp: Any, rules: Mapping[str, Any], rules_digest: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if not text.strip():
+        raise ConfigurationError("No English text was provided on stdin.")
+    document = nlp(text)
+    sentences: list[dict[str, Any]] = []
+    traces: list[dict[str, Any]] = []
+    for sentence_span in document.sents:
+        sentence = sentence_span.text.strip()
+        if sentence:
+            units, trace = _build_sentence(sentence_span, rules)
+            sentences.append({"sentence": sentence, "units": units})
+            traces.append({"sentence": sentence, "units": units, **trace})
+    if not sentences:
+        raise ConfigurationError("spaCy did not find any sentences in the input.")
     return {
-        "schema_version": ANALYSIS_SCHEMA_VERSION,
-        "sentences": analyzed_sentences,
-    }
+        "schema_version": PLAN_SCHEMA_VERSION,
+        "rules_version": rules["schema_version"],
+        "rules_sha256": rules_digest,
+        "sentences": sentences,
+    }, traces
 
 
-def choose_output_path(requested: Path) -> Path:
+def _validate_plan(payload: Any, nlp: Any, rules: Mapping[str, Any], rules_digest: str) -> dict[str, Any]:
+    _exact_keys(payload, {"schema_version", "rules_version", "rules_sha256", "sentences"}, "plan")
+    if payload["schema_version"] != PLAN_SCHEMA_VERSION:
+        raise ConfigurationError(f"plan must use schema_version {PLAN_SCHEMA_VERSION}")
+    if payload["rules_version"] != rules["schema_version"] or payload["rules_sha256"] != rules_digest:
+        raise ConfigurationError("plan dependency-path rules do not match the selected rules file")
+    if not isinstance(payload["sentences"], list) or not payload["sentences"]:
+        raise ConfigurationError("plan.sentences must be a non-empty list")
+    checked: list[dict[str, Any]] = []
+    for index, raw_sentence in enumerate(payload["sentences"]):
+        location = f"plan.sentences[{index}]"
+        _exact_keys(raw_sentence, {"sentence", "units"}, location)
+        if not isinstance(raw_sentence["sentence"], str) or not raw_sentence["sentence"].strip():
+            raise ConfigurationError(f"{location}.sentence must be non-empty")
+        if not isinstance(raw_sentence["units"], list):
+            raise ConfigurationError(f"{location}.units must be a list")
+        expected, _ = generate_plan(raw_sentence["sentence"], nlp, rules, rules_digest)
+        if len(expected["sentences"]) != 1 or expected["sentences"][0]["sentence"] != raw_sentence["sentence"]:
+            raise ConfigurationError(f"{location}.sentence must contain exactly one sentence")
+        for unit_index, unit in enumerate(raw_sentence["units"]):
+            unit_location = f"{location}.units[{unit_index}]"
+            _exact_keys(unit, {"text", "segments", "kind"}, unit_location)
+            if not isinstance(unit["segments"], list) or not unit["segments"]:
+                raise ConfigurationError(f"{unit_location}.segments must be a non-empty list")
+            previous_end = -1
+            for segment in unit["segments"]:
+                _exact_keys(segment, {"start", "end"}, f"{unit_location}.segments[]")
+                start, end = segment["start"], segment["end"]
+                if not isinstance(start, int) or not isinstance(end, int) or start < 0 or start >= end:
+                    raise ConfigurationError(f"{unit_location} has invalid segment bounds")
+                if end > len(raw_sentence["sentence"]) or start < previous_end:
+                    raise ConfigurationError(f"{unit_location} segments are out of range or order")
+                previous_end = end
+            rebuilt = _segments_text(raw_sentence["sentence"], unit["segments"])
+            if rebuilt != unit["text"]:
+                raise ConfigurationError(f"{unit_location}.text does not match its source segments")
+            if unit["kind"] not in {"base", "composition", "sentence"}:
+                raise ConfigurationError(f"{unit_location}.kind is unsupported")
+        if raw_sentence["units"] != expected["sentences"][0]["units"]:
+            raise ConfigurationError(f"{location}.units do not match the dependency-path rule derivation")
+        checked.append(raw_sentence)
+    return {"schema_version": PLAN_SCHEMA_VERSION, "rules_version": rules["schema_version"], "rules_sha256": rules_digest, "sentences": checked}
+
+
+def _parse_annotations(text: str, plan: Mapping[str, Any]) -> dict[str, Any]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise ConfigurationError(f"invalid translation JSON: {error}") from error
+    _exact_keys(payload, {"schema_version", "sentences"}, "translations")
+    if payload["schema_version"] != ANNOTATION_SCHEMA_VERSION:
+        raise ConfigurationError(f"translations must use schema_version {ANNOTATION_SCHEMA_VERSION}")
+    raw_sentences = payload["sentences"]
+    if not isinstance(raw_sentences, list) or len(raw_sentences) != len(plan["sentences"]):
+        raise ConfigurationError("translations.sentences must align with the plan")
+    sentences = []
+    for index, (raw, planned) in enumerate(zip(raw_sentences, plan["sentences"], strict=True)):
+        location = f"translations.sentences[{index}]"
+        _exact_keys(raw, {"unit_prompts"}, location)
+        prompts = raw["unit_prompts"]
+        if not isinstance(prompts, list) or len(prompts) != len(planned["units"]):
+            raise ConfigurationError(f"{location}.unit_prompts must contain exactly {len(planned['units'])} items")
+        if not all(isinstance(prompt, str) and prompt.strip() for prompt in prompts):
+            raise ConfigurationError(f"{location}.unit_prompts must contain non-empty strings")
+        sentences.append({"unit_prompts": [prompt.strip() for prompt in prompts]})
+    return {"schema_version": ANNOTATION_SCHEMA_VERSION, "sentences": sentences}
+
+
+def _markdown_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
+
+
+def render_markdown(plan: Mapping[str, Any], translations: Mapping[str, Any]) -> str:
+    lines = ["# 渐进学习单元", ""]
+    for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True), start=1):
+        lines.extend([f"## 第 {sentence_index} 句", "", "| 步骤 | 中文提示 | 英文答案 | 类型 |", "|---:|---|---|---|"])
+        for step, (unit, prompt) in enumerate(zip(sentence["units"], translated["unit_prompts"], strict=True), start=1):
+            label = {"base": "单词单元", "composition": "依存路径单元", "sentence": "完整原句"}[unit["kind"]]
+            lines.append(f"| {step} | {_markdown_escape(prompt)} | {_markdown_escape(unit['text'])} | {label} |")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_phraseweave(plan: Mapping[str, Any], translations: Mapping[str, Any]) -> str:
+    statements = []
+    for sentence, translated in zip(plan["sentences"], translations["sentences"], strict=True):
+        for unit, prompt in zip(sentence["units"], translated["unit_prompts"], strict=True):
+            statements.append({"chinese": prompt, "english": unit["text"], "soundmark": ""})
+    return json.dumps({"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements}, ensure_ascii=False, indent=2) + "\n"
+
+
+def render_trace(traces: Sequence[Mapping[str, Any]]) -> str:
+    lines = ["# 组合结果", ""]
+    for index, trace in enumerate(traces, start=1):
+        # Keep wrapped source text on one Markdown line, with ordinary spaces.
+        sentence = " ".join(trace["sentence"].split())
+        lines.extend([
+            f"## 第 {index} 句：{sentence}",
+            "",
+            "| 序号 | 学习单元 | 规则标签 |",
+            "|---:|---|---|",
+        ])
+        for unit_index, (unit, match) in enumerate(
+            zip(trace["units"], trace["unit_rules"], strict=True), start=1
+        ):
+            unit_text = _markdown_escape(" ".join(unit["text"].split()))
+            labels = [RULE_TAGS.get(rule_id, rule_id) for rule_id in match["rules"]]
+            rules_text = _markdown_escape("、".join(labels))
+            lines.append(f"| {unit_index} | {unit_text} | {rules_text} |")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _unique_path(requested: Path) -> Path:
     if not requested.exists():
         return requested
-
     index = 2
     while True:
-        if requested.name.endswith(".learning-units.md"):
-            base = requested.name[: -len(".learning-units.md")]
-            name = f"{base}-{index}.learning-units.md"
-        elif requested.name.endswith(".chunks.md"):
-            base = requested.name[: -len(".chunks.md")]
-            name = f"{base}-{index}.chunks.md"
-        else:
-            name = f"{requested.stem}-{index}{requested.suffix}"
-        candidate = requested.with_name(name)
+        candidate = requested.with_name(f"{requested.stem}-{index}{requested.suffix}")
         if not candidate.exists():
             return candidate
         index += 1
 
 
-def markdown_escape(text: str) -> str:
-    return text.replace("|", r"\|")
-
-
-def markdown_content_escape(text: str) -> str:
-    escaped = text.replace("\\", r"\\").replace("\n", "<br>")
-    return re.sub(r"([`*_{}\[\]()<>#+.!|])", r"\\\1", escaped)
-
-
-def _require_exact_keys(
-    value: Mapping[str, Any], expected: set[str], location: str
-) -> None:
-    actual = set(value)
-    if actual == expected:
-        return
-    missing = sorted(expected - actual)
-    unknown = sorted(actual - expected)
-    details: list[str] = []
-    if missing:
-        details.append(f"missing keys {missing}")
-    if unknown:
-        details.append(f"unknown keys {unknown}")
-    raise ConfigurationError(f"{location} has {' and '.join(details)}")
-
-
-def _require_int(value: Any, location: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ConfigurationError(f"{location} must be an integer")
-    return value
-
-
-def _validate_sorted_string_list(value: Any, location: str) -> list[str]:
-    if not isinstance(value, list) or not all(
-        isinstance(item, str) and item for item in value
-    ):
-        raise ConfigurationError(f"{location} must be a string list")
-    if value != sorted(set(value)):
-        raise ConfigurationError(f"{location} must be sorted and unique")
-    return value
-
-
-def _validate_range_text(
-    sentence: str, value: Mapping[str, Any], location: str
-) -> tuple[int, int, str]:
-    text = value["text"]
-    start = _require_int(value["start"], f"{location}.start")
-    end = _require_int(value["end"], f"{location}.end")
-    if not isinstance(text, str) or not text.strip():
-        raise ConfigurationError(f"{location}.text must be non-empty")
-    if start < 0 or end <= start or end > len(sentence):
-        raise ConfigurationError(f"{location} must be a non-empty sentence range")
-    if sentence[start:end] != text:
-        raise ConfigurationError(f"{location}.text must match its sentence range")
-    return start, end, text
-
-
-def validate_analysis(
-    payload: Any, rules: ProgressionRules | None = None
-) -> dict[str, Any]:
-    if not isinstance(payload, dict):
-        raise ConfigurationError("analysis must be a JSON object")
-    _require_exact_keys(payload, {"schema_version", "sentences"}, "analysis")
-    if payload["schema_version"] != ANALYSIS_SCHEMA_VERSION:
-        raise ConfigurationError(
-            f"analysis must use schema_version {ANALYSIS_SCHEMA_VERSION}"
-        )
-    active_rules = rules if rules is not None else load_rules()
-    raw_sentences = payload["sentences"]
-    if not isinstance(raw_sentences, list) or not raw_sentences:
-        raise ConfigurationError("analysis.sentences must be a non-empty list")
-
-    sentences: list[dict[str, Any]] = []
-    for index, raw_sentence in enumerate(raw_sentences):
-        location = f"analysis.sentences[{index}]"
-        if not isinstance(raw_sentence, dict):
-            raise ConfigurationError(f"{location} must be an object")
-        _require_exact_keys(
-            raw_sentence, {"sentence", "atoms", "learning_units"}, location
-        )
-        sentence = raw_sentence["sentence"]
-        if not isinstance(sentence, str) or not sentence.strip():
-            raise ConfigurationError(f"{location}.sentence must be non-empty")
-
-        raw_atoms = raw_sentence["atoms"]
-        if not isinstance(raw_atoms, list) or not raw_atoms:
-            raise ConfigurationError(f"{location}.atoms must be a non-empty list")
-        atoms: list[dict[str, Any]] = []
-        previous_end = -1
-        for atom_index, raw_atom in enumerate(raw_atoms):
-            atom_location = f"{location}.atoms[{atom_index}]"
-            if not isinstance(raw_atom, dict):
-                raise ConfigurationError(f"{atom_location} must be an object")
-            _require_exact_keys(
-                raw_atom,
-                {
-                    "text",
-                    "start",
-                    "end",
-                    "source",
-                    "lexicon_lemmas",
-                    "lexicon_pos",
-                    "match_kind",
-                    "head_pos",
-                    "head_dep",
-                    "head_atom",
-                    "core",
-                },
-                atom_location,
-            )
-            start, end, text = _validate_range_text(sentence, raw_atom, atom_location)
-            if start < previous_end:
-                raise ConfigurationError(f"{atom_location} must not overlap")
-            source = raw_atom["source"]
-            lexicon_lemmas = _validate_sorted_string_list(
-                raw_atom["lexicon_lemmas"], f"{atom_location}.lexicon_lemmas"
-            )
-            lexicon_pos = _validate_sorted_string_list(
-                raw_atom["lexicon_pos"], f"{atom_location}.lexicon_pos"
-            )
-            match_kind = raw_atom["match_kind"]
-            head_pos = raw_atom["head_pos"]
-            head_dep = raw_atom["head_dep"]
-            head_atom = raw_atom["head_atom"]
-            core = raw_atom["core"]
-            if source not in {"oewn", "syntax", "token"}:
-                raise ConfigurationError(f"{atom_location}.source is unsupported")
-            if source == "oewn":
-                if not lexicon_lemmas or not lexicon_pos:
-                    raise ConfigurationError(
-                        f"{atom_location} OEWN evidence must be non-empty"
-                    )
-                if match_kind not in {"surface", "morphy"}:
-                    raise ConfigurationError(
-                        f"{atom_location}.match_kind is unsupported"
-                    )
-            elif source == "syntax":
-                if lexicon_lemmas or lexicon_pos:
-                    raise ConfigurationError(
-                        f"{atom_location} syntax evidence must not claim OEWN data"
-                    )
-                if match_kind != "verb_particle":
-                    raise ConfigurationError(
-                        f"{atom_location}.match_kind is unsupported"
-                    )
-            elif lexicon_lemmas or lexicon_pos or match_kind != "none":
-                raise ConfigurationError(
-                    f"{atom_location} token evidence must be empty"
-                )
-            if not isinstance(head_pos, str):
-                raise ConfigurationError(f"{atom_location}.head_pos must be a string")
-            if not isinstance(head_dep, str):
-                raise ConfigurationError(f"{atom_location}.head_dep must be a string")
-            if head_atom is not None and (
-                not isinstance(head_atom, int) or isinstance(head_atom, bool)
-            ):
-                raise ConfigurationError(
-                    f"{atom_location}.head_atom must be an integer or null"
-                )
-            if not isinstance(core, bool):
-                raise ConfigurationError(f"{atom_location}.core must be a boolean")
-            if source == "syntax":
-                if head_pos not in active_rules.verb_particle_head_pos:
-                    raise ConfigurationError(
-                        f"{atom_location} verb-particle head must use a configured POS"
-                    )
-                if not core:
-                    raise ConfigurationError(
-                        f"{atom_location} verb-particle atom must be a core"
-                    )
-                phrase_tokens = tokenize(text)
-                if len(phrase_tokens) != 2 or not can_join(
-                    text, phrase_tokens[0], phrase_tokens[1]
-                ):
-                    raise ConfigurationError(
-                        f"{atom_location} verb-particle atom must contain two "
-                        "whitespace-joined tokens"
-                    )
-            atoms.append(
-                {
-                    "text": text,
-                    "start": start,
-                    "end": end,
-                    "source": source,
-                    "lexicon_lemmas": lexicon_lemmas,
-                    "lexicon_pos": lexicon_pos,
-                    "match_kind": match_kind,
-                    "head_pos": head_pos,
-                    "head_dep": head_dep,
-                    "head_atom": head_atom,
-                    "core": core,
-                }
-            )
-            previous_end = end
-
-        for atom_index, atom in enumerate(atoms):
-            atom_location = f"{location}.atoms[{atom_index}]"
-            head_atom = atom["head_atom"]
-            if head_atom is not None and not 0 <= head_atom < len(atoms):
-                raise ConfigurationError(
-                    f"{atom_location}.head_atom must reference an atom"
-                )
-            if head_atom == atom_index:
-                raise ConfigurationError(
-                    f"{atom_location}.head_atom must not reference itself"
-                )
-            if atom["head_dep"] == "ROOT" and head_atom is not None:
-                raise ConfigurationError(
-                    f"{atom_location}.head_atom must be null for ROOT"
-                )
-            if atom["head_dep"] != "ROOT" and head_atom is None:
-                raise ConfigurationError(
-                    f"{atom_location}.head_atom must reference its syntactic head"
-                )
-
-        for atom_index in range(len(atoms)):
-            visited: set[int] = set()
-            current: int | None = atom_index
-            while current is not None:
-                if current in visited:
-                    raise ConfigurationError(
-                        f"{location}.atoms head_atom references must be acyclic"
-                    )
-                visited.add(current)
-                current = atoms[current]["head_atom"]
-
-        raw_units = raw_sentence["learning_units"]
-        if not isinstance(raw_units, list) or not raw_units:
-            raise ConfigurationError(
-                f"{location}.learning_units must be a non-empty list"
-            )
-        units: list[dict[str, Any]] = []
-        for unit_index, raw_unit in enumerate(raw_units):
-            unit_location = f"{location}.learning_units[{unit_index}]"
-            if not isinstance(raw_unit, dict):
-                raise ConfigurationError(f"{unit_location} must be an object")
-            _require_exact_keys(
-                raw_unit,
-                {"text", "start", "end", "kind", "core_count"},
-                unit_location,
-            )
-            start, end, text = _validate_range_text(sentence, raw_unit, unit_location)
-            kind = raw_unit["kind"]
-            core_count = _require_int(
-                raw_unit["core_count"], f"{unit_location}.core_count"
-            )
-            if kind not in {"core", "composition"}:
-                raise ConfigurationError(f"{unit_location}.kind is unsupported")
-            if core_count < 1:
-                raise ConfigurationError(f"{unit_location}.core_count must be positive")
-            units.append(
-                {
-                    "text": text,
-                    "start": start,
-                    "end": end,
-                    "kind": kind,
-                    "core_count": core_count,
-                }
-            )
-
-        expected_units = build_learning_units(sentence, atoms, active_rules)
-        if units != expected_units:
-            raise ConfigurationError(
-                f"{location}.learning_units do not match deterministic progression"
-            )
-        sentences.append(
-            {"sentence": sentence, "atoms": atoms, "learning_units": units}
-        )
-    return {"schema_version": ANALYSIS_SCHEMA_VERSION, "sentences": sentences}
-
-
-def load_analysis(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ConfigurationError(
-            f"cannot load analysis from {path}: {error}"
-        ) from error
-    return validate_analysis(payload)
-
-
-def _unit_core_indexes(
-    unit: Mapping[str, Any], atoms: Sequence[Mapping[str, Any]]
-) -> list[int]:
-    core_atoms = [atom for atom in atoms if atom["core"]]
-    return [
-        index
-        for index, atom in enumerate(core_atoms)
-        if atom["start"] >= unit["start"]
-        and atom["end"] <= unit["end"]
-    ]
-
-
-def _core_atom_for_index(
-    core_index: int, atoms: Sequence[Mapping[str, Any]]
-) -> Mapping[str, Any]:
-    core_atoms = [atom for atom in atoms if atom["core"]]
-    return core_atoms[core_index]
-
-
-def _validate_model_unit(
-    sentence: str,
-    raw_unit: Any,
-    atoms: Sequence[Mapping[str, Any]],
-    token_boundaries: set[int],
-    location: str,
-) -> dict[str, Any]:
-    if not isinstance(raw_unit, dict):
-        raise ConfigurationError(f"{location} must be an object")
-    _require_exact_keys(
-        raw_unit,
-        {"start", "end", "kind", "construction_family"},
-        location,
-    )
-    start = _require_int(raw_unit["start"], f"{location}.start")
-    end = _require_int(raw_unit["end"], f"{location}.end")
-    if start not in token_boundaries or end not in token_boundaries:
-        raise ConfigurationError(
-            f"{location} must start and end on original token boundaries"
-        )
-    _, _, text = _validate_range_text(
-        sentence,
-        {"start": start, "end": end, "text": sentence[start:end]},
-        location,
-    )
-    kind = raw_unit["kind"]
-    if kind not in {"core", "composition", "construction"}:
-        raise ConfigurationError(f"{location}.kind is unsupported")
-    construction_family = raw_unit["construction_family"]
-    if kind == "construction":
-        if not isinstance(construction_family, str) or not construction_family.strip():
-            raise ConfigurationError(
-                f"{location}.construction_family must be non-empty for constructions"
-            )
-        construction_family = construction_family.strip()
-    elif construction_family is not None:
-        raise ConfigurationError(
-            f"{location}.construction_family must be null for {kind} units"
-        )
-
-    unit = {
-        "text": text,
-        "start": start,
-        "end": end,
-        "kind": kind,
-        "core_count": 0,
-    }
-    core_indexes = _unit_core_indexes(unit, atoms)
-    if not core_indexes:
-        raise ConfigurationError(f"{location} must contain at least one core atom")
-    if kind == "core":
-        if len(core_indexes) != 1:
-            raise ConfigurationError(f"{location} core units must contain one core atom")
-        matching_core = _core_atom_for_index(core_indexes[0], atoms)
-        if (start, end) != (matching_core["start"], matching_core["end"]):
-            raise ConfigurationError(
-                f"{location} core units must exactly match their core atom"
-            )
-    elif any(
-        (start, end) == (atom["start"], atom["end"])
-        for atom in atoms
-        if atom["core"]
-    ):
-        raise ConfigurationError(
-            f"{location} composition units must not duplicate a core atom"
-        )
-    unit["core_count"] = len(core_indexes)
-    if kind == "construction":
-        unit["construction_family"] = construction_family
-    return unit
-
-
-def parse_model_plan(
-    text: str, analysis: Mapping[str, Any]
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise ConfigurationError(f"model plan is not valid JSON: {error}") from error
-    if not isinstance(payload, dict):
-        raise ConfigurationError("model plan must be a JSON object")
-    _require_exact_keys(payload, {"schema_version", "sentences"}, "model plan")
-    if payload["schema_version"] != MODEL_PLAN_SCHEMA_VERSION:
-        raise ConfigurationError(
-            f"model plan must use schema_version {MODEL_PLAN_SCHEMA_VERSION}"
-        )
-    raw_sentences = payload["sentences"]
-    analysis_sentences = analysis["sentences"]
-    if not isinstance(raw_sentences, list):
-        raise ConfigurationError("model plan.sentences must be a list")
-    if len(raw_sentences) != len(analysis_sentences):
-        raise ConfigurationError(
-            "model plan.sentences must contain exactly "
-            f"{len(analysis_sentences)} items; found {len(raw_sentences)}"
-        )
-
-    normalized_analysis_sentences: list[dict[str, Any]] = []
-    normalized_annotation_sentences: list[dict[str, Any]] = []
-    for index, (raw_sentence, analyzed_sentence) in enumerate(
-        zip(raw_sentences, analysis_sentences, strict=True)
-    ):
-        location = f"model plan.sentences[{index}]"
-        if not isinstance(raw_sentence, dict):
-            raise ConfigurationError(f"{location} must be an object")
-        _require_exact_keys(
-            raw_sentence,
-            {"sentence", "units", "unit_prompts", "sentence_translation"},
-            location,
-        )
-        sentence = raw_sentence["sentence"]
-        if sentence != analyzed_sentence["sentence"]:
-            raise ConfigurationError(f"{location}.sentence does not match analysis")
-        raw_units = raw_sentence["units"]
-        prompts = raw_sentence["unit_prompts"]
-        translation = raw_sentence["sentence_translation"]
-        if not isinstance(raw_units, list) or not raw_units:
-            raise ConfigurationError(f"{location}.units must be a non-empty list")
-        if not isinstance(prompts, list) or len(prompts) != len(raw_units):
-            raise ConfigurationError(
-                f"{location}.unit_prompts must align with units"
-            )
-        if not all(isinstance(prompt, str) and prompt.strip() for prompt in prompts):
-            raise ConfigurationError(
-                f"{location}.unit_prompts must contain only non-empty strings"
-            )
-        if not isinstance(translation, str) or not translation.strip():
-            raise ConfigurationError(
-                f"{location}.sentence_translation must be a non-empty string"
-            )
-
-        atoms = analyzed_sentence["atoms"]
-        boundaries = {0, len(sentence)}
-        boundaries.update(token.start for token in tokenize(sentence))
-        boundaries.update(token.end for token in tokenize(sentence))
-        units = [
-            _validate_model_unit(
-                sentence,
-                raw_unit,
-                atoms,
-                boundaries,
-                f"{location}.units[{unit_index}]",
-            )
-            for unit_index, raw_unit in enumerate(raw_units)
-        ]
-        core_atoms = [atom for atom in atoms if atom["core"]]
-        if len(units) < len(core_atoms):
-            raise ConfigurationError(
-                f"{location}.units must preserve every core atom independently"
-            )
-        for unit_index, core_atom in enumerate(core_atoms):
-            unit = units[unit_index]
-            if unit["kind"] != "core" or (
-                unit["start"], unit["end"]
-            ) != (core_atom["start"], core_atom["end"]):
-                raise ConfigurationError(
-                    f"{location}.units must begin with cores in source order"
-                )
-        seen_ranges: set[tuple[int, int]] = set()
-        for unit_index, unit in enumerate(units):
-            identity = (unit["start"], unit["end"])
-            if identity in seen_ranges:
-                raise ConfigurationError(
-                    f"{location}.units[{unit_index}] duplicates an earlier unit"
-                )
-            seen_ranges.add(identity)
-            core_indexes = _unit_core_indexes(unit, atoms)
-            if unit_index >= len(core_atoms) and core_indexes != list(
-                range(core_indexes[0], core_indexes[-1] + 1)
-            ):
-                raise ConfigurationError(
-                    f"{location}.units must cover a contiguous core range"
-                )
-        if any(
-            unit["start"] == 0
-            and unit["end"] == len(sentence)
-            for unit in units
-        ):
-            raise ConfigurationError(
-                f"{location}.units must not contain the complete sentence"
-            )
-
-        normalized_analysis_sentences.append(
-            {
-                "sentence": sentence,
-                "atoms": atoms,
-                "learning_units": units,
-            }
-        )
-        normalized_annotation_sentences.append(
-            {
-                "unit_prompts": [prompt.strip() for prompt in prompts],
-                "sentence_translation": translation.strip(),
-            }
-        )
-
-    return (
-        {
-            "schema_version": analysis["schema_version"],
-            "sentences": normalized_analysis_sentences,
-        },
-        {
-            "schema_version": ANNOTATION_SCHEMA_VERSION,
-            "sentences": normalized_annotation_sentences,
-        },
-    )
-
-
-def parse_annotations(text: str, analysis: Mapping[str, Any]) -> dict[str, Any]:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise ConfigurationError(f"annotations are not valid JSON: {error}") from error
-    if not isinstance(payload, dict):
-        raise ConfigurationError("annotations must be a JSON object")
-    _require_exact_keys(payload, {"schema_version", "sentences"}, "annotations")
-    if payload["schema_version"] != ANNOTATION_SCHEMA_VERSION:
-        raise ConfigurationError(
-            f"annotations must use schema_version {ANNOTATION_SCHEMA_VERSION}"
-        )
-    raw_sentences = payload["sentences"]
-    analysis_sentences = analysis["sentences"]
-    if not isinstance(raw_sentences, list):
-        raise ConfigurationError("annotations.sentences must be a list")
-    if len(raw_sentences) != len(analysis_sentences):
-        raise ConfigurationError(
-            "annotations.sentences must contain exactly "
-            f"{len(analysis_sentences)} items; found {len(raw_sentences)}"
-        )
-
-    sentences: list[dict[str, Any]] = []
-    for index, (raw_sentence, analyzed_sentence) in enumerate(
-        zip(raw_sentences, analysis_sentences, strict=True)
-    ):
-        location = f"annotations.sentences[{index}]"
-        if not isinstance(raw_sentence, dict):
-            raise ConfigurationError(f"{location} must be an object")
-        _require_exact_keys(
-            raw_sentence, {"unit_prompts", "sentence_translation"}, location
-        )
-        prompts = raw_sentence["unit_prompts"]
-        translation = raw_sentence["sentence_translation"]
-        expected_count = len(analyzed_sentence["learning_units"])
-        if not isinstance(prompts, list):
-            raise ConfigurationError(f"{location}.unit_prompts must be a list")
-        if len(prompts) != expected_count:
-            raise ConfigurationError(
-                f"{location}.unit_prompts must contain exactly "
-                f"{expected_count} items; found {len(prompts)}"
-            )
-        if not all(isinstance(prompt, str) and prompt.strip() for prompt in prompts):
-            raise ConfigurationError(
-                f"{location}.unit_prompts must contain only non-empty strings"
-            )
-        if not isinstance(translation, str) or not translation.strip():
-            raise ConfigurationError(
-                f"{location}.sentence_translation must be a non-empty string"
-            )
-        sentences.append(
-            {
-                "unit_prompts": [prompt.strip() for prompt in prompts],
-                "sentence_translation": translation.strip(),
-            }
-        )
-    return {"schema_version": ANNOTATION_SCHEMA_VERSION, "sentences": sentences}
-
-
-def render_contextual_report(
-    analysis: Mapping[str, Any],
-    annotations: Mapping[str, Any],
-    rules: ProgressionRules | None = None,
-) -> str:
-    active_rules = rules if rules is not None else load_rules()
-
-    def atoms_for_unit(
-        unit: Mapping[str, Any], atoms: Sequence[Mapping[str, Any]]
-    ) -> list[Mapping[str, Any]]:
-        return [
-            atom
-            for atom in atoms
-            if atom["core"]
-            and atom["start"] >= unit["start"]
-            and atom["end"] <= unit["end"]
-        ]
-
-    def nominal_composition_ranges(
-        atoms: Sequence[Mapping[str, Any]],
-    ) -> set[tuple[int, int]]:
-        ranges: set[tuple[int, int]] = set()
-        for group in _nominal_core_groups(atoms, active_rules):
-            for core_count in range(2, len(group) + 1):
-                first = group[-core_count][1]
-                last = group[-1][1]
-                ranges.add((first["start"], last["end"]))
-        return ranges
-
-    def unit_label(
-        unit: Mapping[str, Any],
-        atoms: Sequence[Mapping[str, Any]],
-        nominal_ranges: set[tuple[int, int]],
-    ) -> str:
-        if unit["kind"] == "composition":
-            if (unit["start"], unit["end"]) in nominal_ranges:
-                return "组合·名词短语"
-            return "组合·渐进组合"
-        if unit["kind"] == "construction":
-            return "组合·句式构式"
-
-        unit_atoms = atoms_for_unit(unit, atoms)
-        if len(unit_atoms) != 1:
-            raise ConfigurationError(
-                "core learning unit must map to exactly one core atom"
-            )
-        source = unit_atoms[0]["source"]
-        if source == "oewn":
-            return "核心·词典匹配"
-        if source == "syntax":
-            return "核心·动词 + 小品词"
-        if source == "token":
-            return "核心·实义词"
-        raise ConfigurationError(f"unsupported core atom source: {source}")
-
-    lines = ["# 渐进学习单元", ""]
-    for index, (analyzed_sentence, annotated_sentence) in enumerate(
-        zip(analysis["sentences"], annotations["sentences"], strict=True), start=1
-    ):
-        nominal_ranges = nominal_composition_ranges(analyzed_sentence["atoms"])
-        lines.extend(
-            [
-                f"## 第 {index} 句",
-                "",
-                "| 步骤 | 中文提示 | 英文答案 | 匹配标签 |",
-                "|---:|---|---|---|",
-            ]
-        )
-        for step, (unit, prompt) in enumerate(
-            zip(
-                analyzed_sentence["learning_units"],
-                annotated_sentence["unit_prompts"],
-                strict=True,
-            ),
-            start=1,
-        ):
-            lines.append(
-                f"| {step} | {markdown_content_escape(prompt)} | "
-                f"{markdown_content_escape(unit['text'])} | "
-                f"{markdown_content_escape(unit_label(unit, analyzed_sentence['atoms'], nominal_ranges))} |"
-            )
-        final_step = len(analyzed_sentence["learning_units"]) + 1
-        lines.extend(
-            [
-                (
-                    f"| {final_step} | "
-                    f"{markdown_content_escape(annotated_sentence['sentence_translation'])} | "
-                    f"{markdown_escape(analyzed_sentence['sentence'])} | "
-                    "完成·完整原句 |"
-                ),
-                "",
-            ]
-        )
-    return "\n".join(lines).rstrip() + "\n"
-
-def render_phraseweave_backup(
-    analysis: Mapping[str, Any], annotations: Mapping[str, Any]
-) -> str:
-    statements: list[dict[str, str]] = []
-    for analyzed_sentence, annotated_sentence in zip(
-        analysis["sentences"], annotations["sentences"], strict=True
-    ):
-        for unit, prompt in zip(
-            analyzed_sentence["learning_units"],
-            annotated_sentence["unit_prompts"],
-            strict=True,
-        ):
-            statements.append(
-                {
-                    "chinese": prompt,
-                    "english": unit["text"],
-                    "soundmark": "",
-                }
-            )
-        statements.append(
-            {
-                "chinese": annotated_sentence["sentence_translation"],
-                "english": analyzed_sentence["sentence"],
-                "soundmark": "",
-            }
-        )
-
-    return (
-        json.dumps(
-            {"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements},
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n"
-    )
-
-
-def phraseweave_path_for(markdown_path: Path) -> Path:
-    name = markdown_path.name
-    if name.endswith(".learning-units.md"):
-        name = f"{name[:-len('.learning-units.md')]}.learning-units.json"
-        return markdown_path.with_name(name)
-    if markdown_path.suffix:
-        return markdown_path.with_suffix(".json")
-    return markdown_path.with_name(f"{name}.json")
-
-
-def output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
-    markdown_path = args.output or DEFAULT_OUTPUT
-    if args.format == "markdown":
-        return markdown_path, None
-
-    if args.format == "phraseweave":
-        return None, args.phraseweave_output or args.output or DEFAULT_PHRASEWEAVE_OUTPUT
-
-    phraseweave_path = args.phraseweave_output or phraseweave_path_for(markdown_path)
-    if markdown_path.expanduser().resolve() == phraseweave_path.expanduser().resolve():
-        raise ConfigurationError("Markdown and PhraseWeave output paths must differ")
-    return markdown_path, phraseweave_path
-
-
-def write_output(requested: Path, content: str) -> Path:
-    output = choose_output_path(requested.expanduser()).resolve()
+def _write_output(path: Path, content: str) -> Path:
+    output = _unique_path(path.expanduser()).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(content, encoding="utf-8")
     return output
 
 
+def _output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
+    requested = args.output or (DEFAULT_PHRASEWEAVE_OUTPUT if args.format == "phraseweave" else DEFAULT_OUTPUT)
+    if args.format == "markdown":
+        return requested, None
+    if args.format == "phraseweave":
+        return None, requested
+    phraseweave = args.phraseweave_output or requested.with_suffix(".json")
+    if requested.expanduser().resolve() == phraseweave.expanduser().resolve():
+        raise ConfigurationError("Markdown and PhraseWeave outputs must use different paths")
+    return requested, phraseweave
+
+
+def _write_trace(args: argparse.Namespace, traces: Sequence[Mapping[str, Any]]) -> None:
+    if args.trace_output is not None:
+        print(_write_output(args.trace_output, render_trace(traces)))
+
+
 def main() -> int:
     args = parse_args()
-
-    if (
-        args.render_analysis is None
-        and args.render_model_plan is None
-        and args.analysis_output is None
-    ):
-        print(
-            "lexical-chunks: specify --analysis-output, --render-analysis, "
-            "or --render-model-plan",
-            file=sys.stderr,
-        )
-        return 1
-
-    if args.render_analysis is not None or args.render_model_plan is not None:
-        try:
-            rules = load_rules()
-            analysis_path = args.render_analysis or args.render_model_plan
-            analysis = load_analysis(analysis_path)
-            if args.render_model_plan is not None:
-                analysis, annotations = parse_model_plan(sys.stdin.read(), analysis)
-            else:
-                annotations = parse_annotations(sys.stdin.read(), analysis)
-            markdown_path, phraseweave_path = output_paths(args)
-            rendered_outputs: list[tuple[Path, str]] = []
-            if markdown_path is not None:
-                rendered_outputs.append(
-                    (
-                        markdown_path,
-                        render_contextual_report(analysis, annotations, rules),
-                    )
-                )
-            if phraseweave_path is not None:
-                rendered_outputs.append(
-                    (phraseweave_path, render_phraseweave_backup(analysis, annotations))
-                )
-        except ConfigurationError as error:
-            print(f"lexical-chunks: {error}", file=sys.stderr)
-            return 1
-        outputs = [write_output(path, content) for path, content in rendered_outputs]
-        for output in outputs:
-            print(output)
-        return 0
-
-    text = sys.stdin.read()
-    sentences = split_sentences(text)
-    if not sentences or not any(tokenize(sentence) for sentence in sentences):
-        print("No English text was provided on stdin.", file=sys.stderr)
-        return 2
-
-    if args.format != "markdown" and args.analysis_output is None:
-        print(
-            "lexical-chunks: phraseweave output requires --render-analysis with aligned Chinese prompts",
-            file=sys.stderr,
-        )
-        return 1
-
     try:
-        rules = load_rules()
+        rules, rules_digest = load_rules(args.rules)
         nlp = load_syntax_model()
-        wordnet = ensure_lexicon()
-        trie = build_trie(lexicon_entries(wordnet))
-        lemmatize = Morphy(wordnet)
-        analysis = build_analysis(
-            sentences,
-            trie,
-            lemmatize,
-            lambda value: analyze_sentence(nlp, value),
-            rules,
-        )
+        if args.plan_output is not None:
+            plan, traces = generate_plan(sys.stdin.read(), nlp, rules, rules_digest)
+            plan_path = _write_output(args.plan_output, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
+            print(plan_path)
+            _write_trace(args, traces)
+            return 0
+        try:
+            raw_plan = json.loads(args.render_plan.expanduser().read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ConfigurationError(f"cannot read plan from {args.render_plan}: {error}") from error
+        plan = _validate_plan(raw_plan, nlp, rules, rules_digest)
+        translations = _parse_annotations(sys.stdin.read(), plan)
+        markdown_path, phraseweave_path = _output_paths(args)
+        outputs: list[tuple[Path, str]] = []
+        if markdown_path is not None:
+            outputs.append((markdown_path, render_markdown(plan, translations)))
+        if phraseweave_path is not None:
+            outputs.append((phraseweave_path, render_phraseweave(plan, translations)))
+        for path, content in outputs:
+            print(_write_output(path, content))
+        if args.trace_output is not None:
+            traces = []
+            for sentence in plan["sentences"]:
+                _, sentence_traces = generate_plan(sentence["sentence"], nlp, rules, rules_digest)
+                traces.extend(sentence_traces)
+            _write_trace(args, traces)
+        return 0
     except ConfigurationError as error:
         print(f"lexical-chunks: {error}", file=sys.stderr)
         return 1
-
-    if args.analysis_output is not None:
-        output = write_output(
-            args.analysis_output,
-            json.dumps(analysis, ensure_ascii=False, indent=2) + "\n",
-        )
-        print(output)
-        return 0
-
-    raise AssertionError("analysis-output should have returned before rendering")
 
 
 if __name__ == "__main__":
