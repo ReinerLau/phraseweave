@@ -86,7 +86,9 @@ describe("ExerciseCard", () => {
 
     const moreButton = wrapper.find('button[aria-label="更多操作"]');
     expect(moreButton.attributes("title")).toBe("更多操作");
-    expect(moreButton.classes()).toContain("pr-0");
+    expect(moreButton.classes()).toEqual(
+      expect.arrayContaining(["h-8", "min-h-8", "w-8", "min-w-8", "p-0"]),
+    );
     expect(moreButton.find("span").classes()).toContain("i-ph-dots-three-vertical");
 
     await moreButton.trigger("click");

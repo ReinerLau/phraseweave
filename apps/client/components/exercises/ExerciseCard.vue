@@ -13,7 +13,7 @@
           @click.stop
         >
           <button
-            class="btn btn-ghost btn-sm pr-0"
+            class="btn btn-ghost btn-sm h-8 min-h-8 w-8 min-w-8 rounded-md p-0"
             type="button"
             aria-label="更多操作"
             title="更多操作"
