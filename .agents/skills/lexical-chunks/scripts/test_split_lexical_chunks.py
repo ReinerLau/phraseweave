@@ -30,12 +30,12 @@ FIRST_SENTENCE = (
     "Researchers from Tulane University in the USA say any kind of light "
     "at bedtime could be bad for your heart"
 )
-FIRST_UNITS = """Tulane
-the
+FIRST_UNITS = """the
 USA
 the USA
 in
 in the USA
+Tulane
 University
 Tulane University
 University in the USA
@@ -44,19 +44,18 @@ from
 from Tulane University in the USA
 Researchers
 Researchers from Tulane University in the USA
-any
 light
 of
 of light
 bedtime
 at
 at bedtime
+any
 kind
 any kind
 kind of light
 any kind of light
 any kind of light at bedtime
-could
 your
 heart
 your heart
@@ -64,6 +63,7 @@ for
 for your heart
 bad
 bad for your heart
+could
 be
 could be
 be bad for your heart
@@ -83,11 +83,11 @@ The young teacher
 her
 students
 her students
-a
-difficult
 class
 after
 after class
+a
+difficult
 problem
 difficult problem
 problem after class
@@ -115,6 +115,11 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
                 self.assertEqual([unit["text"] for unit in units], expected)
                 self.assertEqual(units[-1]["kind"], "sentence")
                 self.assertEqual(sum(unit["kind"] == "sentence" for unit in units), 1)
+
+    def test_leaf_child_follows_non_leaf_siblings_before_head(self):
+        texts = [unit["text"] for unit in self.plan(FIRST_SENTENCE + ".")["sentences"][0]["units"]]
+        index = texts.index("bad for your heart")
+        self.assertEqual(texts[index:index + 4], ["bad for your heart", "could", "be", "could be"])
 
     def test_all_word_tokens_appear_and_units_use_one_source_span(self):
         source = SECOND_SENTENCE

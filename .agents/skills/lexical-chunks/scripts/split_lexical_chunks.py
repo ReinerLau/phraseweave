@@ -24,7 +24,7 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
-ALGORITHM_VERSION = 1
+ALGORITHM_VERSION = 2
 ANNOTATION_SCHEMA_VERSION = 1
 PHRASEWEAVE_SCHEMA_VERSION = 1
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
@@ -137,7 +137,10 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             return
         children = sorted(
             (child for child in token.children if child.i in token_by_id),
-            key=lambda child: child.i,
+            key=lambda child: (
+                not any(grandchild.i in token_by_id for grandchild in child.children),
+                child.i,
+            ),
         )
         for child in children:
             visit(child)
