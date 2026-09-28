@@ -136,4 +136,66 @@ describe("course", () => {
 
     expect(store.totalQuestionsCount).toBe(2);
   });
+
+  it("keeps the saved index while recovering a failed combination", async () => {
+    const course: Course = {
+      ...firstCourse,
+      statements: [
+        {
+          id: "a",
+          order: 1,
+          english: "Researchers",
+          chinese: "研究人员",
+          soundmark: "",
+          unitId: "0:0",
+          sourceUnitIds: [],
+        },
+        {
+          id: "b",
+          order: 2,
+          english: "say",
+          chinese: "说",
+          soundmark: "",
+          unitId: "0:1",
+          sourceUnitIds: [],
+        },
+        {
+          id: "c",
+          order: 3,
+          english: "Researchers say",
+          chinese: "研究人员说",
+          soundmark: "",
+          unitId: "0:2",
+          sourceUnitIds: ["0:0", "0:1"],
+        },
+      ],
+    };
+    vi.mocked(getLocalExercise).mockResolvedValueOnce({
+      id: coursePack.id,
+      title: coursePack.title,
+      description: "",
+      isFree: true,
+      cover: "",
+      courses: [course],
+    });
+    const store = useExerciseStore();
+    await store.setup(coursePack.id, course.id);
+    store.toSpecificStatement(2);
+
+    store.failCurrentStatement();
+    expect(store.statementIndex).toBe(2);
+    expect(store.currentStatement?.english).toBe("Researchers");
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.currentStatement?.english).toBe("say");
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.currentStatement?.english).toBe("Researchers say");
+    expect(store.isAnsweringBaseUnit).toBe(true);
+    expect(store.advanceAfterCorrect()).toBe(true);
+    expect(store.isRecovering).toBe(false);
+
+    store.failCurrentStatement();
+    store.toPreviousStatement();
+    expect(store.isRecovering).toBe(false);
+    expect(store.statementIndex).toBe(1);
+  });
 });

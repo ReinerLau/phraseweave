@@ -26,7 +26,7 @@ MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
 ALGORITHM_VERSION = 2
 ANNOTATION_SCHEMA_VERSION = 1
-PHRASEWEAVE_SCHEMA_VERSION = 1
+PHRASEWEAVE_SCHEMA_VERSION = 2
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
 DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
 DEFAULT_REVIEW_OUTPUT = Path("outputs/lexical-chunks/text.review.learning-units.md")
@@ -473,13 +473,31 @@ def render_phraseweave(
     traces: Sequence[Mapping[str, Any]] | None = None,
     mode: str = "standard",
 ) -> str:
+    if traces is None:
+        raise ConfigurationError("PhraseWeave export requires a regenerated derivation trace")
     statements = []
     for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True)):
-        sentence_trace = traces[sentence_index] if traces is not None else None
+        sentence_trace = traces[sentence_index]
+        unit_ids = [f"{sentence_index}:{index}" for index in range(len(sentence["units"]))]
+        by_span = {
+            (unit["span"]["start"], unit["span"]["end"]): index
+            for index, unit in enumerate(sentence["units"])
+        }
         for unit_index, _ in _exercise_steps(sentence, sentence_trace, mode):
             unit = sentence["units"][unit_index]
             prompt = translated["unit_prompts"][unit_index]
-            statements.append({"chinese": prompt, "english": unit["text"], "soundmark": ""})
+            source_spans = sentence_trace["sources"][unit_index]
+            source_ids = [] if source_spans is None else [
+                unit_ids[by_span[span]]
+                for span in sorted(source_spans, key=lambda span: span[0])
+            ]
+            statements.append({
+                "chinese": prompt,
+                "english": unit["text"],
+                "soundmark": "",
+                "unit_id": unit_ids[unit_index],
+                "source_unit_ids": source_ids,
+            })
     return json.dumps({"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements}, ensure_ascii=False, indent=2) + "\n"
 
 
@@ -564,7 +582,7 @@ def main() -> int:
         translations = _parse_annotations(sys.stdin.read(), plan)
         markdown_path, phraseweave_path = _output_paths(args)
         traces = []
-        if markdown_path is not None or args.trace_output is not None or args.mode == "review":
+        if markdown_path is not None or phraseweave_path is not None or args.trace_output is not None or args.mode == "review":
             for sentence in plan["sentences"]:
                 _, sentence_traces = generate_plan(sentence["sentence"], nlp)
                 traces.extend(sentence_traces)

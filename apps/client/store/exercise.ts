@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, ref, watchEffect } from "vue";
+import { computed, ref } from "vue";
 
 import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
@@ -8,6 +8,7 @@ import {
   saveLocalExercise,
   saveLocalExerciseProgress,
 } from "~/services/localExerciseDb";
+import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
 
 export interface Statement {
@@ -16,6 +17,8 @@ export interface Statement {
   chinese: string;
   english: string;
   soundmark: string;
+  unitId?: string;
+  sourceUnitIds?: [] | [string, string];
 }
 
 export interface CourseIdentifier {
@@ -36,13 +39,24 @@ export interface Course {
 export const useExerciseStore = defineStore("exercise", () => {
   const currentCourse = ref<Course>();
   const currentStatement = ref<Statement>();
+  const recoveryUnitId = ref<string>();
+  const isRecovering = computed(() => recoveryUnitId.value !== undefined);
+  const isAnsweringBaseUnit = computed(
+    () =>
+      recoveryUnitId.value === undefined ||
+      recoveryUnitId.value === currentCourse.value?.statements[statementIndex.value]?.unitId,
+  );
+  const unitStatements = new Map<string, Statement>();
+  let recovery: ReviewRecovery | undefined;
   const { statementIndex, setupStatement } = useStatement();
 
   const { updateActiveCourseMap } = useActiveCourseMap();
 
-  watchEffect(() => {
-    currentStatement.value = currentCourse.value?.statements[statementIndex.value];
-  });
+  function refreshCurrentStatement() {
+    currentStatement.value = recoveryUnitId.value
+      ? unitStatements.get(recoveryUnitId.value)
+      : currentCourse.value?.statements[statementIndex.value];
+  }
 
   const words = computed(() => {
     return currentStatement.value?.english.split(" ") || [];
@@ -69,11 +83,13 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   function setStatementIndex(index: number) {
+    cancelRecovery();
     const lastIndex = Math.max(0, totalQuestionsCount.value - 1);
     const nextIndex = Number.isFinite(index)
       ? Math.min(Math.max(0, Math.trunc(index)), lastIndex)
       : 0;
     statementIndex.value = nextIndex;
+    refreshCurrentStatement();
 
     const course = currentCourse.value;
     if (!course) return;
@@ -82,6 +98,30 @@ export const useExerciseStore = defineStore("exercise", () => {
     void saveLocalExerciseProgress(course.coursePackId, course.id, nextIndex).catch((error) => {
       console.error("保存练习进度失败", error);
     });
+  }
+
+  function cancelRecovery() {
+    recovery?.cancel();
+    recoveryUnitId.value = undefined;
+    refreshCurrentStatement();
+  }
+
+  function failCurrentStatement() {
+    recoveryUnitId.value = recovery?.fail(currentStatement.value?.unitId);
+    refreshCurrentStatement();
+  }
+
+  /** Returns true only after the final base question has been answered. */
+  function advanceAfterCorrect(): boolean {
+    recoveryUnitId.value = recovery?.correct();
+    if (recoveryUnitId.value) {
+      refreshCurrentStatement();
+      return false;
+    }
+    refreshCurrentStatement();
+    if (isAllDone()) return true;
+    setStatementIndex(statementIndex.value + 1);
+    return false;
   }
 
   function isAllDone() {
@@ -123,19 +163,45 @@ export const useExerciseStore = defineStore("exercise", () => {
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
       : 0;
     currentCourse.value = course;
+    unitStatements.clear();
+    const firstUnitOrder = new Map<string, number>();
+    const sourcesByUnitId = new Map<string, [string, string]>();
+    for (const [index, statement] of course.statements.entries()) {
+      if (!statement.unitId || unitStatements.has(statement.unitId)) continue;
+      unitStatements.set(statement.unitId, statement);
+      firstUnitOrder.set(statement.unitId, index);
+    }
+    for (const statement of unitStatements.values()) {
+      if (
+        statement.unitId &&
+        statement.sourceUnitIds?.length === 2 &&
+        statement.sourceUnitIds.every(
+          (id) => (firstUnitOrder.get(id) ?? Infinity) < firstUnitOrder.get(statement.unitId!)!,
+        )
+      )
+        sourcesByUnitId.set(statement.unitId, statement.sourceUnitIds);
+    }
+    recovery = new ReviewRecovery(sourcesByUnitId);
+    recoveryUnitId.value = undefined;
     setupStatement(currentCourse);
+    refreshCurrentStatement();
   }
 
   return {
     statementIndex,
     currentCourse,
     currentStatement,
+    isRecovering,
+    isAnsweringBaseUnit,
     words,
     totalQuestionsCount,
     setup,
     doAgain,
     isAllDone,
     checkCorrect,
+    failCurrentStatement,
+    advanceAfterCorrect,
+    cancelRecovery,
     completeCourse,
     toSpecificStatement,
     toPreviousStatement,

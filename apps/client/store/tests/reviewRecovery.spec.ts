@@ -1,0 +1,39 @@
+import { describe, expect, it } from "vitest";
+
+import { ReviewRecovery } from "../reviewRecovery";
+
+describe("ReviewRecovery", () => {
+  const sources = new Map<string, [string, string]>([
+    ["whole", ["old", "new"]],
+    ["old", ["leaf-a", "leaf-b"]],
+  ]);
+
+  it("only descends further when a source is answered incorrectly", () => {
+    const recovery = new ReviewRecovery(sources);
+    expect(recovery.fail("whole")).toBe("old");
+    expect(recovery.fail("old")).toBe("leaf-a");
+    expect(recovery.correct()).toBe("leaf-b");
+    expect(recovery.correct()).toBe("old");
+    expect(recovery.correct()).toBe("new");
+    expect(recovery.correct()).toBe("whole");
+    expect(recovery.correct()).toBeUndefined();
+  });
+
+  it("keeps an indivisible unit in place and reopens a failed retry", () => {
+    const recovery = new ReviewRecovery(sources);
+    recovery.fail("whole");
+    expect(recovery.fail("old")).toBe("leaf-a");
+    expect(recovery.fail("leaf-a")).toBe("leaf-a");
+    recovery.correct();
+    recovery.correct();
+    expect(recovery.fail("old")).toBe("leaf-a");
+  });
+
+  it("cancels the pending path on manual navigation", () => {
+    const recovery = new ReviewRecovery(sources);
+    recovery.fail("whole");
+    recovery.cancel();
+    expect(recovery.currentUnitId).toBeUndefined();
+    expect(recovery.correct()).toBeUndefined();
+  });
+});
