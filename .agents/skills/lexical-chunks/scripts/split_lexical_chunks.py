@@ -29,6 +29,8 @@ ANNOTATION_SCHEMA_VERSION = 1
 PHRASEWEAVE_SCHEMA_VERSION = 1
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
 DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
+DEFAULT_REVIEW_OUTPUT = Path("outputs/lexical-chunks/text.review.learning-units.md")
+DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.review.learning-units.json")
 
 
 class ConfigurationError(RuntimeError):
@@ -46,6 +48,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, help="Markdown or PhraseWeave output path")
     parser.add_argument(
         "--format", choices=("markdown", "phraseweave", "both"), default="markdown"
+    )
+    parser.add_argument(
+        "--mode", choices=("standard", "review"), default="standard",
+        help="exercise mode for rendered output",
     )
     parser.add_argument("--phraseweave-output", type=Path)
     return parser.parse_args()
@@ -87,6 +93,7 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
     token_by_id = {token.i: token for token in tokens}
     units: list[dict[str, Any]] = []
     explanations: list[str] = []
+    sources: list[tuple[tuple[int, int], tuple[int, int]] | None] = []
     seen_spans: set[tuple[int, int]] = set()
     blocked: list[dict[str, str]] = []
     completed: dict[int, tuple[int, int] | None] = {}
@@ -95,7 +102,17 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
         first, last = (sentence_span.doc[index] for index in bounds)
         return sentence[first.idx - sentence_start : last.idx + len(last.text) - sentence_start]
 
-    def record(bounds: tuple[int, int], kind: str, explanation: str) -> None:
+    def source_span(bounds: tuple[int, int]) -> tuple[int, int]:
+        first, last = (sentence_span.doc[index] for index in bounds)
+        return first.idx - sentence_start, last.idx + len(last.text) - sentence_start
+
+    def record(
+        bounds: tuple[int, int],
+        kind: str,
+        explanation: str,
+        operands: tuple[tuple[int, int], tuple[int, int]] | None = None,
+        source_spans: tuple[tuple[int, int], tuple[int, int]] | None = None,
+    ) -> None:
         first, last = (sentence_span.doc[index] for index in bounds)
         start = first.idx - sentence_start
         end = last.idx + len(last.text) - sentence_start
@@ -108,6 +125,12 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             "kind": kind,
         })
         explanations.append(explanation)
+        if source_spans is not None:
+            sources.append(source_spans)
+        elif operands is not None:
+            sources.append(tuple(source_span(operand) for operand in operands))
+        else:
+            sources.append(None)
 
     def visit(token: Any) -> None:
         if token.i in completed:
@@ -140,18 +163,29 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             if left is not None:
                 left_index, left_bounds = left
                 left_text = phrase_text(left_bounds)
-                record((left_bounds[0], current[1]), "phrase", f"中心词 {token.text}；左接 {left_text}")
+                record(
+                    (left_bounds[0], current[1]),
+                    "phrase",
+                    f"中心词 {token.text}；左接 {left_text}",
+                    (left_bounds, current),
+                )
                 del remaining[left_index]
             if right is not None:
                 right_index, right_bounds = right
                 right_text = phrase_text(right_bounds)
-                record((current[0], right_bounds[1]), "phrase", f"中心词 {token.text}；右接 {right_text}")
+                record(
+                    (current[0], right_bounds[1]),
+                    "phrase",
+                    f"中心词 {token.text}；右接 {right_text}",
+                    (current, right_bounds),
+                )
                 del remaining[right_index]
             if left is not None and right is not None:
                 record(
                     (left_bounds[0], right_bounds[1]),
                     "phrase",
                     f"中心词 {token.text}；左接 {left_text}；右接 {right_text}",
+                    ((left_bounds[0], current[1]), (current[0], right_bounds[1])),
                 )
             current = (
                 left_bounds[0] if left is not None else current[0],
@@ -178,13 +212,15 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
     first, last = tokens[0], tokens[-1]
     full_start = first.idx - sentence_start
     full_end = last.idx + len(last.text) - sentence_start
+    sentence_sources = None
     for index in range(len(units) - 1, -1, -1):
         if units[index]["span"] == {"start": full_start, "end": full_end}:
+            sentence_sources = sources.pop(index)
             del units[index]
             del explanations[index]
             seen_spans.remove((full_start, full_end))
             break
-    record(full_bounds, "sentence", "整句")
+    record(full_bounds, "sentence", "整句", source_spans=sentence_sources)
 
     trace = {
         "tree_tokens": [
@@ -199,6 +235,7 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             if not token.is_space
         ],
         "explanations": explanations,
+        "sources": sources,
         "blocked": blocked,
     }
     return units, trace
@@ -353,10 +390,46 @@ def _render_dependency_tree(tokens: Sequence[Mapping[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _exercise_steps(
+    sentence: Mapping[str, Any],
+    trace: Mapping[str, Any] | None,
+    mode: str,
+) -> list[tuple[int, bool]]:
+    if mode == "standard":
+        return [(index, False) for index in range(len(sentence["units"]))]
+    if trace is None:
+        raise ConfigurationError("review mode requires a regenerated derivation trace")
+
+    by_span = {
+        (unit["span"]["start"], unit["span"]["end"]): index
+        for index, unit in enumerate(sentence["units"])
+    }
+    steps: list[tuple[int, bool]] = []
+    for index, operand_spans in enumerate(trace["sources"]):
+        if operand_spans is not None:
+            try:
+                operands = [by_span[span] for span in operand_spans]
+            except KeyError as error:
+                raise ConfigurationError(f"review source is absent from the plan: {error}") from error
+            if any(operand >= index for operand in operands):
+                raise ConfigurationError("review source must precede its combination")
+            # Revisit the other operand first when one has just been introduced.
+            if index - 1 in operands:
+                operands.sort(key=lambda operand: operand == index - 1)
+            else:
+                operands.sort(key=lambda operand: sentence["units"][operand]["span"]["start"])
+            for operand in operands:
+                if not steps or steps[-1] != (operand, True):
+                    steps.append((operand, True))
+        steps.append((index, False))
+    return steps
+
+
 def render_markdown(
     plan: Mapping[str, Any],
     translations: Mapping[str, Any],
     traces: Sequence[Mapping[str, Any]] | None = None,
+    mode: str = "standard",
 ) -> str:
     lines = ["# 渐进学习单元", ""]
     for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True), start=1):
@@ -377,10 +450,13 @@ def render_markdown(
         explanations = traces[sentence_index - 1]["explanations"] if traces is not None else [
             "" for _ in sentence["units"]
         ]
-        for step, (unit, prompt, explanation) in enumerate(
-            zip(sentence["units"], translated["unit_prompts"], explanations, strict=True),
-            start=1,
+        sentence_trace = traces[sentence_index - 1] if traces is not None else None
+        for step, (unit_index, is_review) in enumerate(
+            _exercise_steps(sentence, sentence_trace, mode), start=1
         ):
+            unit = sentence["units"][unit_index]
+            prompt = translated["unit_prompts"][unit_index]
+            explanation = "复习" if is_review else explanations[unit_index]
             lines.append(
                 f"| {step} | {_markdown_escape(prompt)} | {_markdown_escape(unit['text'])} | {_markdown_escape(explanation)} |"
             )
@@ -388,10 +464,18 @@ def render_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_phraseweave(plan: Mapping[str, Any], translations: Mapping[str, Any]) -> str:
+def render_phraseweave(
+    plan: Mapping[str, Any],
+    translations: Mapping[str, Any],
+    traces: Sequence[Mapping[str, Any]] | None = None,
+    mode: str = "standard",
+) -> str:
     statements = []
-    for sentence, translated in zip(plan["sentences"], translations["sentences"], strict=True):
-        for unit, prompt in zip(sentence["units"], translated["unit_prompts"], strict=True):
+    for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True)):
+        sentence_trace = traces[sentence_index] if traces is not None else None
+        for unit_index, _ in _exercise_steps(sentence, sentence_trace, mode):
+            unit = sentence["units"][unit_index]
+            prompt = translated["unit_prompts"][unit_index]
             statements.append({"chinese": prompt, "english": unit["text"], "soundmark": ""})
     return json.dumps({"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements}, ensure_ascii=False, indent=2) + "\n"
 
@@ -439,7 +523,11 @@ def _write_output(path: Path, content: str) -> Path:
 
 
 def _output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
-    requested = args.output or (DEFAULT_PHRASEWEAVE_OUTPUT if args.format == "phraseweave" else DEFAULT_OUTPUT)
+    if args.mode == "review":
+        default = DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT if args.format == "phraseweave" else DEFAULT_REVIEW_OUTPUT
+    else:
+        default = DEFAULT_PHRASEWEAVE_OUTPUT if args.format == "phraseweave" else DEFAULT_OUTPUT
+    requested = args.output or default
     if args.format == "markdown":
         return requested, None
     if args.format == "phraseweave":
@@ -473,15 +561,15 @@ def main() -> int:
         translations = _parse_annotations(sys.stdin.read(), plan)
         markdown_path, phraseweave_path = _output_paths(args)
         traces = []
-        if markdown_path is not None or args.trace_output is not None:
+        if markdown_path is not None or args.trace_output is not None or args.mode == "review":
             for sentence in plan["sentences"]:
                 _, sentence_traces = generate_plan(sentence["sentence"], nlp)
                 traces.extend(sentence_traces)
         outputs: list[tuple[Path, str]] = []
         if markdown_path is not None:
-            outputs.append((markdown_path, render_markdown(plan, translations, traces)))
+            outputs.append((markdown_path, render_markdown(plan, translations, traces, args.mode)))
         if phraseweave_path is not None:
-            outputs.append((phraseweave_path, render_phraseweave(plan, translations)))
+            outputs.append((phraseweave_path, render_phraseweave(plan, translations, traces, args.mode)))
         for path, content in outputs:
             print(_write_output(path, content))
         if args.trace_output is not None:
