@@ -2,6 +2,7 @@ import { createTestingPinia } from "@pinia/testing";
 import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseStore } from "~/store/exercise";
 import QuestionInput from "../QuestionInput.vue";
 
@@ -22,6 +23,7 @@ vi.mock("../useTypingSound", () => ({
 describe("QuestionInput", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    useAnswerTip().hiddenAnswerTip();
     playErrorSound.mockClear();
     playRightSound.mockClear();
     playTypingSound.mockClear();
@@ -33,13 +35,13 @@ describe("QuestionInput", () => {
     vi.unstubAllGlobals();
   });
 
-  function mountQuestionInput() {
+  function mountQuestionInput(english = "I eat") {
     const pinia = createTestingPinia({ createSpy: vi.fn });
     const courseStore = useExerciseStore(pinia);
     courseStore.currentStatement = {
       id: "1",
       order: 1,
-      english: "I eat",
+      english,
       chinese: "我吃",
       soundmark: "/aɪ iːt/",
     };
@@ -128,5 +130,29 @@ describe("QuestionInput", () => {
     wrapper.unmount();
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps the answer tip for Han input and hides it for symbols or digits", async () => {
+    const { input, wrapper } = mountQuestionInput("S$500");
+    const { showAnswerTip, isAnswerTip } = useAnswerTip();
+    showAnswerTip();
+    await wrapper.vm.$nextTick();
+
+    await input.setValue("中");
+    expect(isAnswerTip()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("");
+
+    await input.setValue("$");
+    expect(isAnswerTip()).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe("$");
+
+    showAnswerTip();
+    await wrapper.vm.$nextTick();
+    await input.setValue("5");
+    expect(isAnswerTip()).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe("5");
+
+    await submitAnswer(input, "S$500");
+    expect(playRightSound).toHaveBeenCalledOnce();
   });
 });

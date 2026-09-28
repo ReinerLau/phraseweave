@@ -24,11 +24,14 @@ const separator = " ";
 
 const inputValue = ref("");
 
-const QUESTION_INPUT_ALLOWED_CHARACTERS = /[^A-Za-z '.,?!-]/g;
-const LATIN_LETTER = /[A-Za-z]/;
+const QUESTION_INPUT_DISALLOWED_CHARACTERS = /[\p{Cc}\p{Script=Han}]|[^\S ]/gu;
 
 export function sanitizeQuestionInput(value: string) {
-  return value.replace(QUESTION_INPUT_ALLOWED_CHARACTERS, "");
+  return value.replace(QUESTION_INPUT_DISALLOWED_CHARACTERS, "");
+}
+
+export function containsAllowedQuestionCharacter(value: string) {
+  return sanitizeQuestionInput(value).replaceAll(separator, "").length > 0;
 }
 
 export function fitInputToWordWidths(
@@ -53,10 +56,6 @@ export function fitInputToWordWidths(
       return fittedWord;
     })
     .join(separator);
-}
-
-export function containsLatinLetter(value: string) {
-  return LATIN_LETTER.test(value);
 }
 
 export function clearQuestionInput() {
@@ -183,7 +182,7 @@ export function useInput({
   function markIncorrectWord() {
     userInputWords.forEach((word) => {
       const formattedWord = formatInputText(word.userInput);
-      if (formattedWord !== word.text.toLocaleLowerCase()) {
+      if (formattedWord !== formatInputText(word.text)) {
         word.incorrect = true;
       } else {
         word.incorrect = false;
@@ -196,9 +195,9 @@ export function useInput({
     return userInputWords[len - 1].isActive;
   }
 
-  // 将‘ 转化为', 做模糊匹配, 后续可拓展其他的模糊匹配算法
+  // 排版引号与对应的直引号等价，但单引号和双引号仍分别比较。
   function formatInputText(word: string) {
-    return word.toLocaleLowerCase().replace(/‘|’|“|"|”/g, "'");
+    return word.toLocaleLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
   }
 
   function submitAnswer(correctCallback?: () => void, wrongCallback?: () => void) {
