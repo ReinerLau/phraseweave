@@ -24,10 +24,11 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
-ALGORITHM_VERSION = 3
+ALGORITHM_VERSION = 4
 ANNOTATION_SCHEMA_VERSION = 1
-PHRASEWEAVE_SCHEMA_VERSION = 2
+PHRASEWEAVE_SCHEMA_VERSION = 3
 FILTERED_WORD_POS = frozenset({"DET", "ADP", "AUX"})
+DOUBLE_QUOTES = frozenset({'"', "“", "”"})
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
 DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
 DEFAULT_REVIEW_OUTPUT = Path("outputs/lexical-chunks/text.review.learning-units.md")
@@ -83,6 +84,25 @@ def _exact_keys(value: Any, keys: set[str], location: str) -> None:
         raise ConfigurationError(f"{location} must contain exactly: {', '.join(sorted(keys))}")
 
 
+def _remove_double_quotes(text: str) -> str:
+    clean: list[str] = []
+    for index, char in enumerate(text):
+        if char not in DOUBLE_QUOTES:
+            clean.append(char)
+            continue
+        next_index = index + 1
+        while next_index < len(text) and text[next_index] in DOUBLE_QUOTES:
+            next_index += 1
+        if (
+            clean
+            and clean[-1].isalnum()
+            and next_index < len(text)
+            and text[next_index].isalnum()
+        ):
+            clean.append(" ")
+    return "".join(clean)
+
+
 def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     sentence = sentence_span.text.strip()
     sentence_start = sentence_span.start_char + (
@@ -94,7 +114,7 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
     token_by_id = {token.i: token for token in tokens}
     units: list[dict[str, Any]] = []
     explanations: list[str] = []
-    sources: list[tuple[tuple[int, int], tuple[int, int]] | None] = []
+    sources: list[tuple[tuple[int, int], ...] | None] = []
     seen_spans: set[tuple[int, int]] = set()
     blocked: list[dict[str, str]] = []
     completed: dict[int, tuple[int, int] | None] = {}
@@ -245,7 +265,9 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
     }
     kept_sources = [sources[index] for index in kept_indices]
     sources = [
-        source if source is None or all(span in kept_spans for span in source) else None
+        (tuple(span for span in source if span in kept_spans) or None)
+        if source is not None
+        else None
         for source in kept_sources
     ]
 
@@ -269,9 +291,10 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
 
 
 def generate_plan(text: str, nlp: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    if not text.strip():
+    clean_text = _remove_double_quotes(text).strip()
+    if not clean_text:
         raise ConfigurationError("No English text was provided on stdin.")
-    document = nlp(text.strip())
+    document = nlp(clean_text)
     sentences: list[dict[str, Any]] = []
     traces: list[dict[str, Any]] = []
     for sentence_span in document.sents:

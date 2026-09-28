@@ -141,4 +141,71 @@ describe("normalizeExerciseImport", () => {
       }),
     ).toThrow("备份文件包含无效单元关系");
   });
+
+  it("imports a schema 3 unit with one retained source", () => {
+    const [pack] = normalizeExerciseImport({
+      schema_version: 3,
+      statements: [
+        {
+          chinese: "公共交通环境",
+          english: "public transport environment",
+          soundmark: "",
+          unit_id: "0:0",
+          source_unit_ids: [],
+        },
+        {
+          chinese: "一个公共交通环境",
+          english: "a public transport environment",
+          soundmark: "",
+          unit_id: "0:1",
+          source_unit_ids: ["0:0"],
+        },
+      ],
+    });
+    expect(pack.courses[0].statements[1]).toMatchObject({
+      unitId: "0:1",
+      sourceUnitIds: ["0:0"],
+    });
+  });
+
+  it("keeps schema 2 restricted to complete source pairs", () => {
+    expect(() =>
+      normalizeExerciseImport({
+        schema_version: 2,
+        statements: [
+          {
+            chinese: "公共交通环境",
+            english: "public transport environment",
+            soundmark: "",
+            unit_id: "0:0",
+            source_unit_ids: [],
+          },
+          {
+            chinese: "一个公共交通环境",
+            english: "a public transport environment",
+            soundmark: "",
+            unit_id: "0:1",
+            source_unit_ids: ["0:0"],
+          },
+        ],
+      }),
+    ).toThrow("备份文件包含无效练习");
+  });
+
+  it("rejects a schema 3 singleton link to an absent source", () => {
+    expect(() =>
+      normalizeExerciseImport({
+        schema_version: 3,
+        statements: [
+          {
+            chinese: "一个公共交通环境",
+            english: "a public transport environment",
+            soundmark: "",
+            unit_id: "0:1",
+            source_unit_ids: ["0:0"],
+          },
+        ],
+      }),
+    ).toThrow("备份文件包含无效单元关系");
+  });
 });
