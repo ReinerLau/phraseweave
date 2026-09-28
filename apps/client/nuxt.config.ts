@@ -50,7 +50,8 @@ export default defineNuxtConfig({
         },
       ],
       link: [
-        { rel: "icon", type: "image/x-icon", href: `${appBaseURL}logo.png` },
+        { rel: "icon", type: "image/x-icon", href: `${appBaseURL}favicon.ico` },
+        { rel: "icon", type: "image/svg+xml", href: `${appBaseURL}brand-icon.svg` },
         { rel: "manifest", href: `${appBaseURL}manifest.webmanifest` },
       ],
       script: appScripts,
