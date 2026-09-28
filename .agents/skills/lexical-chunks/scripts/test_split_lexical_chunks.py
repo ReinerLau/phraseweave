@@ -15,6 +15,7 @@ from unittest import main as unittest_main
 
 from split_lexical_chunks import (
     ConfigurationError,
+    _exercise_steps,
     _parse_annotations,
     _validate_plan,
     generate_plan,
@@ -191,6 +192,58 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertIn("中心词 USA；左接 the", markdown)
         self.assertIn("| 序号 | 学习单元 | 组合说明 |", report)
         self.assertIn("整句", report)
+
+    def test_review_replays_both_direct_sources_in_example_order(self):
+        plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
+        sentence = plan["sentences"][0]
+        steps = _exercise_steps(sentence, traces[0], "review")
+        rows = [(sentence["units"][index]["text"], is_review) for index, is_review in steps]
+
+        for result, sources in (
+            ("the USA", ["the", "USA"]),
+            ("University in the USA", ["University", "in the USA"]),
+            ("any kind of light at bedtime", ["at bedtime", "any kind of light"]),
+            ("any kind of light at bedtime could be bad for your heart",
+             ["any kind of light at bedtime", "could be bad for your heart"]),
+            ("Researchers from Tulane University in the USA say",
+             ["Researchers from Tulane University in the USA", "say"]),
+        ):
+            with self.subTest(result=result):
+                position = rows.index((result, False))
+                self.assertEqual(rows[position - 2:position], [(text, True) for text in sources])
+
+        for first, second in zip(steps, steps[1:]):
+            self.assertFalse(first[1] and second[1] and first[0] == second[0])
+        self.assertEqual(
+            [index for index, is_review in steps if not is_review],
+            list(range(len(sentence["units"]))),
+        )
+
+    def test_review_renderers_reuse_prompts_and_phraseweave_schema(self):
+        plan, traces = generate_plan("the USA grows.", self.nlp)
+        sentence = plan["sentences"][0]
+        prompts = [f"提示 {index}" for index, _ in enumerate(sentence["units"], 1)]
+        translations = {"sentences": [{"unit_prompts": prompts}]}
+        steps = _exercise_steps(sentence, traces[0], "review")
+
+        markdown = render_markdown(plan, translations, traces, mode="review")
+        self.assertEqual(markdown.count("| 复习 |"), sum(is_review for _, is_review in steps))
+        payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["statements"], [
+            {"chinese": prompts[index], "english": sentence["units"][index]["text"], "soundmark": ""}
+            for index, _ in steps
+        ])
+        self.assertEqual(
+            len(json.loads(render_phraseweave(plan, translations))["statements"]),
+            len(sentence["units"]),
+        )
+
+    def test_review_does_not_invent_sources_across_punctuation(self):
+        plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
+        sentence = plan["sentences"][0]
+        self.assertIsNone(traces[0]["sources"][-1])
+        self.assertEqual(_exercise_steps(sentence, traces[0], "review")[-1], (len(sentence["units"]) - 1, False))
 
 
 if __name__ == "__main__":
