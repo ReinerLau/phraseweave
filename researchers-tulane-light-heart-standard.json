@@ -1,0 +1,285 @@
+{
+  "schema_version": 2,
+  "statements": [
+    {
+      "chinese": "美国",
+      "english": "USA",
+      "soundmark": "",
+      "unit_id": "0:0",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "美国",
+      "english": "the USA",
+      "soundmark": "",
+      "unit_id": "0:1",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "位于美国的……",
+      "english": "in the USA",
+      "soundmark": "",
+      "unit_id": "0:2",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "杜兰（大学名）",
+      "english": "Tulane",
+      "soundmark": "",
+      "unit_id": "0:3",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "大学",
+      "english": "University",
+      "soundmark": "",
+      "unit_id": "0:4",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "杜兰大学",
+      "english": "Tulane University",
+      "soundmark": "",
+      "unit_id": "0:5",
+      "source_unit_ids": [
+        "0:3",
+        "0:4"
+      ]
+    },
+    {
+      "chinese": "位于美国的大学",
+      "english": "University in the USA",
+      "soundmark": "",
+      "unit_id": "0:6",
+      "source_unit_ids": [
+        "0:4",
+        "0:2"
+      ]
+    },
+    {
+      "chinese": "位于美国的杜兰大学",
+      "english": "Tulane University in the USA",
+      "soundmark": "",
+      "unit_id": "0:7",
+      "source_unit_ids": [
+        "0:5",
+        "0:6"
+      ]
+    },
+    {
+      "chinese": "来自美国杜兰大学的……",
+      "english": "from Tulane University in the USA",
+      "soundmark": "",
+      "unit_id": "0:8",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "研究人员",
+      "english": "Researchers",
+      "soundmark": "",
+      "unit_id": "0:9",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "来自美国杜兰大学的研究人员",
+      "english": "Researchers from Tulane University in the USA",
+      "soundmark": "",
+      "unit_id": "0:10",
+      "source_unit_ids": [
+        "0:9",
+        "0:8"
+      ]
+    },
+    {
+      "chinese": "灯光",
+      "english": "light",
+      "soundmark": "",
+      "unit_id": "0:11",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "光的……",
+      "english": "of light",
+      "soundmark": "",
+      "unit_id": "0:12",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "就寝时间",
+      "english": "bedtime",
+      "soundmark": "",
+      "unit_id": "0:13",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "就寝时的……",
+      "english": "at bedtime",
+      "soundmark": "",
+      "unit_id": "0:14",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "种类",
+      "english": "kind",
+      "soundmark": "",
+      "unit_id": "0:15",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "任何一种……",
+      "english": "any kind",
+      "soundmark": "",
+      "unit_id": "0:16",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "一种光",
+      "english": "kind of light",
+      "soundmark": "",
+      "unit_id": "0:17",
+      "source_unit_ids": [
+        "0:15",
+        "0:12"
+      ]
+    },
+    {
+      "chinese": "任何一种光",
+      "english": "any kind of light",
+      "soundmark": "",
+      "unit_id": "0:18",
+      "source_unit_ids": [
+        "0:16",
+        "0:17"
+      ]
+    },
+    {
+      "chinese": "就寝时任何一种光",
+      "english": "any kind of light at bedtime",
+      "soundmark": "",
+      "unit_id": "0:19",
+      "source_unit_ids": [
+        "0:18",
+        "0:14"
+      ]
+    },
+    {
+      "chinese": "你的……",
+      "english": "your",
+      "soundmark": "",
+      "unit_id": "0:20",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "心脏",
+      "english": "heart",
+      "soundmark": "",
+      "unit_id": "0:21",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "你的心脏",
+      "english": "your heart",
+      "soundmark": "",
+      "unit_id": "0:22",
+      "source_unit_ids": [
+        "0:20",
+        "0:21"
+      ]
+    },
+    {
+      "chinese": "对你的心脏……",
+      "english": "for your heart",
+      "soundmark": "",
+      "unit_id": "0:23",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "有害的",
+      "english": "bad",
+      "soundmark": "",
+      "unit_id": "0:24",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "对你的心脏有害",
+      "english": "bad for your heart",
+      "soundmark": "",
+      "unit_id": "0:25",
+      "source_unit_ids": [
+        "0:24",
+        "0:23"
+      ]
+    },
+    {
+      "chinese": "可能是……",
+      "english": "could be",
+      "soundmark": "",
+      "unit_id": "0:26",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "……对你的心脏有害",
+      "english": "be bad for your heart",
+      "soundmark": "",
+      "unit_id": "0:27",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "……可能对你的心脏有害",
+      "english": "could be bad for your heart",
+      "soundmark": "",
+      "unit_id": "0:28",
+      "source_unit_ids": [
+        "0:26",
+        "0:27"
+      ]
+    },
+    {
+      "chinese": "任何一种光在就寝时都可能对你的心脏有害",
+      "english": "any kind of light at bedtime could be bad for your heart",
+      "soundmark": "",
+      "unit_id": "0:29",
+      "source_unit_ids": [
+        "0:19",
+        "0:28"
+      ]
+    },
+    {
+      "chinese": "……表示……",
+      "english": "say",
+      "soundmark": "",
+      "unit_id": "0:30",
+      "source_unit_ids": []
+    },
+    {
+      "chinese": "来自美国杜兰大学的研究人员表示……",
+      "english": "Researchers from Tulane University in the USA say",
+      "soundmark": "",
+      "unit_id": "0:31",
+      "source_unit_ids": [
+        "0:10",
+        "0:30"
+      ]
+    },
+    {
+      "chinese": "……表示：就寝时任何一种光都可能对你的心脏有害",
+      "english": "say any kind of light at bedtime could be bad for your heart",
+      "soundmark": "",
+      "unit_id": "0:32",
+      "source_unit_ids": [
+        "0:30",
+        "0:29"
+      ]
+    },
+    {
+      "chinese": "美国杜兰大学的研究人员表示，睡前任何光线都可能对你的心脏有害。",
+      "english": "Researchers from Tulane University in the USA say any kind of light at bedtime could be bad for your heart",
+      "soundmark": "",
+      "unit_id": "0:33",
+      "source_unit_ids": [
+        "0:31",
+        "0:32"
+      ]
+    }
+  ]
+}
