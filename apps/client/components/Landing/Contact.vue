@@ -117,7 +117,7 @@
 <script setup lang="ts">
 import { useRuntimeConfig } from "nuxt/app";
 
-const logoPath = `${useRuntimeConfig().app.baseURL}logo.png`;
+const logoPath = `${useRuntimeConfig().app.baseURL}brand-icon.svg`;
 </script>
 
 <style scoped>

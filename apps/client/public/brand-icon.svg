@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <title>PhraseWeave</title>
+  <path
+    d="M39 8C39 17 27 18 27 25C27 32 40 32 40 39C40 46 27 47 27 56"
+    stroke="#C4B5FD"
+    stroke-width="8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path d="M12 16H49M16 32H50M12 48H49" stroke="#8B5CF6" stroke-width="8" stroke-linecap="round" />
+  <path
+    d="M27 25C27 32 40 32 40 39"
+    stroke="#C4B5FD"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+</svg>
