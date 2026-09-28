@@ -62,7 +62,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
-import { containsLatinLetter, sanitizeQuestionInput, useInput } from "~/composables/main/question";
+import {
+  containsAllowedQuestionCharacter,
+  sanitizeQuestionInput,
+  useInput,
+} from "~/composables/main/question";
 import { useShowAnswer } from "~/composables/main/showAnswer";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
@@ -132,7 +136,7 @@ watch(
   () => inputValue.value,
   (val) => {
     const sanitizedValue = sanitizeQuestionInput(val);
-    if (isAnswerTip() && containsLatinLetter(sanitizedValue)) {
+    if (isAnswerTip() && containsAllowedQuestionCharacter(sanitizedValue)) {
       hiddenAnswerTip();
     }
 
@@ -285,8 +289,9 @@ function handleKeydown(e: KeyboardEvent) {
   }
 
   if (isAnswerTip()) {
-    const isLatinLetterKey = /^[A-Za-z]$/.test(e.key) && !e.metaKey && !e.altKey;
-    if (isLatinLetterKey) {
+    const isAllowedCharacterKey =
+      [...e.key].length === 1 && containsAllowedQuestionCharacter(e.key) && !e.metaKey && !e.altKey;
+    if (isAllowedCharacterKey) {
       hiddenAnswerTip();
     } else {
       if (e.code === "Enter") {
