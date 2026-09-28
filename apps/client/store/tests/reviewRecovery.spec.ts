@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import type { RecoverySources } from "../reviewRecovery";
 import { ReviewRecovery } from "../reviewRecovery";
 
 describe("ReviewRecovery", () => {
-  const sources = new Map<string, [string, string]>([
+  const sources = new Map<string, RecoverySources>([
     ["whole", ["old", "new"]],
     ["old", ["leaf-a", "leaf-b"]],
   ]);
@@ -34,6 +35,17 @@ describe("ReviewRecovery", () => {
     recovery.fail("whole");
     recovery.cancel();
     expect(recovery.currentUnitId).toBeUndefined();
+    expect(recovery.correct()).toBeUndefined();
+  });
+
+  it("retries after the only retained source and can reopen a failed retry", () => {
+    const recovery = new ReviewRecovery(
+      new Map<string, RecoverySources>([["with-article", ["core"]]]),
+    );
+    expect(recovery.fail("with-article")).toBe("core");
+    expect(recovery.correct()).toBe("with-article");
+    expect(recovery.fail("with-article")).toBe("core");
+    expect(recovery.correct()).toBe("with-article");
     expect(recovery.correct()).toBeUndefined();
   });
 });

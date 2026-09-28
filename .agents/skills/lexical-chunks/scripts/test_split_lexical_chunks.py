@@ -126,15 +126,21 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             start, end = unit["span"]["start"], unit["span"]["end"]
             self.assertEqual(unit["text"], source[start:end])
 
-    def test_filtered_sources_do_not_appear_in_review_or_phraseweave_links(self):
+    def test_retained_sources_survive_function_word_filtering(self):
         plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
         sentence = plan["sentences"][0]
         texts = [unit["text"] for unit in sentence["units"]]
         self.assertEqual(len(texts), 34)
         self.assertIn("of light", texts)
         self.assertIn("could be", texts)
-        for text in ("the USA", "of light", "could be"):
-            self.assertIsNone(traces[0]["sources"][texts.index(text)])
+        by_span = {
+            (unit["span"]["start"], unit["span"]["end"]): unit["text"]
+            for unit in sentence["units"]
+        }
+        for text, expected in (("the USA", ["USA"]), ("of light", ["light"])):
+            spans = traces[0]["sources"][texts.index(text)]
+            self.assertEqual([by_span[span] for span in spans], expected)
+        self.assertIsNone(traces[0]["sources"][texts.index("could be")])
 
         translations = {"sentences": [{"unit_prompts": ["提示"] * len(texts)}]}
         rows = json.loads(render_phraseweave(plan, translations, traces, mode="review"))["statements"]
@@ -142,10 +148,13 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         for index, row in enumerate(rows):
             first_by_id.setdefault(row["unit_id"], index)
         for row in rows:
-            self.assertIn(len(row["source_unit_ids"]), (0, 2))
+            self.assertIn(len(row["source_unit_ids"]), (0, 1, 2))
             self.assertTrue(all(first_by_id[source_id] < first_by_id[row["unit_id"]] for source_id in row["source_unit_ids"]))
-        for text in ("the USA", "of light", "could be"):
-            self.assertEqual(next(row for row in rows if row["english"] == text)["source_unit_ids"], [])
+        for text, source in (("the USA", "USA"), ("of light", "light")):
+            target = next(row for row in rows if row["english"] == text)
+            source_id = next(row["unit_id"] for row in rows if row["english"] == source)
+            self.assertEqual(target["source_unit_ids"], [source_id])
+        self.assertEqual(next(row for row in rows if row["english"] == "could be")["source_unit_ids"], [])
 
     def test_internal_punctuation_blocks_local_closure_but_sentence_keeps_comma(self):
         plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
@@ -155,6 +164,44 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertEqual(texts[-1], "He smiled, and she laughed")
         self.assertNotIn("smiled, and", texts)
         self.assertTrue(traces[0]["blocked"])
+
+    def test_double_quotes_are_removed_before_parsing_and_from_answers(self):
+        sentence = (
+            "Singapore's government said the fines would help create a "
+            '"more considerate and pleasant public transport environment"'
+        )
+        straight, traces = generate_plan(sentence, self.nlp)
+        curly, _ = generate_plan(sentence.replace('"', "“", 1).replace('"', "”"), self.nlp)
+        self.assertEqual(straight, curly)
+        planned = straight["sentences"][0]
+        self.assertEqual(
+            planned["units"][-1]["text"],
+            "Singapore's government said the fines would help create a "
+            "more considerate and pleasant public transport environment",
+        )
+        self.assertIn(
+            "create a more considerate and pleasant public transport environment",
+            [unit["text"] for unit in planned["units"]],
+        )
+        target_index = next(
+            index for index, unit in enumerate(planned["units"])
+            if unit["text"] == "a more considerate and pleasant public transport environment"
+        )
+        source_span = traces[0]["sources"][target_index]
+        self.assertEqual(len(source_span), 1)
+        self.assertEqual(planned["sentence"][slice(*source_span[0])],
+                         "more considerate and pleasant public transport environment")
+        self.assertTrue(all('"' not in unit["text"] for unit in planned["units"]))
+        self.assertTrue(all(token["text"] not in {'"', "“", "”"} for token in traces[0]["tree_tokens"]))
+        for unit in planned["units"]:
+            start, end = unit["span"]["start"], unit["span"]["end"]
+            self.assertEqual(unit["text"], planned["sentence"][start:end])
+
+    def test_double_quote_removal_keeps_word_boundaries_and_single_quotes(self):
+        plan = self.plan('She said"hello"today.')
+        self.assertEqual(plan["sentences"][0]["sentence"], "She said hello today.")
+        single_quote_sentence = "Singapore's government said 'hello'."
+        self.assertEqual(self.plan(single_quote_sentence)["sentences"][0]["sentence"], single_quote_sentence)
 
     def test_coordination_follows_tree_without_special_grouping(self):
         texts = [unit["text"] for unit in self.plan("He smiled and she laughed.")["sentences"][0]["units"]]
@@ -177,6 +224,11 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         with self.assertRaisesRegex(ConfigurationError, "generator versions"):
             _validate_plan(wrong_version, self.nlp)
 
+        old_algorithm = deepcopy(plan)
+        old_algorithm["algorithm_version"] = 3
+        with self.assertRaisesRegex(ConfigurationError, "generator versions"):
+            _validate_plan(old_algorithm, self.nlp)
+
         wrong_span = deepcopy(plan)
         wrong_span["sentences"][0]["units"][0]["span"]["start"] += 1
         with self.assertRaisesRegex(ConfigurationError, "does not match"):
@@ -193,7 +245,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         annotations = {"schema_version": 1, "sentences": [{"unit_prompts": prompts}]}
         parsed = _parse_annotations(json.dumps(annotations), plan)
         payload = json.loads(render_phraseweave(plan, parsed, traces))
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
         self.assertEqual(len(payload["statements"]), len(prompts))
         self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
         self.assertEqual(set(payload["statements"][0]), {"chinese", "english", "soundmark", "unit_id", "source_unit_ids"})
@@ -250,11 +302,16 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         markdown = render_markdown(plan, translations, traces, mode="review")
         self.assertEqual(markdown.count("| 复习 |"), sum(is_review for _, is_review in steps))
         payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
+        source_row = next(row for row in payload["statements"] if row["english"] == "the USA")
+        self.assertEqual(source_row["source_unit_ids"], ["0:0"])
         self.assertEqual(
             [(row["chinese"], row["english"]) for row in payload["statements"]],
             [(prompts[index], sentence["units"][index]["text"]) for index, _ in steps],
         )
+        rows = [(sentence["units"][index]["text"], is_review) for index, is_review in steps]
+        position = rows.index(("the USA", False))
+        self.assertEqual(rows[position - 1], ("USA", True))
         self.assertEqual(payload["statements"][0]["source_unit_ids"], [])
         self.assertEqual(payload["statements"][-1]["source_unit_ids"], ["0:1", "0:2"])
         self.assertEqual(

@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
 import type { ExerciseCatalogItem } from "./exerciseCatalog";
+import type { RecoverySources } from "./reviewRecovery";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import {
   getLocalExercise,
@@ -18,7 +19,7 @@ export interface Statement {
   english: string;
   soundmark: string;
   unitId?: string;
-  sourceUnitIds?: [] | [string, string];
+  sourceUnitIds?: [] | RecoverySources;
 }
 
 export interface CourseIdentifier {
@@ -165,21 +166,23 @@ export const useExerciseStore = defineStore("exercise", () => {
     currentCourse.value = course;
     unitStatements.clear();
     const firstUnitOrder = new Map<string, number>();
-    const sourcesByUnitId = new Map<string, [string, string]>();
+    const sourcesByUnitId = new Map<string, RecoverySources>();
     for (const [index, statement] of course.statements.entries()) {
       if (!statement.unitId || unitStatements.has(statement.unitId)) continue;
       unitStatements.set(statement.unitId, statement);
       firstUnitOrder.set(statement.unitId, index);
     }
     for (const statement of unitStatements.values()) {
+      const sourceUnitIds = statement.sourceUnitIds;
       if (
         statement.unitId &&
-        statement.sourceUnitIds?.length === 2 &&
-        statement.sourceUnitIds.every(
+        sourceUnitIds &&
+        sourceUnitIds.length !== 0 &&
+        sourceUnitIds.every(
           (id) => (firstUnitOrder.get(id) ?? Infinity) < firstUnitOrder.get(statement.unitId!)!,
         )
       )
-        sourcesByUnitId.set(statement.unitId, statement.sourceUnitIds);
+        sourcesByUnitId.set(statement.unitId, sourceUnitIds);
     }
     recovery = new ReviewRecovery(sourcesByUnitId);
     recoveryUnitId.value = undefined;

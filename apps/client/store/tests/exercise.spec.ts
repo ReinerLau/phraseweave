@@ -198,4 +198,49 @@ describe("course", () => {
     expect(store.isRecovering).toBe(false);
     expect(store.statementIndex).toBe(1);
   });
+
+  it("recovers through one retained source", async () => {
+    const course: Course = {
+      ...firstCourse,
+      statements: [
+        {
+          id: "core",
+          order: 1,
+          english: "public transport environment",
+          chinese: "公共交通环境",
+          soundmark: "",
+          unitId: "0:0",
+          sourceUnitIds: [],
+        },
+        {
+          id: "article",
+          order: 2,
+          english: "a public transport environment",
+          chinese: "一个公共交通环境",
+          soundmark: "",
+          unitId: "0:1",
+          sourceUnitIds: ["0:0"],
+        },
+      ],
+    };
+    vi.mocked(getLocalExercise).mockResolvedValueOnce({
+      id: coursePack.id,
+      title: coursePack.title,
+      description: "",
+      isFree: true,
+      cover: "",
+      courses: [course],
+    });
+    const store = useExerciseStore();
+    await store.setup(coursePack.id, course.id);
+    store.toSpecificStatement(1);
+
+    store.failCurrentStatement();
+    expect(store.statementIndex).toBe(1);
+    expect(store.currentStatement?.unitId).toBe("0:0");
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.currentStatement?.unitId).toBe("0:1");
+    expect(store.advanceAfterCorrect()).toBe(true);
+    expect(store.isRecovering).toBe(false);
+  });
 });

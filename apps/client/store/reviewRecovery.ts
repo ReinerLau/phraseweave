@@ -1,6 +1,8 @@
+export type RecoverySources = [string] | [string, string];
+
 interface RecoveryFrame {
   targetUnitId: string;
-  sourceUnitIds: [string, string];
+  sourceUnitIds: RecoverySources;
   sourceIndex: number;
   retrying: boolean;
 }
@@ -10,7 +12,7 @@ export class ReviewRecovery {
   private frames: RecoveryFrame[] = [];
   currentUnitId: string | undefined;
 
-  constructor(private readonly sourcesByUnitId: Map<string, [string, string]>) {}
+  constructor(private readonly sourcesByUnitId: Map<string, RecoverySources>) {}
 
   fail(unitId: string | undefined): string | undefined {
     if (!unitId) return this.currentUnitId;
@@ -40,9 +42,9 @@ export class ReviewRecovery {
         this.frames.pop();
         continue;
       }
-      if (frame.sourceIndex === 0) {
-        frame.sourceIndex = 1;
-        this.currentUnitId = frame.sourceUnitIds[1];
+      if (frame.sourceIndex + 1 < frame.sourceUnitIds.length) {
+        frame.sourceIndex += 1;
+        this.currentUnitId = frame.sourceUnitIds[frame.sourceIndex];
         return this.currentUnitId;
       }
       frame.retrying = true;

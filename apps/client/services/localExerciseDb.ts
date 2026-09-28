@@ -30,12 +30,23 @@ interface LexicalChunksStatementV2 extends LexicalChunksStatement {
   source_unit_ids: [] | [string, string];
 }
 
+interface LexicalChunksStatementV3 extends LexicalChunksStatement {
+  unit_id: string;
+  source_unit_ids: [] | [string] | [string, string];
+}
+
 interface LexicalChunksBackupV2 {
   schema_version: 2;
   statements: LexicalChunksStatementV2[];
 }
 
-type LexicalChunksBackup = LexicalChunksBackupV1 | LexicalChunksBackupV2;
+interface LexicalChunksBackupV3 {
+  schema_version: 3;
+  statements: LexicalChunksStatementV3[];
+}
+
+type LexicalChunksBackup = LexicalChunksBackupV1 | LexicalChunksBackupV2 | LexicalChunksBackupV3;
+type LinkedStatement = LexicalChunksStatementV2 | LexicalChunksStatementV3;
 
 export interface ExerciseImportOptions {
   title?: string;
@@ -185,14 +196,16 @@ export function normalizeExerciseImport(
   }
 
   if (!isLexicalChunksBackup(value)) throw new Error("备份文件格式不正确");
-  if (
-    !value.statements.every(
-      value.schema_version === 2 ? isLexicalChunksStatementV2 : isLexicalChunksStatement,
-    )
-  ) {
+  const validStatements =
+    value.schema_version === 1
+      ? value.statements.every(isLexicalChunksStatement)
+      : value.schema_version === 2
+        ? value.statements.every(isLexicalChunksStatementV2)
+        : value.statements.every(isLexicalChunksStatementV3);
+  if (!validStatements) {
     throw new Error("备份文件包含无效练习");
   }
-  if (value.schema_version === 2 && !hasValidSources(value.statements)) {
+  if (value.schema_version !== 1 && !hasValidSources(value.statements)) {
     throw new Error("备份文件包含无效单元关系");
   }
 
@@ -221,10 +234,10 @@ export function normalizeExerciseImport(
             chinese: statement.chinese,
             english: statement.english,
             soundmark: statement.soundmark,
-            ...(value.schema_version === 2
+            ...(value.schema_version !== 1
               ? {
-                  unitId: (statement as LexicalChunksStatementV2).unit_id,
-                  sourceUnitIds: (statement as LexicalChunksStatementV2).source_unit_ids,
+                  unitId: (statement as LinkedStatement).unit_id,
+                  sourceUnitIds: (statement as LinkedStatement).source_unit_ids,
                 }
               : {}),
           })),
@@ -276,7 +289,8 @@ function isLexicalChunksBackup(value: unknown): value is LexicalChunksBackup {
   if (!value || typeof value !== "object") return false;
   const backup = value as Partial<LexicalChunksBackup>;
   return (
-    (backup.schema_version === 1 || backup.schema_version === 2) && Array.isArray(backup.statements)
+    (backup.schema_version === 1 || backup.schema_version === 2 || backup.schema_version === 3) &&
+    Array.isArray(backup.statements)
   );
 }
 
@@ -291,20 +305,28 @@ function isLexicalChunksStatement(value: unknown): value is LexicalChunksStateme
 }
 
 function isLexicalChunksStatementV2(value: unknown): value is LexicalChunksStatementV2 {
+  return hasLinkedStatementShape(value, [0, 2]);
+}
+
+function isLexicalChunksStatementV3(value: unknown): value is LexicalChunksStatementV3 {
+  return hasLinkedStatementShape(value, [0, 1, 2]);
+}
+
+function hasLinkedStatementShape(value: unknown, allowedLengths: number[]): boolean {
   if (!isLexicalChunksStatement(value)) return false;
-  const statement = value as Partial<LexicalChunksStatementV2>;
+  const statement = value as Partial<LexicalChunksStatementV3>;
   return (
     typeof statement.unit_id === "string" &&
     statement.unit_id.length > 0 &&
     Array.isArray(statement.source_unit_ids) &&
-    (statement.source_unit_ids.length === 0 || statement.source_unit_ids.length === 2) &&
+    allowedLengths.includes(statement.source_unit_ids.length) &&
     statement.source_unit_ids.every((id) => typeof id === "string" && id.length > 0)
   );
 }
 
-function hasValidSources(statements: LexicalChunksStatementV2[]): boolean {
+function hasValidSources(statements: LinkedStatement[]): boolean {
   const firstById = new Map<string, number>();
-  const canonical = new Map<string, LexicalChunksStatementV2>();
+  const canonical = new Map<string, LinkedStatement>();
   statements.forEach((statement, index) => {
     if (!firstById.has(statement.unit_id)) {
       firstById.set(statement.unit_id, index);
@@ -320,9 +342,8 @@ function hasValidSources(statements: LexicalChunksStatementV2[]): boolean {
       JSON.stringify(statement.source_unit_ids) === JSON.stringify(first.source_unit_ids);
     const sources = statement.source_unit_ids;
     const sourceOrderValid =
-      sources.length === 0 ||
-      (sources[0] !== sources[1] &&
-        sources.every((id) => (firstById.get(id) ?? Infinity) < firstById.get(statement.unit_id)!));
+      new Set(sources).size === sources.length &&
+      sources.every((id) => (firstById.get(id) ?? Infinity) < firstById.get(statement.unit_id)!);
     return sameUnit && sourceOrderValid;
   });
 }
