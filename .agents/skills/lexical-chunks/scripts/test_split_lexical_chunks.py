@@ -30,27 +30,21 @@ FIRST_SENTENCE = (
     "Researchers from Tulane University in the USA say any kind of light "
     "at bedtime could be bad for your heart"
 )
-FIRST_UNITS = """the
-USA
+FIRST_UNITS = """USA
 the USA
-in
 in the USA
 Tulane
 University
 Tulane University
 University in the USA
 Tulane University in the USA
-from
 from Tulane University in the USA
 Researchers
 Researchers from Tulane University in the USA
 light
-of
 of light
 bedtime
-at
 at bedtime
-any
 kind
 any kind
 kind of light
@@ -59,12 +53,9 @@ any kind of light at bedtime
 your
 heart
 your heart
-for
 for your heart
 bad
 bad for your heart
-could
-be
 could be
 be bad for your heart
 could be bad for your heart
@@ -75,8 +66,7 @@ say any kind of light at bedtime could be bad for your heart
 Researchers from Tulane University in the USA say any kind of light at bedtime could be bad for your heart""".splitlines()
 
 SECOND_SENTENCE = "The young teacher gave her students a difficult problem after class."
-SECOND_UNITS = """The
-young
+SECOND_UNITS = """young
 teacher
 young teacher
 The young teacher
@@ -84,9 +74,7 @@ her
 students
 her students
 class
-after
 after class
-a
 difficult
 problem
 difficult problem
@@ -119,16 +107,45 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
     def test_leaf_child_follows_non_leaf_siblings_before_head(self):
         texts = [unit["text"] for unit in self.plan(FIRST_SENTENCE + ".")["sentences"][0]["units"]]
         index = texts.index("bad for your heart")
-        self.assertEqual(texts[index:index + 4], ["bad for your heart", "could", "be", "could be"])
+        self.assertEqual(
+            texts[index:index + 4],
+            ["bad for your heart", "could be", "be bad for your heart", "could be bad for your heart"],
+        )
 
-    def test_all_word_tokens_appear_and_units_use_one_source_span(self):
+    def test_function_word_tokens_are_filtered_but_phrases_keep_their_source_span(self):
         source = SECOND_SENTENCE
         units = self.plan(source)["sentences"][0]["units"]
-        self.assertIn("The", [unit["text"] for unit in units])
-        self.assertIn("a", [unit["text"] for unit in units])
+        texts = [unit["text"] for unit in units]
+        self.assertNotIn("The", texts)
+        self.assertNotIn("a", texts)
+        self.assertNotIn("after", texts)
+        self.assertIn("her", texts)
+        self.assertIn("after class", texts)
+        self.assertIn("a difficult problem after class", texts)
         for unit in units:
             start, end = unit["span"]["start"], unit["span"]["end"]
             self.assertEqual(unit["text"], source[start:end])
+
+    def test_filtered_sources_do_not_appear_in_review_or_phraseweave_links(self):
+        plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
+        sentence = plan["sentences"][0]
+        texts = [unit["text"] for unit in sentence["units"]]
+        self.assertEqual(len(texts), 34)
+        self.assertIn("of light", texts)
+        self.assertIn("could be", texts)
+        for text in ("the USA", "of light", "could be"):
+            self.assertIsNone(traces[0]["sources"][texts.index(text)])
+
+        translations = {"sentences": [{"unit_prompts": ["提示"] * len(texts)}]}
+        rows = json.loads(render_phraseweave(plan, translations, traces, mode="review"))["statements"]
+        first_by_id = {}
+        for index, row in enumerate(rows):
+            first_by_id.setdefault(row["unit_id"], index)
+        for row in rows:
+            self.assertIn(len(row["source_unit_ids"]), (0, 2))
+            self.assertTrue(all(first_by_id[source_id] < first_by_id[row["unit_id"]] for source_id in row["source_unit_ids"]))
+        for text in ("the USA", "of light", "could be"):
+            self.assertEqual(next(row for row in rows if row["english"] == text)["source_unit_ids"], [])
 
     def test_internal_punctuation_blocks_local_closure_but_sentence_keeps_comma(self):
         plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
@@ -205,7 +222,6 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         rows = [(sentence["units"][index]["text"], is_review) for index, is_review in steps]
 
         for result, sources in (
-            ("the USA", ["the", "USA"]),
             ("University in the USA", ["University", "in the USA"]),
             ("any kind of light at bedtime", ["at bedtime", "any kind of light"]),
             ("any kind of light at bedtime could be bad for your heart",
@@ -240,7 +256,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             [(prompts[index], sentence["units"][index]["text"]) for index, _ in steps],
         )
         self.assertEqual(payload["statements"][0]["source_unit_ids"], [])
-        self.assertEqual(payload["statements"][-1]["source_unit_ids"], ["0:2", "0:3"])
+        self.assertEqual(payload["statements"][-1]["source_unit_ids"], ["0:1", "0:2"])
         self.assertEqual(
             len(json.loads(render_phraseweave(plan, translations, traces))["statements"]),
             len(sentence["units"]),
@@ -260,7 +276,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertEqual(source_texts, ["Researchers from Tulane University in the USA", "say"])
         self.assertEqual(
             {row["unit_id"] for row in rows if row["english"] == "the USA"},
-            {"0:2"},
+            {"0:1"},
         )
 
     def test_review_does_not_invent_sources_across_punctuation(self):
