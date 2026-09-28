@@ -45,6 +45,8 @@
 }
 ```
 
-渲染器按当前版本重新生成英文单元并逐项校验，再验证中文提示 JSON schema 1 中每句 `unit_prompts` 的数量。PhraseWeave 导入 JSON 继续使用 schema 1 的平铺 `statements`，现有客户端可直接导入。Markdown 包含依存树、中文提示、英文答案与组合说明。
+渲染器按当前版本重新生成英文单元并逐项校验，再验证中文提示 JSON schema 1 中每句 `unit_prompts` 的数量。Markdown 包含依存树、中文提示、英文答案与组合说明。
+
+PhraseWeave 导入 JSON 使用 schema 2 的平铺 `statements`。每行保留 `chinese`、`english`、`soundmark`，增加稳定的 `unit_id` 和 `source_unit_ids`。单词或没有可用来源的单元使用空数组；可拆的单元使用两个直接来源 ID，按原文位置排序。`review` 模式中的重复行共用相同的单元 ID 与来源。客户端在答错可拆单元时使用这些关系逐级回退；旧 schema 1 导入仍可用，但没有回退关系。
 
 此策略的取舍记于 [ADR 0012](adr/0012-adjacent-subtree-closure.md)。

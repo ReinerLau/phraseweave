@@ -8,16 +8,17 @@ import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 export function useExerciseNavigation() {
   const courseStore = useExerciseStore();
-  const { showQuestion } = useGameMode();
+  const { showQuestion, isAnswer } = useGameMode();
   const { showSummary } = useSummary();
 
   function goToNextQuestion() {
-    if (courseStore.isAllDone()) {
+    if (isAnswer() ? courseStore.advanceAfterCorrect() : courseStore.isAllDone()) {
+      courseStore.cancelRecovery();
       showSummary();
       return;
     }
 
-    courseStore.toNextStatement();
+    if (!isAnswer()) courseStore.toNextStatement();
     showQuestion();
   }
 

@@ -89,4 +89,56 @@ describe("normalizeExerciseImport", () => {
       }),
     ).toThrow("备份文件包含无效练习");
   });
+
+  it("keeps schema 2 source links when importing repeated review rows", () => {
+    const [pack] = normalizeExerciseImport({
+      schema_version: 2,
+      statements: [
+        {
+          chinese: "研究人员",
+          english: "Researchers",
+          soundmark: "",
+          unit_id: "0:0",
+          source_unit_ids: [],
+        },
+        { chinese: "说", english: "say", soundmark: "", unit_id: "0:1", source_unit_ids: [] },
+        {
+          chinese: "研究人员",
+          english: "Researchers",
+          soundmark: "",
+          unit_id: "0:0",
+          source_unit_ids: [],
+        },
+        {
+          chinese: "研究人员说",
+          english: "Researchers say",
+          soundmark: "",
+          unit_id: "0:2",
+          source_unit_ids: ["0:0", "0:1"],
+        },
+      ],
+    });
+
+    expect(pack.courses[0].statements[3]).toMatchObject({
+      unitId: "0:2",
+      sourceUnitIds: ["0:0", "0:1"],
+    });
+  });
+
+  it("rejects schema 2 links to absent or later units", () => {
+    expect(() =>
+      normalizeExerciseImport({
+        schema_version: 2,
+        statements: [
+          {
+            chinese: "研究人员说",
+            english: "Researchers say",
+            soundmark: "",
+            unit_id: "0:2",
+            source_unit_ids: ["0:0", "0:1"],
+          },
+        ],
+      }),
+    ).toThrow("备份文件包含无效单元关系");
+  });
 });

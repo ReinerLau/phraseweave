@@ -171,15 +171,15 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             _validate_plan(wrong_order, self.nlp)
 
     def test_annotation_alignment_and_phraseweave_import_shape(self):
-        plan = self.plan("Birdsong is good.")
+        plan, traces = generate_plan("Birdsong is good.", self.nlp)
         prompts = [f"提示 {index}" for index, _ in enumerate(plan["sentences"][0]["units"], 1)]
         annotations = {"schema_version": 1, "sentences": [{"unit_prompts": prompts}]}
         parsed = _parse_annotations(json.dumps(annotations), plan)
-        payload = json.loads(render_phraseweave(plan, parsed))
-        self.assertEqual(payload["schema_version"], 1)
+        payload = json.loads(render_phraseweave(plan, parsed, traces))
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(len(payload["statements"]), len(prompts))
         self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
-        self.assertEqual(set(payload["statements"][0]), {"chinese", "english", "soundmark"})
+        self.assertEqual(set(payload["statements"][0]), {"chinese", "english", "soundmark", "unit_id", "source_unit_ids"})
 
         annotations["sentences"][0]["unit_prompts"].pop()
         with self.assertRaisesRegex(ConfigurationError, "must contain exactly"):
@@ -234,14 +234,33 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         markdown = render_markdown(plan, translations, traces, mode="review")
         self.assertEqual(markdown.count("| 复习 |"), sum(is_review for _, is_review in steps))
         payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
-        self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(payload["statements"], [
-            {"chinese": prompts[index], "english": sentence["units"][index]["text"], "soundmark": ""}
-            for index, _ in steps
-        ])
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(
-            len(json.loads(render_phraseweave(plan, translations))["statements"]),
+            [(row["chinese"], row["english"]) for row in payload["statements"]],
+            [(prompts[index], sentence["units"][index]["text"]) for index, _ in steps],
+        )
+        self.assertEqual(payload["statements"][0]["source_unit_ids"], [])
+        self.assertEqual(payload["statements"][-1]["source_unit_ids"], ["0:2", "0:3"])
+        self.assertEqual(
+            len(json.loads(render_phraseweave(plan, translations, traces))["statements"]),
             len(sentence["units"]),
+        )
+
+    def test_phraseweave_sources_identify_original_units_across_review_repetitions(self):
+        plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
+        sentence = plan["sentences"][0]
+        translations = {"sentences": [{"unit_prompts": ["提示"] * len(sentence["units"])}]}
+        payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
+        rows = payload["statements"]
+        target = next(row for row in rows if row["english"].endswith("USA say"))
+        source_texts = [
+            next(row["english"] for row in rows if row["unit_id"] == source_id)
+            for source_id in target["source_unit_ids"]
+        ]
+        self.assertEqual(source_texts, ["Researchers from Tulane University in the USA", "say"])
+        self.assertEqual(
+            {row["unit_id"] for row in rows if row["english"] == "the USA"},
+            {"0:2"},
         )
 
     def test_review_does_not_invent_sources_across_punctuation(self):

@@ -20,10 +20,22 @@ interface LexicalChunksStatement {
   soundmark: string;
 }
 
-interface LexicalChunksBackup {
+interface LexicalChunksBackupV1 {
   schema_version: 1;
   statements: LexicalChunksStatement[];
 }
+
+interface LexicalChunksStatementV2 extends LexicalChunksStatement {
+  unit_id: string;
+  source_unit_ids: [] | [string, string];
+}
+
+interface LexicalChunksBackupV2 {
+  schema_version: 2;
+  statements: LexicalChunksStatementV2[];
+}
+
+type LexicalChunksBackup = LexicalChunksBackupV1 | LexicalChunksBackupV2;
 
 export interface ExerciseImportOptions {
   title?: string;
@@ -173,8 +185,15 @@ export function normalizeExerciseImport(
   }
 
   if (!isLexicalChunksBackup(value)) throw new Error("备份文件格式不正确");
-  if (!value.statements.every(isLexicalChunksStatement)) {
+  if (
+    !value.statements.every(
+      value.schema_version === 2 ? isLexicalChunksStatementV2 : isLexicalChunksStatement,
+    )
+  ) {
     throw new Error("备份文件包含无效练习");
+  }
+  if (value.schema_version === 2 && !hasValidSources(value.statements)) {
+    throw new Error("备份文件包含无效单元关系");
   }
 
   const idFactory = options.idFactory ?? createImportId;
@@ -202,6 +221,12 @@ export function normalizeExerciseImport(
             chinese: statement.chinese,
             english: statement.english,
             soundmark: statement.soundmark,
+            ...(value.schema_version === 2
+              ? {
+                  unitId: (statement as LexicalChunksStatementV2).unit_id,
+                  sourceUnitIds: (statement as LexicalChunksStatementV2).source_unit_ids,
+                }
+              : {}),
           })),
         },
       ],
@@ -250,7 +275,9 @@ function isExerciseResponse(value: unknown): value is ExerciseResponse {
 function isLexicalChunksBackup(value: unknown): value is LexicalChunksBackup {
   if (!value || typeof value !== "object") return false;
   const backup = value as Partial<LexicalChunksBackup>;
-  return backup.schema_version === 1 && Array.isArray(backup.statements);
+  return (
+    (backup.schema_version === 1 || backup.schema_version === 2) && Array.isArray(backup.statements)
+  );
 }
 
 function isLexicalChunksStatement(value: unknown): value is LexicalChunksStatement {
@@ -261,6 +288,43 @@ function isLexicalChunksStatement(value: unknown): value is LexicalChunksStateme
     typeof statement.english === "string" &&
     typeof statement.soundmark === "string"
   );
+}
+
+function isLexicalChunksStatementV2(value: unknown): value is LexicalChunksStatementV2 {
+  if (!isLexicalChunksStatement(value)) return false;
+  const statement = value as Partial<LexicalChunksStatementV2>;
+  return (
+    typeof statement.unit_id === "string" &&
+    statement.unit_id.length > 0 &&
+    Array.isArray(statement.source_unit_ids) &&
+    (statement.source_unit_ids.length === 0 || statement.source_unit_ids.length === 2) &&
+    statement.source_unit_ids.every((id) => typeof id === "string" && id.length > 0)
+  );
+}
+
+function hasValidSources(statements: LexicalChunksStatementV2[]): boolean {
+  const firstById = new Map<string, number>();
+  const canonical = new Map<string, LexicalChunksStatementV2>();
+  statements.forEach((statement, index) => {
+    if (!firstById.has(statement.unit_id)) {
+      firstById.set(statement.unit_id, index);
+      canonical.set(statement.unit_id, statement);
+    }
+  });
+  return statements.every((statement) => {
+    const first = canonical.get(statement.unit_id)!;
+    const sameUnit =
+      statement.chinese === first.chinese &&
+      statement.english === first.english &&
+      statement.soundmark === first.soundmark &&
+      JSON.stringify(statement.source_unit_ids) === JSON.stringify(first.source_unit_ids);
+    const sources = statement.source_unit_ids;
+    const sourceOrderValid =
+      sources.length === 0 ||
+      (sources[0] !== sources[1] &&
+        sources.every((id) => (firstById.get(id) ?? Infinity) < firstById.get(statement.unit_id)!));
+    return sameUnit && sourceOrderValid;
+  });
 }
 
 function createImportId() {
