@@ -3,13 +3,11 @@ import { computed, ref } from "vue";
 import { getLocalStorageItem, setLocalStorageItem } from "~/utils/storageScope";
 
 export enum SHORTCUT_KEY_TYPES {
-  SOUND = "sound",
   SKIP = "skip",
   PREVIOUS = "previous",
 }
 export const SHORTCUT_KEYS = "shortcutKeys";
 export const DEFAULT_SHORTCUT_KEYS = {
-  sound: "Ctrl+'",
   skip: "ArrowRight",
   previous: "ArrowLeft",
 };
@@ -74,6 +72,7 @@ export function useShortcutKeyMode() {
       const migratedKeys = { ...storedKeys };
 
       delete migratedKeys.answer;
+      delete migratedKeys.sound;
 
       if (migratedKeys.skip === LEGACY_NAVIGATION_SHORTCUT_KEYS.skip) {
         migratedKeys.skip = DEFAULT_SHORTCUT_KEYS.skip;

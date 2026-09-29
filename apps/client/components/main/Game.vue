@@ -4,12 +4,7 @@
     data-testid="practice-focus-area"
     @click="handleFocusAreaClick"
   >
-    <template v-if="currentGameMode === GameMode.Dictation">
-      <ModeDictationMode />
-    </template>
-    <template v-else-if="currentGameMode === GameMode.ChineseToEnglish">
-      <ModeChineseToEnglishMode />
-    </template>
+    <ModeClozeMode />
   </div>
 
   <MainSummary />
@@ -23,9 +18,7 @@ import { onMounted } from "vue";
 import { useQuestionInput } from "~/components/main/QuestionInput/questionInputHelper";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useGameMode as useQuestionGameMode } from "~/composables/main/game";
-import { GameMode, useGameMode } from "~/composables/user/gameMode";
 
-const { currentGameMode } = useGameMode();
 const { isQuestion } = useQuestionGameMode();
 const { focusInput } = useQuestionInput();
 

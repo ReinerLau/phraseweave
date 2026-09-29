@@ -29,7 +29,7 @@ describe("user defined shortcut key", () => {
       localStorage.setItem(SHORTCUT_KEYS, JSON.stringify(storeShortcutKeys));
       const { shortcutKeys } = useShortcutKeyMode();
 
-      expect(shortcutKeys.value).toEqual(storeShortcutKeys);
+      expect(shortcutKeys.value).toEqual({ previous: "ArrowLeft", skip: "ArrowRight" });
     });
 
     it("should migrate legacy navigation shortcuts to arrow keys", () => {
@@ -44,7 +44,6 @@ describe("user defined shortcut key", () => {
       const { shortcutKeys } = useShortcutKeyMode();
 
       expect(shortcutKeys.value).toEqual({
-        sound: storeShortcutKeys.sound,
         previous: "ArrowLeft",
         skip: "ArrowRight",
       });
@@ -56,7 +55,7 @@ describe("user defined shortcut key", () => {
     it("should be true when edit shortcut key", () => {
       const { showModal, handleEdit } = useShortcutKeyMode();
 
-      handleEdit(SHORTCUT_KEY_TYPES.SOUND);
+      handleEdit(SHORTCUT_KEY_TYPES.SKIP);
 
       expect(showModal.value).toBeTruthy();
     });
@@ -64,7 +63,7 @@ describe("user defined shortcut key", () => {
     it("should be close the dialog when press Enter key", () => {
       const { showModal, handleEdit, handleKeydown } = useShortcutKeyMode();
 
-      handleEdit(SHORTCUT_KEY_TYPES.SOUND);
+      handleEdit(SHORTCUT_KEY_TYPES.SKIP);
       handleKeydown({
         key: "Enter",
         preventDefault: () => {},
@@ -91,7 +90,7 @@ describe("user defined shortcut key", () => {
     it("should be the shortcut key is changed when the dialog is open", () => {
       const { shortcutKeyStr, shortcutKeyTip, handleEdit, handleKeydown } = useShortcutKeyMode();
 
-      handleEdit(SHORTCUT_KEY_TYPES.SOUND); // open dialog
+      handleEdit(SHORTCUT_KEY_TYPES.SKIP); // open dialog
 
       handleKeydown({
         key: "s",
@@ -106,7 +105,7 @@ describe("user defined shortcut key", () => {
     it("should be the shortcut key is set successfully when the dialog is open (single key)", () => {
       const { shortcutKeys, handleEdit, handleKeydown } = useShortcutKeyMode();
 
-      handleEdit(SHORTCUT_KEY_TYPES.SOUND);
+      handleEdit(SHORTCUT_KEY_TYPES.SKIP);
 
       handleKeydown({
         key: "Tab",
@@ -118,10 +117,10 @@ describe("user defined shortcut key", () => {
       } as KeyboardEvent);
 
       expect(shortcutKeys.value).toMatchObject({
-        [SHORTCUT_KEY_TYPES.SOUND]: "Tab",
+        [SHORTCUT_KEY_TYPES.SKIP]: "Tab",
       });
       expect(localStorage.getItem(SHORTCUT_KEYS)).toMatchInlineSnapshot(
-        `"{"sound":"Tab","skip":"ArrowRight","previous":"ArrowLeft"}"`,
+        `"{"skip":"Tab","previous":"ArrowLeft"}"`,
       );
     });
   });

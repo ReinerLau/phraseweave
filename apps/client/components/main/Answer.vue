@@ -1,6 +1,6 @@
 <template>
   <div
-    class="answer-content h-full min-h-0 w-full min-w-0 max-w-full overflow-hidden text-left"
+    class="answer-content h-full min-h-0 w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden text-left"
     :style="questionStyle"
     data-testid="answer-content"
   >
@@ -14,29 +14,36 @@
       class="answer-prompt dark:text-gray-50"
       data-testid="answer-prompt"
     >
-      {{ courseStore.currentStatement?.chinese }}
+      {{ courseStore.currentStatement?.sentenceChinese }}
     </div>
-    <!-- 与输入区（QuestionInput）同款词块渲染：共享类 + 同一测量公式，
-         唯一差异是不带 border-b-2 —— 答题后布局零偏移，只是没有下划线 -->
     <div
-      ref="answerWordsEl"
-      class="answer-words question-input-words relative flex w-full min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+      class="answer-sentence dark:text-gray-50"
+      data-testid="answer-sentence"
     >
-      <span
-        v-for="(word, index) in words"
-        :key="index"
-        class="question-input-word min-w-0 max-w-full cursor-pointer rounded-[2px] leading-none text-[#20202099] hover:text-fuchsia-500 dark:text-gray-300"
-        :style="{ width: `${wordWidth(word)}em` }"
-        @click="handlePlayWordSound(word)"
-        >{{ word }}</span
+      <span class="cloze-context">{{ courseStore.currentStatement?.contextBefore }}</span>
+      <div
+        ref="answerWordsEl"
+        class="answer-words question-input-words relative inline-flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       >
-      <span
-        ref="probeEl"
-        class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
-        aria-hidden="true"
-      ></span>
+        <span
+          v-for="(word, index) in words"
+          :key="index"
+          class="question-input-word min-w-0 max-w-full rounded-[2px] leading-none text-[#20202099] dark:text-gray-300"
+          :style="{ width: `${wordWidth(word)}em` }"
+          >{{ word }}</span
+        >
+        <span
+          ref="probeEl"
+          class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
+          aria-hidden="true"
+        ></span>
+      </div>
+      <span class="cloze-context">{{ courseStore.currentStatement?.contextAfter }}</span>
     </div>
-    <div class="my-2 text-xl text-gray-500">
+    <div
+      v-if="courseStore.currentStatement?.soundmark"
+      class="my-2 text-xl text-gray-500"
+    >
       {{ courseStore.currentStatement?.soundmark }}
     </div>
   </div>
@@ -46,18 +53,12 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import { useWordWidths } from "~/components/main/QuestionInput/questionInputHelper";
-import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
-import { usePlayWordSound } from "~/composables/main/englishSound/audio";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
-import { useAutoPronunciation } from "~/composables/user/sound";
 import { useExerciseStore } from "~/store/exercise";
 import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 
 const courseStore = useExerciseStore();
-const { handlePlayWordSound } = usePlayWordSound();
-usePlayEnglishSound();
-const { isAutoPlaySound } = useAutoPronunciation();
 const { questionFontSize } = useQuestionFontSize();
 const { goToNextQuestion: navigateToNextQuestion } = useExerciseNavigation();
 
@@ -72,16 +73,6 @@ const answerWordsEl = ref<HTMLElement>();
 const { probeEl, wordWidth } = useWordWidths(answerWordsEl);
 
 registerShortcutKeyForNextQuestion();
-
-function usePlayEnglishSound() {
-  const { playSound } = useCurrentStatementEnglishSound();
-
-  onMounted(() => {
-    if (isAutoPlaySound()) {
-      playSound();
-    }
-  });
-}
 
 function registerShortcutKeyForNextQuestion() {
   function handleKeydown(e: KeyboardEvent) {
@@ -117,5 +108,19 @@ function goToNextQuestion() {
   font-size: inherit;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.answer-sentence {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.cloze-context {
+  white-space: pre-wrap;
+}
+
+.answer-words {
+  width: fit-content;
+  vertical-align: bottom;
 }
 </style>

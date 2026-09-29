@@ -51,9 +51,10 @@ function seedLocalExercise(english = englishSentence) {
                   {
                     id: "mobile-overflow-statement",
                     order: 1,
-                    chinese: "这是一个测试句子",
+                    sentenceChinese: "这是一个测试句子",
                     english,
-                    soundmark: "/ðɪs/",
+                    contextBefore: "",
+                    contextAfter: ".",
                   },
                 ],
               },
@@ -354,13 +355,14 @@ describe("mobile practice layout", () => {
       const words = root.querySelectorAll<HTMLElement>(".question-input-word");
       expect(words.length, "long question renders every word block").to.be.greaterThan(100);
       const styles = root.ownerDocument.defaultView?.getComputedStyle(root);
-      expect(styles?.overflowY).to.equal("hidden");
-      expect(parseFloat(styles?.fontSize ?? "36px"), "long question scales down").to.be.lessThan(
-        12,
+      expect(styles?.overflowY).to.equal("auto");
+      expect(parseFloat(styles?.fontSize ?? "36px"), "long question stays readable").to.be.at.least(
+        16,
       );
-      expect(root.scrollHeight).to.be.at.most(root.clientHeight + 1);
+      expect(root.scrollHeight).to.be.greaterThan(root.clientHeight);
 
       const action = root.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      root.scrollTop = root.scrollHeight;
       expect(action.getBoundingClientRect().bottom).to.be.at.most(
         root.getBoundingClientRect().bottom + 1,
       );
@@ -376,20 +378,16 @@ describe("mobile practice layout", () => {
     cy.get('[data-testid="show-answer-button"]')
       .should("be.visible")
       .and("have.attr", "aria-label", "显示答案");
-    cy.get(".question-input-words").should(($words) => {
-      const words = $words[0];
+    cy.get(".question-content").should(($question) => {
+      const words = $question[0].querySelector<HTMLElement>(".question-input-words")!;
       const inputWords = words.querySelectorAll<HTMLElement>(".question-input-word");
       const lastInputWord = inputWords[inputWords.length - 1];
-      const button = words.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const button = $question[0].querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
       const lastInputRect = lastInputWord.getBoundingClientRect();
       const buttonRect = button.getBoundingClientRect();
 
       expect(buttonRect.height).to.be.at.least(44);
-      if (Math.abs(buttonRect.top - lastInputRect.top) <= 1) {
-        expect(buttonRect.left).to.be.at.least(lastInputRect.right - 1);
-      } else {
-        expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
-      }
+      expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
     });
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
@@ -551,7 +549,7 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
-  it("keeps the answer button at the input end with the keyboard open", () => {
+  it("keeps the answer button below the input with the keyboard open", () => {
     cy.get('input[type="text"]').click({ force: true });
     cy.window().then((window) => {
       const viewport = window.visualViewport;
@@ -566,19 +564,15 @@ describe("mobile practice layout", () => {
       viewport?.dispatchEvent(new Event("resize"));
     });
 
-    cy.get(".question-input-words").should(($words) => {
-      const words = $words[0];
+    cy.get(".question-content").should(($question) => {
+      const words = $question[0].querySelector<HTMLElement>(".question-input-words")!;
       const inputWords = words.querySelectorAll<HTMLElement>(".question-input-word");
       const lastInputWord = inputWords[inputWords.length - 1];
-      const button = words.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const button = $question[0].querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
       const lastInputRect = lastInputWord.getBoundingClientRect();
       const buttonRect = button.getBoundingClientRect();
 
-      if (Math.abs(buttonRect.top - lastInputRect.top) <= 1) {
-        expect(buttonRect.left).to.be.at.least(lastInputRect.right - 1);
-      } else {
-        expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
-      }
+      expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
     });
   });
 

@@ -25,8 +25,8 @@ MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
 ALGORITHM_VERSION = 4
-ANNOTATION_SCHEMA_VERSION = 1
-PHRASEWEAVE_SCHEMA_VERSION = 3
+ANNOTATION_SCHEMA_VERSION = 2
+PHRASEWEAVE_SCHEMA_VERSION = 4
 FILTERED_WORD_POS = frozenset({"DET", "ADP", "AUX"})
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
@@ -375,23 +375,21 @@ def _parse_annotations(text: str, plan: Mapping[str, Any]) -> dict[str, Any]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as error:
-        raise ConfigurationError(f"invalid translation JSON: {error}") from error
-    _exact_keys(payload, {"schema_version", "sentences"}, "translations")
+        raise ConfigurationError(f"invalid sentence prompt JSON: {error}") from error
+    _exact_keys(payload, {"schema_version", "sentences"}, "prompts")
     if payload["schema_version"] != ANNOTATION_SCHEMA_VERSION:
-        raise ConfigurationError(f"translations must use schema_version {ANNOTATION_SCHEMA_VERSION}")
+        raise ConfigurationError(f"prompts must use schema_version {ANNOTATION_SCHEMA_VERSION}")
     raw_sentences = payload["sentences"]
     if not isinstance(raw_sentences, list) or len(raw_sentences) != len(plan["sentences"]):
-        raise ConfigurationError("translations.sentences must align with the plan")
+        raise ConfigurationError("prompts.sentences must align with the plan")
     sentences = []
-    for index, (raw, planned) in enumerate(zip(raw_sentences, plan["sentences"], strict=True)):
-        location = f"translations.sentences[{index}]"
-        _exact_keys(raw, {"unit_prompts"}, location)
-        prompts = raw["unit_prompts"]
-        if not isinstance(prompts, list) or len(prompts) != len(planned["units"]):
-            raise ConfigurationError(f"{location}.unit_prompts must contain exactly {len(planned['units'])} items")
-        if not all(isinstance(prompt, str) and prompt.strip() for prompt in prompts):
-            raise ConfigurationError(f"{location}.unit_prompts must contain non-empty strings")
-        sentences.append({"unit_prompts": [prompt.strip() for prompt in prompts]})
+    for index, raw in enumerate(raw_sentences):
+        location = f"prompts.sentences[{index}]"
+        _exact_keys(raw, {"sentence_chinese"}, location)
+        prompt = raw["sentence_chinese"]
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ConfigurationError(f"{location}.sentence_chinese must be a non-empty string")
+        sentences.append({"sentence_chinese": prompt.strip()})
     return {"schema_version": ANNOTATION_SCHEMA_VERSION, "sentences": sentences}
 
 
@@ -494,7 +492,9 @@ def render_markdown(
             else "（依存关系树不可用）",
             "```",
             "",
-            "| 序号 | 中文提示 | 英文答案 | 组合说明 |",
+            f"中文提示：{translated['sentence_chinese']}",
+            "",
+            "| 序号 | 英文填空 | 英文答案 | 组合说明 |",
             "|---:|---|---|---|",
         ])
         explanations = traces[sentence_index - 1]["explanations"] if traces is not None else [
@@ -505,10 +505,11 @@ def render_markdown(
             _exercise_steps(sentence, sentence_trace, mode), start=1
         ):
             unit = sentence["units"][unit_index]
-            prompt = translated["unit_prompts"][unit_index]
+            span = unit["span"]
+            blank = sentence["sentence"][:span["start"]] + "____" + sentence["sentence"][span["end"]:]
             explanation = "复习" if is_review else explanations[unit_index]
             lines.append(
-                f"| {step} | {_markdown_escape(prompt)} | {_markdown_escape(unit['text'])} | {_markdown_escape(explanation)} |"
+                f"| {step} | {_markdown_escape(blank)} | {_markdown_escape(unit['text'])} | {_markdown_escape(explanation)} |"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
@@ -532,16 +533,17 @@ def render_phraseweave(
         }
         for unit_index, _ in _exercise_steps(sentence, sentence_trace, mode):
             unit = sentence["units"][unit_index]
-            prompt = translated["unit_prompts"][unit_index]
+            span = unit["span"]
             source_spans = sentence_trace["sources"][unit_index]
             source_ids = [] if source_spans is None else [
                 unit_ids[by_span[span]]
                 for span in sorted(source_spans, key=lambda span: span[0])
             ]
             statements.append({
-                "chinese": prompt,
                 "english": unit["text"],
-                "soundmark": "",
+                "context_before": sentence["sentence"][:span["start"]],
+                "context_after": sentence["sentence"][span["end"]:],
+                "sentence_chinese": translated["sentence_chinese"],
                 "unit_id": unit_ids[unit_index],
                 "source_unit_ids": source_ids,
             })

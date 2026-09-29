@@ -3,7 +3,7 @@
     class="flex h-full min-h-0 w-full min-w-0 flex-col items-start justify-start overflow-hidden"
   >
     <template v-if="isQuestion()">
-      <ModeChineseToEnglishQuestion />
+      <ModeClozeQuestion />
     </template>
     <template v-else-if="isAnswer()">
       <MainAnswer />

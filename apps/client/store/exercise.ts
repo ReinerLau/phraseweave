@@ -15,9 +15,12 @@ import { useStatement } from "./statement";
 export interface Statement {
   id: string;
   order: number;
-  chinese: string;
+  chinese?: string;
   english: string;
-  soundmark: string;
+  soundmark?: string;
+  contextBefore?: string;
+  contextAfter?: string;
+  sentenceChinese?: string;
   unitId?: string;
   sourceUnitIds?: [] | RecoverySources;
 }
