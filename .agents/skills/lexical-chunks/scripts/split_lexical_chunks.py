@@ -28,10 +28,11 @@ ALGORITHM_VERSION = 5
 ANNOTATION_SCHEMA_VERSION = 2
 PHRASEWEAVE_SCHEMA_VERSION = 4
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
-DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
-DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
-DEFAULT_REVIEW_OUTPUT = Path("outputs/lexical-chunks/text.review.learning-units.md")
-DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.review.learning-units.json")
+OUTPUT_DIR = Path(__file__).resolve().parents[4] / "outputs" / "lexical-chunks"
+DEFAULT_OUTPUT = OUTPUT_DIR / "text.learning-units.md"
+DEFAULT_PHRASEWEAVE_OUTPUT = OUTPUT_DIR / "text.learning-units.json"
+DEFAULT_REVIEW_OUTPUT = OUTPUT_DIR / "text.review.learning-units.md"
+DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT = OUTPUT_DIR / "text.review.learning-units.json"
 
 
 class ConfigurationError(RuntimeError):
@@ -46,7 +47,6 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument("--plan-output", type=Path, help="analyze English from stdin")
     mode.add_argument("--render-plan", type=Path, help="render a validated plan")
     parser.add_argument("--trace-output", type=Path, help="write a Markdown derivation trace")
-    parser.add_argument("--output", type=Path, help="Markdown or PhraseWeave output path")
     parser.add_argument(
         "--format", choices=("markdown", "phraseweave", "both"), default="markdown"
     )
@@ -54,7 +54,6 @@ def parse_args() -> argparse.Namespace:
         "--mode", choices=("standard", "review"), default="standard",
         help="exercise mode for rendered output",
     )
-    parser.add_argument("--phraseweave-output", type=Path)
     return parser.parse_args()
 
 
@@ -568,18 +567,16 @@ def _write_output(path: Path, content: str) -> Path:
 
 def _output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
     if args.mode == "review":
-        default = DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT if args.format == "phraseweave" else DEFAULT_REVIEW_OUTPUT
+        markdown = DEFAULT_REVIEW_OUTPUT
+        phraseweave = DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT
     else:
-        default = DEFAULT_PHRASEWEAVE_OUTPUT if args.format == "phraseweave" else DEFAULT_OUTPUT
-    requested = args.output or default
+        markdown = DEFAULT_OUTPUT
+        phraseweave = DEFAULT_PHRASEWEAVE_OUTPUT
     if args.format == "markdown":
-        return requested, None
+        return markdown, None
     if args.format == "phraseweave":
-        return None, requested
-    phraseweave = args.phraseweave_output or requested.with_suffix(".json")
-    if requested.expanduser().resolve() == phraseweave.expanduser().resolve():
-        raise ConfigurationError("Markdown and PhraseWeave outputs must use different paths")
-    return requested, phraseweave
+        return None, phraseweave
+    return markdown, phraseweave
 
 
 def _write_trace(args: argparse.Namespace, traces: Sequence[Mapping[str, Any]]) -> None:

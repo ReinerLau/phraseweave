@@ -9,13 +9,19 @@
 # ///
 
 import json
+import os
+from argparse import Namespace
 from copy import deepcopy
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest import main as unittest_main
 
 from split_lexical_chunks import (
     ConfigurationError,
+    OUTPUT_DIR,
     _exercise_steps,
+    _output_paths,
     _parse_annotations,
     _validate_plan,
     generate_plan,
@@ -95,6 +101,19 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
 
     def plan(self, text):
         return generate_plan(text, self.nlp)[0]
+
+    def test_render_output_directory_is_fixed_across_working_directories(self):
+        original_directory = Path.cwd()
+        with TemporaryDirectory() as directory:
+            try:
+                os.chdir(directory)
+                for mode in ("standard", "review"):
+                    for output_format in ("markdown", "phraseweave", "both"):
+                        with self.subTest(mode=mode, output_format=output_format):
+                            paths = _output_paths(Namespace(mode=mode, format=output_format))
+                            self.assertTrue(all(path.parent == OUTPUT_DIR for path in paths if path))
+            finally:
+                os.chdir(original_directory)
 
     def test_matches_manual_postorder_examples(self):
         for source, expected in ((FIRST_SENTENCE, FIRST_UNITS), (SECOND_SENTENCE, SECOND_UNITS)):
