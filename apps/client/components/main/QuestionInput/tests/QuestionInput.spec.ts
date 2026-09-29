@@ -6,27 +6,10 @@ import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseStore } from "~/store/exercise";
 import QuestionInput from "../QuestionInput.vue";
 
-const { playErrorSound, playRightSound, playTypingSound } = vi.hoisted(() => ({
-  playErrorSound: vi.fn(),
-  playRightSound: vi.fn(),
-  playTypingSound: vi.fn(),
-}));
-
-vi.mock("../useTypingSound", () => ({
-  usePlayTipSound: () => ({ playErrorSound, playRightSound }),
-  useTypingSound: () => ({
-    checkPlayTypingSound: () => false,
-    playTypingSound,
-  }),
-}));
-
 describe("QuestionInput", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useAnswerTip().hiddenAnswerTip();
-    playErrorSound.mockClear();
-    playRightSound.mockClear();
-    playTypingSound.mockClear();
   });
 
   afterEach(() => {
@@ -71,7 +54,6 @@ describe("QuestionInput", () => {
     await submitAnswer(input, "I like");
     await wrapper.vm.$nextTick();
 
-    expect(playErrorSound).toHaveBeenCalledOnce();
     expect((input.element as HTMLInputElement).value).not.toBe("");
     expect(wrapper.findAll(".question-input-word")).toHaveLength(2);
     expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(1);
@@ -115,7 +97,6 @@ describe("QuestionInput", () => {
     await submitAnswer(input, "I eat");
     await wrapper.vm.$nextTick();
 
-    expect(playRightSound).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -153,6 +134,5 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("5");
 
     await submitAnswer(input, "S$500");
-    expect(playRightSound).toHaveBeenCalledOnce();
   });
 });

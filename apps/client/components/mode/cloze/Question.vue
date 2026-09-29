@@ -1,7 +1,7 @@
 <template>
   <div
     ref="questionRootEl"
-    class="question-content h-full min-h-0 w-full min-w-0 overflow-hidden text-left"
+    class="question-content h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden text-left"
     :style="questionStyle"
   >
     <div class="question-content-flow">
@@ -15,9 +15,27 @@
         class="question-prompt dark:text-gray-50"
         data-testid="question-prompt"
       >
-        {{ courseStore.currentStatement?.chinese || "生存还是毁灭，这是一个问题" }}
+        {{ courseStore.currentStatement?.sentenceChinese }}
       </div>
-      <MainQuestionInput />
+      <div
+        class="question-sentence dark:text-gray-50"
+        data-testid="cloze-sentence"
+      >
+        <span class="cloze-context">{{ courseStore.currentStatement?.contextBefore }}</span
+        ><MainQuestionInput inline /><span class="cloze-context">{{
+          courseStore.currentStatement?.contextAfter
+        }}</span>
+      </div>
+      <button
+        class="btn btn-ghost mt-3 min-h-11 text-gray-500 hover:text-fuchsia-500 dark:text-gray-300"
+        type="button"
+        data-testid="show-answer-button"
+        :aria-label="answerTipText"
+        @mousedown.prevent
+        @click="toggleGameMode"
+      >
+        {{ answerTipText }}
+      </button>
     </div>
   </div>
 </template>
@@ -25,15 +43,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { useCurrentStatementEnglishSound } from "~/composables/main/englishSound";
+import { useAnswerTip } from "~/composables/main/answerTip";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
-import { useAutoPlayEnglish } from "~/composables/user/sound";
+import { useShowAnswer } from "~/composables/main/showAnswer";
 import { useExerciseStore } from "~/store/exercise";
 import { findLargestFittingFontSize, QUESTION_FONT_MAX_SIZE_PX } from "./questionLayoutHelper";
 
 const courseStore = useExerciseStore();
-const { playSound } = useCurrentStatementEnglishSound();
-const { isAutoPlayEnglish } = useAutoPlayEnglish();
+const { isAnswerTip } = useAnswerTip();
+const { toggleGameMode } = useShowAnswer();
+const answerTipText = computed(() => (isAnswerTip() ? "隐藏答案" : "显示答案"));
 const questionRootEl = ref<HTMLElement>();
 const { questionFontSize } = useQuestionFontSize();
 const questionStyle = computed(() => ({
@@ -42,23 +61,13 @@ const questionStyle = computed(() => ({
 let resizeObserver: ResizeObserver | undefined;
 let fitFrame: number | undefined;
 
-onMounted(() => {
-  handleAutoPlayEnglish();
-});
-
 watch(
   () => courseStore.currentStatement,
   () => {
-    handleAutoPlayEnglish();
+    if (questionRootEl.value) questionRootEl.value.scrollTop = 0;
     scheduleQuestionFontSize();
   },
 );
-
-function handleAutoPlayEnglish() {
-  if (isAutoPlayEnglish()) {
-    playSound();
-  }
-}
 
 function contentFits() {
   const root = questionRootEl.value;
@@ -143,5 +152,14 @@ onUnmounted(() => {
   font-size: inherit;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.question-sentence {
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.cloze-context {
+  white-space: pre-wrap;
 }
 </style>

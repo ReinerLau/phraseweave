@@ -1,8 +1,12 @@
 <template>
-  <div class="question-input-shell">
+  <div
+    class="question-input-shell"
+    :class="{ inline }"
+  >
     <div
       ref="questionInputWordsEl"
-      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+      class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+      :class="inline ? 'w-fit' : 'w-full'"
     >
       <template
         v-for="(w, i) in courseStore.words"
@@ -20,6 +24,7 @@
         ref="inputEl"
         class="absolute h-full w-full opacity-0"
         type="text"
+        aria-label="填写当前英文单元"
         v-model="inputValue"
         @keydown="handleKeydown"
         @focus="handleInputFocus"
@@ -36,28 +41,12 @@
         class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
         aria-hidden="true"
       ></span>
-      <button
-        class="btn btn-square btn-ghost h-11 min-h-11 w-11 min-w-11 shrink-0 p-0 text-2xl text-gray-500 hover:text-fuchsia-500 dark:text-gray-300"
-        type="button"
-        data-testid="show-answer-button"
-        :aria-label="answerTipText"
-        :title="answerTipText"
-        @mousedown.prevent
-        @click="toggleGameMode"
-      >
-        <span
-          class="h-6 w-6"
-          :class="isAnswerTip() ? 'i-ph-eye-slash' : 'i-ph-eye'"
-          aria-hidden="true"
-        ></span>
-        <span class="sr-only">{{ answerTipText }}</span>
-      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
@@ -67,10 +56,8 @@ import {
   sanitizeQuestionInput,
   useInput,
 } from "~/composables/main/question";
-import { useShowAnswer } from "~/composables/main/showAnswer";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
-import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useExerciseStore } from "~/store/exercise";
 import {
@@ -80,19 +67,16 @@ import {
   useQuestionInput,
   useWordWidths,
 } from "./questionInputHelper";
-import { usePlayTipSound, useTypingSound } from "./useTypingSound";
+
+defineProps<{ inline?: boolean }>();
 
 const courseStore = useExerciseStore();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
 const { showAnswer } = useGameMode();
-const { toggleGameMode } = useShowAnswer();
 const { showSummary } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
-const { isKeyboardSoundEnabled } = useKeyboardSound();
-const { checkPlayTypingSound, playTypingSound } = useTypingSound();
-const { playRightSound, playErrorSound } = usePlayTipSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
@@ -110,12 +94,10 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     source: () => courseStore.currentStatement?.english!,
     setInputCursorPosition,
     getInputCursorPosition,
-    inputChangedCallback,
     getInputWordWidth,
     getInputWordCapacity,
   });
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
-const answerTipText = computed(() => (isAnswerTip() ? "隐藏答案" : "显示答案"));
 
 function handleInputFocus() {
   focusInput();
@@ -202,12 +184,6 @@ function getWordsClassNames(index: number) {
   return "text-[#20202099] border-b-gray-300 dark:text-gray-300 dark:border-b-gray-400";
 }
 
-function inputChangedCallback(e: KeyboardEvent) {
-  if (isKeyboardSoundEnabled() && checkPlayTypingSound(e)) {
-    playTypingSound();
-  }
-}
-
 // 输入块宽度 = 目标单词实测宽度的固定长度提示，不随输入生长；
 // 仅当实际显示文字更宽（如大小写差异）时才撑开，避免文字被挤出块外换行。单位 em。
 function inputWidth(index: number) {
@@ -242,7 +218,6 @@ function cancelErrorReset() {
 }
 
 function handleAnswerError() {
-  playErrorSound();
   cancelErrorReset();
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
@@ -256,7 +231,6 @@ function handleAnswerRight() {
   if (courseStore.isAnsweringBaseUnit) {
     courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时
   }
-  playRightSound();
 
   if (isAutoNextQuestion()) {
     const completed = courseStore.advanceAfterCorrect();
@@ -336,5 +310,11 @@ function preventCursorMove(event: MouseEvent) {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+}
+
+.question-input-shell.inline {
+  display: inline-flex;
+  width: fit-content;
+  vertical-align: bottom;
 }
 </style>

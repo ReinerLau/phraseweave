@@ -15,14 +15,13 @@
         :class="getItemClassNames(item.index)"
         @click="jumpTo(item.index)"
       >
-        <div
-          class="tooltip flex whitespace-pre-wrap border-b py-1 dark:border-slate-600"
-          :class="{ 'tooltip-bottom': item.index <= 1 }"
-          :data-tip="item.data.english + '\n' + item.data.chinese"
-        >
+        <div class="flex h-[60px] border-b py-1 dark:border-slate-600">
           <div class="w-12 text-center">{{ item.index + 1 }}</div>
-          <div class="flex-1 truncate text-left">
-            {{ item.data.chinese }}
+          <div class="min-w-0 flex-1 text-left">
+            <div class="truncate">
+              {{ item.data.contextBefore }}____{{ item.data.contextAfter }}
+            </div>
+            <div class="truncate text-sm opacity-70">{{ item.data.sentenceChinese }}</div>
           </div>
         </div>
       </div>
@@ -47,7 +46,7 @@ const contentsList = computed(() => {
 });
 
 const { list, containerProps, wrapperProps, scrollTo } = useVirtualList(contentsList.value, {
-  itemHeight: 35,
+  itemHeight: 60,
 });
 
 onMounted(async () => {

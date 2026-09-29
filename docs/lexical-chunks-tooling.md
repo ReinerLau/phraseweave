@@ -14,7 +14,7 @@
 ## 命令行
 
 - `--plan-output <路径>`：从标准输入读取带原文标点的英文，生成计划。
-- `--render-plan <路径>`：校验计划，根据标准输入中的中文提示渲染。
+- `--render-plan <路径>`：校验计划，根据标准输入中逐句提供的中文提示渲染。
 - `--format markdown|phraseweave|both`：最终格式，默认 `markdown`。
 - `--output <路径>`：Markdown 路径；`phraseweave` 模式下为 JSON 路径。
 - `--phraseweave-output <路径>`：`both` 模式下的 JSON 路径。
@@ -36,16 +36,22 @@
     {
       "sentence": "the USA.",
       "units": [
-        {"text": "USA", "span": {"start": 4, "end": 7}, "kind": "word"},
-        {"text": "the USA", "span": {"start": 0, "end": 7}, "kind": "sentence"}
+        { "text": "USA", "span": { "start": 4, "end": 7 }, "kind": "word" },
+        { "text": "the USA", "span": { "start": 0, "end": 7 }, "kind": "sentence" }
       ]
     }
   ]
 }
 ```
 
-渲染器按当前版本重新生成英文单元并逐项校验，再验证中文提示 JSON schema 1 中每句 `unit_prompts` 的数量。Markdown 包含依存树、中文提示、英文答案与组合说明。
+渲染器按当前版本重新生成英文单元并逐项校验，再验证中文提示 JSON schema 2 中每句都有非空 `sentence_chinese`。例如：
 
-PhraseWeave 导入 JSON 使用 schema 3 的平铺 `statements`。每行保留 `chinese`、`english`、`soundmark`，增加稳定的 `unit_id` 和 `source_unit_ids`。单词或没有可练来源的单元使用空数组；只有一个直接来源保留时使用单个 ID，两个都保留时按原文位置排列。`review` 模式复习仍保留的直接来源，重复行共用相同的单元 ID 与来源。客户端在答错可拆单元时使用这些关系逐级回退；旧 schema 1、2 导入仍可用，schema 1 没有回退关系。
+```json
+{ "schema_version": 2, "sentences": [{ "sentence_chinese": "美国。" }] }
+```
+
+Markdown 每句显示整句中文提示，表格列出挖空后的英文原句、目标单元及组合说明。
+
+PhraseWeave 导入 JSON 使用 schema 4 的平铺 `statements`。每行有目标单元 `english`、整句译文 `sentence_chinese`、原句挖空前后的 `context_before` 与 `context_after`，以及稳定的 `unit_id` 和 `source_unit_ids`。上下文字段直接用计划中的 `span` 切分原句，能准确定位重复片段。单词或没有可练来源的单元使用空数组；只有一个直接来源保留时使用单个 ID，两个都保留时按原文位置排列。`review` 模式复习仍保留的直接来源，重复行共用相同的单元 ID 与来源。客户端在答错可拆单元时使用这些关系逐级回退。旧格式缺少填空上下文，需重新生成后导入。
 
 依存组合与词元过滤的取舍分别记于 [ADR 0012](adr/0012-adjacent-subtree-closure.md)、[ADR 0014](adr/0014-filter-function-word-units.md) 和 [ADR 0016](adr/0016-retain-available-review-sources.md)。

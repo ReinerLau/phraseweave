@@ -142,7 +142,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             self.assertEqual([by_span[span] for span in spans], expected)
         self.assertIsNone(traces[0]["sources"][texts.index("could be")])
 
-        translations = {"sentences": [{"unit_prompts": ["提示"] * len(texts)}]}
+        translations = {"sentences": [{"sentence_chinese": "整句提示"}]}
         rows = json.loads(render_phraseweave(plan, translations, traces, mode="review"))["statements"]
         first_by_id = {}
         for index, row in enumerate(rows):
@@ -241,28 +241,27 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
 
     def test_annotation_alignment_and_phraseweave_import_shape(self):
         plan, traces = generate_plan("Birdsong is good.", self.nlp)
-        prompts = [f"提示 {index}" for index, _ in enumerate(plan["sentences"][0]["units"], 1)]
-        annotations = {"schema_version": 1, "sentences": [{"unit_prompts": prompts}]}
+        annotations = {"schema_version": 2, "sentences": [{"sentence_chinese": "鸟鸣很好。"}]}
         parsed = _parse_annotations(json.dumps(annotations), plan)
         payload = json.loads(render_phraseweave(plan, parsed, traces))
-        self.assertEqual(payload["schema_version"], 3)
-        self.assertEqual(len(payload["statements"]), len(prompts))
+        self.assertEqual(payload["schema_version"], 4)
+        self.assertEqual(len(payload["statements"]), len(plan["sentences"][0]["units"]))
         self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
-        self.assertEqual(set(payload["statements"][0]), {"chinese", "english", "soundmark", "unit_id", "source_unit_ids"})
+        self.assertEqual(set(payload["statements"][0]), {"sentence_chinese", "english", "context_before", "context_after", "unit_id", "source_unit_ids"})
 
-        annotations["sentences"][0]["unit_prompts"].pop()
-        with self.assertRaisesRegex(ConfigurationError, "must contain exactly"):
+        annotations["sentences"][0]["sentence_chinese"] = ""
+        with self.assertRaisesRegex(ConfigurationError, "non-empty string"):
             _parse_annotations(json.dumps(annotations), plan)
 
     def test_markdown_and_trace_show_composition_explanations(self):
         plan, traces = generate_plan("the USA grows.", self.nlp)
         prompts = {
-            "schema_version": 1,
-            "sentences": [{"unit_prompts": ["提示" for _ in plan["sentences"][0]["units"]]}],
+            "schema_version": 2,
+            "sentences": [{"sentence_chinese": "美国在增长。"}],
         }
         markdown = render_markdown(plan, prompts, traces)
         report = render_trace(traces)
-        self.assertIn("| 序号 | 中文提示 | 英文答案 | 组合说明 |", markdown)
+        self.assertIn("| 序号 | 英文填空 | 英文答案 | 组合说明 |", markdown)
         self.assertIn("中心词 USA；左接 the", markdown)
         self.assertIn("| 序号 | 学习单元 | 组合说明 |", report)
         self.assertIn("整句", report)
@@ -295,19 +294,18 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
     def test_review_renderers_reuse_prompts_and_phraseweave_schema(self):
         plan, traces = generate_plan("the USA grows.", self.nlp)
         sentence = plan["sentences"][0]
-        prompts = [f"提示 {index}" for index, _ in enumerate(sentence["units"], 1)]
-        translations = {"sentences": [{"unit_prompts": prompts}]}
+        translations = {"sentences": [{"sentence_chinese": "美国在增长。"}]}
         steps = _exercise_steps(sentence, traces[0], "review")
 
         markdown = render_markdown(plan, translations, traces, mode="review")
         self.assertEqual(markdown.count("| 复习 |"), sum(is_review for _, is_review in steps))
         payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
-        self.assertEqual(payload["schema_version"], 3)
+        self.assertEqual(payload["schema_version"], 4)
         source_row = next(row for row in payload["statements"] if row["english"] == "the USA")
         self.assertEqual(source_row["source_unit_ids"], ["0:0"])
         self.assertEqual(
-            [(row["chinese"], row["english"]) for row in payload["statements"]],
-            [(prompts[index], sentence["units"][index]["text"]) for index, _ in steps],
+            [(row["sentence_chinese"], row["english"]) for row in payload["statements"]],
+            [("美国在增长。", sentence["units"][index]["text"]) for index, _ in steps],
         )
         rows = [(sentence["units"][index]["text"], is_review) for index, is_review in steps]
         position = rows.index(("the USA", False))
@@ -322,7 +320,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
     def test_phraseweave_sources_identify_original_units_across_review_repetitions(self):
         plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
         sentence = plan["sentences"][0]
-        translations = {"sentences": [{"unit_prompts": ["提示"] * len(sentence["units"])}]}
+        translations = {"sentences": [{"sentence_chinese": "整句提示"}]}
         payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
         rows = payload["statements"]
         target = next(row for row in rows if row["english"].endswith("USA say"))
