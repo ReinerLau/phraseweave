@@ -108,9 +108,9 @@ export function getWordBlockWidthEm(targetWidthEm: number, displayedWidthEm: num
   return Math.max(targetWidthEm, displayedWidthEm) + SUBPIXEL_SAFETY_EM;
 }
 
-/** 可输入容量：不超过目标单词实测宽度；容器更窄时不超过容器宽度，单位 em */
-export function getWordCapacityEm(wordWidthEm: number, containerWidthEm: number) {
-  return Math.max(0, Math.min(wordWidthEm, containerWidthEm));
+/** 可输入容量只由目标单词决定，避免窄行布局截断可输入字符，单位 em */
+export function getWordCapacityEm(wordWidthEm: number) {
+  return Math.max(0, wordWidthEm);
 }
 
 /**

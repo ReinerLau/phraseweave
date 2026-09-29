@@ -83,7 +83,6 @@ const questionInputWordsEl = ref<HTMLElement>();
 const {
   probeEl: questionInputProbeEl,
   measureEm,
-  fontSizePx,
 } = useWordWidths(questionInputWordsEl);
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
@@ -198,16 +197,9 @@ function getInputWordWidth(text: string) {
   return getInputWordWidthEm(text, measureEm);
 }
 
-// 可输入容量：不超过目标单词的实测宽度，保证敲完目标单词一定放得下
+// 输入容量由目标单词决定；行内剩余宽度不应限制答案字符数。
 function getInputWordCapacity(word: string) {
-  const wordWidthEm = getInputWordWidth(word);
-  const wordsEl = questionInputWordsEl.value;
-  if (!wordsEl) return wordWidthEm;
-
-  const fontPx = fontSizePx();
-  if (fontPx <= 0) return wordWidthEm;
-
-  return getWordCapacityEm(wordWidthEm, wordsEl.clientWidth / fontPx);
+  return getWordCapacityEm(getInputWordWidth(word));
 }
 
 function cancelErrorReset() {
