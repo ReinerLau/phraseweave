@@ -8,6 +8,7 @@ import {
   getLocalExercise,
   saveLocalExercise,
   saveLocalExerciseProgress,
+  saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
@@ -38,6 +39,11 @@ export interface Course {
   coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
   statementIndex: number;
+  passedUnitIds?: string[];
+}
+
+function unitPassKey(statement: Statement) {
+  return statement.unitId ? `unit:${statement.unitId}` : `statement:${statement.id}`;
 }
 
 export const useExerciseStore = defineStore("exercise", () => {
@@ -52,6 +58,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   );
   const unitStatements = new Map<string, Statement>();
   let recovery: ReviewRecovery | undefined;
+  let pendingPassedWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
 
   const { updateActiveCourseMap } = useActiveCourseMap();
@@ -141,9 +148,30 @@ export const useExerciseStore = defineStore("exercise", () => {
     return input.toLocaleLowerCase() === currentStatement.value?.english.toLocaleLowerCase();
   }
 
+  function isStatementPassed(statement: Statement) {
+    return currentCourse.value?.passedUnitIds?.includes(unitPassKey(statement)) ?? false;
+  }
+
+  function passCurrentStatement() {
+    const course = currentCourse.value;
+    const statement = currentStatement.value;
+    if (!course || !statement) return;
+
+    const key = unitPassKey(statement);
+    if (isStatementPassed(statement)) return;
+    course.passedUnitIds = [...(course.passedUnitIds ?? []), key];
+    pendingPassedWrite = pendingPassedWrite
+      .then(() => saveLocalExerciseUnitPassed(course.coursePackId, course.id, key))
+      .catch((error) => {
+        console.error("保存单元通过记录失败", error);
+      });
+  }
+
   async function completeCourse() {
     const course = currentCourse.value;
     if (!course) return { nextCourse: undefined };
+
+    await pendingPassedWrite;
 
     const coursePack = await getLocalExercise(course.coursePackId);
     if (!coursePack) return { nextCourse: undefined };
@@ -205,6 +233,8 @@ export const useExerciseStore = defineStore("exercise", () => {
     doAgain,
     isAllDone,
     checkCorrect,
+    isStatementPassed,
+    passCurrentStatement,
     failCurrentStatement,
     advanceAfterCorrect,
     cancelRecovery,

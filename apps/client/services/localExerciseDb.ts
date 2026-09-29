@@ -137,6 +137,32 @@ export async function saveLocalExerciseProgress(
   await transactionDone;
 }
 
+export async function saveLocalExerciseUnitPassed(
+  coursePackId: string,
+  courseId: string,
+  unitKey: string,
+) {
+  if (!isSupported()) return;
+
+  const database = await openDatabase();
+  const transaction = database.transaction(PACK_STORE, "readwrite");
+  const transactionDone = transactionComplete(transaction);
+  const store = transaction.objectStore(PACK_STORE);
+  const request = store.get(coursePackId);
+
+  request.onsuccess = () => {
+    const coursePack = request.result as ExerciseResponse | undefined;
+    const course = coursePack?.courses.find((item) => item.id === courseId);
+    if (!coursePack || !course) return;
+
+    if (course.passedUnitIds?.includes(unitKey)) return;
+    course.passedUnitIds = [...(course.passedUnitIds ?? []), unitKey];
+    store.put(coursePack);
+  };
+
+  await transactionDone;
+}
+
 export async function deleteLocalExercise(coursePackId: string) {
   if (!isSupported()) return;
 
@@ -212,6 +238,7 @@ export function normalizeExerciseImport(
           coursePackId,
           completionCount: 0,
           statementIndex: 0,
+          passedUnitIds: [],
           statements,
         },
       ],

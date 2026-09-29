@@ -80,10 +80,7 @@ const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
-const {
-  probeEl: questionInputProbeEl,
-  measureEm,
-} = useWordWidths(questionInputWordsEl);
+const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInputWordsEl);
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -220,6 +217,7 @@ function handleAnswerError() {
 
 function handleAnswerRight() {
   cancelErrorReset();
+  courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
     courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时
   }
