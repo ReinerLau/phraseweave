@@ -16,11 +16,9 @@
 - `--plan-output <路径>`：从标准输入读取带原文标点的英文，生成计划。
 - `--render-plan <路径>`：校验计划，根据标准输入中逐句提供的中文提示渲染。
 - `--format markdown|phraseweave|both`：最终格式，默认 `markdown`。
-- `--output <路径>`：Markdown 路径；`phraseweave` 模式下为 JSON 路径。
-- `--phraseweave-output <路径>`：`both` 模式下的 JSON 路径。
 - `--trace-output <路径>`：另存组合说明和未闭合分支。
 
-输出路径已存在时使用递增编号。计划生成与渲染都要求 spaCy 3.8.7 和 `en_core_web_sm` 3.8.0。
+渲染结果固定写入项目的 `outputs/lexical-chunks/` 目录，与当前工作目录无关；现有文件保留，新文件名使用递增编号。计划与追踪文件仍由调用方指定路径。计划生成与渲染都要求 spaCy 3.8.7 和 `en_core_web_sm` 3.8.0。
 
 ## 英文计划 schema 3
 
