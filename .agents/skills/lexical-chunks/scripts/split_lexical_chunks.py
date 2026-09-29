@@ -24,10 +24,9 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
-ALGORITHM_VERSION = 4
+ALGORITHM_VERSION = 5
 ANNOTATION_SCHEMA_VERSION = 2
 PHRASEWEAVE_SCHEMA_VERSION = 4
-FILTERED_WORD_POS = frozenset({"DET", "ADP", "AUX"})
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
 DEFAULT_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.md")
 DEFAULT_PHRASEWEAVE_OUTPUT = Path("outputs/lexical-chunks/text.learning-units.json")
@@ -245,31 +244,6 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             seen_spans.remove((full_start, full_end))
             break
     record(full_bounds, "sentence", "整句", source_spans=sentence_sources)
-
-    filtered_word_spans = {
-        source_span((token.i, token.i))
-        for token in tokens
-        if token.pos_ in FILTERED_WORD_POS
-    }
-    kept_indices = [
-        index
-        for index, unit in enumerate(units)
-        if unit["kind"] != "word"
-        or (unit["span"]["start"], unit["span"]["end"]) not in filtered_word_spans
-    ]
-    units = [units[index] for index in kept_indices]
-    explanations = [explanations[index] for index in kept_indices]
-    kept_spans = {
-        (unit["span"]["start"], unit["span"]["end"])
-        for unit in units
-    }
-    kept_sources = [sources[index] for index in kept_indices]
-    sources = [
-        (tuple(span for span in source if span in kept_spans) or None)
-        if source is not None
-        else None
-        for source in kept_sources
-    ]
 
     trace = {
         "tree_tokens": [
