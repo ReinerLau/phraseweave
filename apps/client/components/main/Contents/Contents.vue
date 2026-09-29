@@ -15,13 +15,12 @@
         :class="getItemClassNames(item.index)"
         @click="jumpTo(item.index)"
       >
-        <div class="flex h-[60px] border-b py-1 dark:border-slate-600">
+        <div class="flex h-[60px] items-center border-b py-1 dark:border-slate-600">
           <div class="w-12 text-center">{{ item.index + 1 }}</div>
           <div class="min-w-0 flex-1 text-left">
             <div class="truncate">
-              {{ item.data.contextBefore }}____{{ item.data.contextAfter }}
+              {{ coursesStore.isStatementPassed(item.data) ? item.data.english : "____" }}
             </div>
-            <div class="truncate text-sm opacity-70">{{ item.data.sentenceChinese }}</div>
           </div>
         </div>
       </div>
