@@ -97,10 +97,11 @@ function isGeneratorUrl(value, requestId) {
       url.origin === "https://reinerlau.github.io" ||
       url.origin === "http://localhost:3000" ||
       url.origin === "http://127.0.0.1:3000";
+    const pathname = url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
     const correctPath =
       url.origin === "https://reinerlau.github.io"
-        ? url.pathname === "/phraseweave/generator"
-        : url.pathname === "/generator";
+        ? pathname === "/phraseweave/generator"
+        : pathname === "/generator";
     return allowedOrigin && correctPath && url.searchParams.get("capture") === requestId;
   } catch {
     return false;
