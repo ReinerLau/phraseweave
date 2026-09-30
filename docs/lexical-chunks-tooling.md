@@ -27,6 +27,8 @@ python3 tools/lexical_chunks/local_service.py
 
 ## 学习单元与导出
 
+Chrome 用户也可以安装 [选中文本浏览器扩展](../apps/browser-extension/README.md)。在文章中选择英文后使用右键菜单，扩展会把文本交给 `/generator` 自动生成、导入并打开练习。扩展仍使用上面的本地服务。
+
 分句、双引号处理和依存树闭合算法沿用 [ADR 0012](adr/0012-adjacent-subtree-closure.md)、[ADR 0015](adr/0015-ignore-double-quotes-in-learning-units.md) 和 [ADR 0018](adr/0018-retain-all-word-units.md)。`standard` 和 `review` 模式以及 `markdown`、`phraseweave`、`both` 导出格式保持原行为。PhraseWeave JSON 使用 schema 4，含稳定 `unit_id`、直接来源 `source_unit_ids` 及原句上下文。
 
 下载文件名包含 UTC 时间戳，重复生成时也能得到不同文件名。生成器服务仅绑定 `127.0.0.1:8765`，并校验客户端来源后接受生成请求；页面确认接收任务结果后，服务会释放对应的内存内容。若页面在任务完成前关闭，未领取的结果会在下次任务启动时清理。

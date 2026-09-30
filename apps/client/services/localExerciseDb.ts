@@ -211,6 +211,7 @@ export function normalizeExerciseImport(
 
   const idFactory = options.idFactory ?? createImportId;
   const coursePackId = idFactory();
+  const courseId = idFactory();
   const exerciseTitle = options.title || createImportTitle();
   const statements = value.statements.map((statement, index) => ({
     id: idFactory(),
@@ -232,7 +233,7 @@ export function normalizeExerciseImport(
       cover: "",
       courses: [
         {
-          id: idFactory(),
+          id: courseId,
           title: exerciseTitle,
           order: 1,
           coursePackId,

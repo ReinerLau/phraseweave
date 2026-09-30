@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "PhraseWeave: Practice Selected Text",
+  "version": "1.0.0",
+  "description": "Generate and practice learning units from text selected in a web page.",
+  "permissions": ["contextMenus", "storage"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://reinerlau.github.io/phraseweave/generator*",
+        "http://localhost:3000/generator*",
+        "http://127.0.0.1:3000/generator*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
