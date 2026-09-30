@@ -16,12 +16,18 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <button
-            class="btn btn-outline btn-sm"
+            class="btn btn-ghost btn-square btn-sm"
             type="button"
             :disabled="connecting"
+            :aria-label="connecting ? '正在连接本地服务' : '刷新本地服务连接'"
+            :title="connecting ? '正在连接本地服务' : '刷新本地服务连接'"
             @click="connectService"
           >
-            {{ connecting ? "连接中…" : "连接本地服务" }}
+            <span
+              class="i-ph-arrows-clockwise h-5 w-5"
+              :class="{ 'animate-spin': connecting }"
+              aria-hidden="true"
+            ></span>
           </button>
         </div>
       </div>
@@ -109,7 +115,7 @@
           生成学习单元
         </button>
         <p class="text-sm opacity-70">
-          <template v-if="!serviceConnected">先启动并连接本地服务。</template>
+          <template v-if="!serviceConnected">请先启动本地服务；连接失败后点击上方刷新按钮。</template>
           <template v-else-if="!runtimeReady || !modelDownloaded">请等待本地服务完成依赖和 Helsinki 模型初始化。</template>
           <template v-else>模型运行在本机；生成结果暂存在本页内存，下载后由浏览器保存。</template>
         </p>
@@ -217,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 type ExerciseMode = "standard" | "review";
 type OutputFormat = "markdown" | "phraseweave" | "both";
@@ -248,7 +254,7 @@ const serviceConnected = ref(false);
 const connecting = ref(false);
 const runtimeReady = ref(false);
 const modelDownloaded = ref(false);
-const serviceMessage = ref("启动本地服务后，在此连接。启动命令见下方提示。");
+const serviceMessage = ref("正在连接本地服务…");
 const activeJob = ref<JobState | null>(null);
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
@@ -265,6 +271,10 @@ const canGenerate = computed(
     modelDownloaded.value &&
     englishText.value.trim().length > 0,
 );
+
+onMounted(() => {
+  void connectService();
+});
 
 async function localFetch(path: string, init: RequestInit = {}) {
   const options: LocalFetchInit = { ...init, targetAddressSpace: "loopback" };
@@ -288,9 +298,7 @@ async function connectService() {
     }
   } catch {
     serviceConnected.value = false;
-    serviceMessage.value =
-      "无法连接。请确认本地服务已完成初始化并保持运行。";
-    jobError.value = "连接失败。确认 uv 已安装、服务终端没有初始化错误，并允许浏览器访问本机服务。";
+    serviceMessage.value = "无法连接本地服务。请先启动本地服务，再点击刷新按钮重试。";
   } finally {
     connecting.value = false;
   }
