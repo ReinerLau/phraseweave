@@ -308,6 +308,7 @@ let disposed = false;
 let captureTimer: ReturnType<typeof setTimeout> | undefined;
 
 const { updateActiveCourseMap } = useActiveCourseMap();
+let serviceCheck: Promise<void> | undefined;
 
 const canGenerate = computed(
   () =>
@@ -318,6 +319,7 @@ const canGenerate = computed(
 );
 
 onMounted(() => {
+  serviceCheck = connectService();
   if (captureMode) {
     window.addEventListener("message", receiveCaptureMessage);
     if (!/^[a-f0-9-]{32,36}$/i.test(captureId)) {
@@ -326,8 +328,6 @@ onMounted(() => {
       return;
     }
     requestCapture();
-  } else {
-    void connectService();
   }
 });
 
@@ -487,7 +487,10 @@ async function runCapture() {
   englishText.value = captureText.value;
 
   try {
-    await connectService();
+    const pendingServiceCheck = serviceCheck;
+    serviceCheck = undefined;
+    if (pendingServiceCheck) await pendingServiceCheck;
+    else await connectService();
     if (!canGenerate.value) {
       throw new Error(serviceMessage.value || "本地生成服务尚未就绪。请启动服务后重试。");
     }
