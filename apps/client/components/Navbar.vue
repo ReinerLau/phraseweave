@@ -77,7 +77,7 @@ import { useUserStore } from "~/store/user";
 
 const route = useRoute();
 const runtimeConfig = useRuntimeConfig();
-const logoPath = `${runtimeConfig.app.baseURL}logo.png`;
+const logoPath = `${runtimeConfig.app.baseURL}brand-icon.svg`;
 const userStore = useUserStore();
 const { darkMode, toggleDarkMode } = useDarkMode();
 

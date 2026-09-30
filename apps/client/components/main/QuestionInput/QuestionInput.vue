@@ -1,8 +1,12 @@
 <template>
-  <div class="question-input-shell">
+  <div
+    class="question-input-shell"
+    :class="{ inline }"
+  >
     <div
       ref="questionInputWordsEl"
-      class="question-input-words relative flex w-full min-w-0 max-w-full flex-wrap justify-start gap-2 text-left"
+      class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+      :class="inline ? 'w-fit' : 'w-full'"
     >
       <template
         v-for="(w, i) in courseStore.words"
@@ -20,6 +24,7 @@
         ref="inputEl"
         class="absolute h-full w-full opacity-0"
         type="text"
+        aria-label="填写当前英文单元"
         v-model="inputValue"
         @keydown="handleKeydown"
         @focus="handleInputFocus"
@@ -46,10 +51,13 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
-import { containsLatinLetter, sanitizeQuestionInput, useInput } from "~/composables/main/question";
+import {
+  containsAllowedQuestionCharacter,
+  sanitizeQuestionInput,
+  useInput,
+} from "~/composables/main/question";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
-import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useExerciseStore } from "~/store/exercise";
 import {
@@ -59,7 +67,8 @@ import {
   useQuestionInput,
   useWordWidths,
 } from "./questionInputHelper";
-import { usePlayTipSound, useTypingSound } from "./useTypingSound";
+
+defineProps<{ inline?: boolean }>();
 
 const courseStore = useExerciseStore();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
@@ -68,17 +77,10 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 const { showAnswer } = useGameMode();
 const { showSummary } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
-const { isKeyboardSoundEnabled } = useKeyboardSound();
-const { checkPlayTypingSound, playTypingSound } = useTypingSound();
-const { playRightSound, playErrorSound } = usePlayTipSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
-const {
-  probeEl: questionInputProbeEl,
-  measureEm,
-  fontSizePx,
-} = useWordWidths(questionInputWordsEl);
+const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInputWordsEl);
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -88,7 +90,6 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     source: () => courseStore.currentStatement?.english!,
     setInputCursorPosition,
     getInputCursorPosition,
-    inputChangedCallback,
     getInputWordWidth,
     getInputWordCapacity,
   });
@@ -113,12 +114,12 @@ watch(
   () => inputValue.value,
   (val) => {
     const sanitizedValue = sanitizeQuestionInput(val);
-    if (isAnswerTip() && containsLatinLetter(sanitizedValue)) {
+    if (isAnswerTip() && containsAllowedQuestionCharacter(sanitizedValue)) {
       hiddenAnswerTip();
     }
 
     setInputValue(sanitizedValue);
-    if (!isAnswerTip()) {
+    if (!isAnswerTip() && sanitizedValue.length > 0) {
       courseTimer.time(String(courseStore.statementIndex));
     }
   },
@@ -131,8 +132,10 @@ watch(isAnswerTip, (isVisible) => {
 });
 
 watch(
-  () => courseStore.statementIndex,
+  () => courseStore.currentStatement?.id,
   () => {
+    cancelErrorReset();
+    clearInput();
     focusInput();
   },
 );
@@ -177,12 +180,6 @@ function getWordsClassNames(index: number) {
   return "text-[#20202099] border-b-gray-300 dark:text-gray-300 dark:border-b-gray-400";
 }
 
-function inputChangedCallback(e: KeyboardEvent) {
-  if (isKeyboardSoundEnabled() && checkPlayTypingSound(e)) {
-    playTypingSound();
-  }
-}
-
 // 输入块宽度 = 目标单词实测宽度的固定长度提示，不随输入生长；
 // 仅当实际显示文字更宽（如大小写差异）时才撑开，避免文字被挤出块外换行。单位 em。
 function inputWidth(index: number) {
@@ -197,16 +194,9 @@ function getInputWordWidth(text: string) {
   return getInputWordWidthEm(text, measureEm);
 }
 
-// 可输入容量：不超过目标单词的实测宽度，保证敲完目标单词一定放得下
+// 输入容量由目标单词决定；行内剩余宽度不应限制答案字符数。
 function getInputWordCapacity(word: string) {
-  const wordWidthEm = getInputWordWidth(word);
-  const wordsEl = questionInputWordsEl.value;
-  if (!wordsEl) return wordWidthEm;
-
-  const fontPx = fontSizePx();
-  if (fontPx <= 0) return wordWidthEm;
-
-  return getWordCapacityEm(wordWidthEm, wordsEl.clientWidth / fontPx);
+  return getWordCapacityEm(getInputWordWidth(word));
 }
 
 function cancelErrorReset() {
@@ -217,26 +207,27 @@ function cancelErrorReset() {
 }
 
 function handleAnswerError() {
-  playErrorSound();
   cancelErrorReset();
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
     clearInput();
+    courseStore.failCurrentStatement();
   }, ERROR_FEEDBACK_DURATION_MS);
 }
 
 function handleAnswerRight() {
   cancelErrorReset();
-  courseTimer.timeEnd(String(courseStore.statementIndex)); // 停止当前题目的计时
-  playRightSound();
+  courseStore.passCurrentStatement();
+  if (courseStore.isAnsweringBaseUnit) {
+    courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时
+  }
 
   if (isAutoNextQuestion()) {
-    // 自动下一题
-    if (courseStore.isAllDone()) {
+    const completed = courseStore.advanceAfterCorrect();
+    if (completed) {
       blurInput(); // 失去输入焦点，防止结束时光标仍然在输入框，造成后续结算面板回车事件无法触发
       showSummary();
     }
-    courseStore.toNextStatement();
   } else {
     showAnswer();
   }
@@ -262,8 +253,9 @@ function handleKeydown(e: KeyboardEvent) {
   }
 
   if (isAnswerTip()) {
-    const isLatinLetterKey = /^[A-Za-z]$/.test(e.key) && !e.metaKey && !e.altKey;
-    if (isLatinLetterKey) {
+    const isAllowedCharacterKey =
+      [...e.key].length === 1 && containsAllowedQuestionCharacter(e.key) && !e.metaKey && !e.altKey;
+    if (isAllowedCharacterKey) {
       hiddenAnswerTip();
     } else {
       if (e.code === "Enter") {
@@ -308,5 +300,11 @@ function preventCursorMove(event: MouseEvent) {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+}
+
+.question-input-shell.inline {
+  display: inline-flex;
+  width: fit-content;
+  vertical-align: bottom;
 }
 </style>

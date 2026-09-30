@@ -14,15 +14,18 @@ interface StoredMetadata {
 
 let databasePromise: Promise<IDBDatabase> | undefined;
 
-interface LexicalChunksStatement {
-  chinese: string;
+interface LexicalChunksStatementV4 {
   english: string;
-  soundmark: string;
+  context_before: string;
+  context_after: string;
+  sentence_chinese: string;
+  unit_id: string;
+  source_unit_ids: [] | [string] | [string, string];
 }
 
 interface LexicalChunksBackup {
-  schema_version: 1;
-  statements: LexicalChunksStatement[];
+  schema_version: 4;
+  statements: LexicalChunksStatementV4[];
 }
 
 export interface ExerciseImportOptions {
@@ -109,6 +112,57 @@ export async function saveLocalExercise(coursePack: ExerciseResponse) {
   await transactionComplete(transaction);
 }
 
+export async function saveLocalExerciseProgress(
+  coursePackId: string,
+  courseId: string,
+  statementIndex: number,
+) {
+  if (!isSupported()) return;
+
+  const database = await openDatabase();
+  const transaction = database.transaction(PACK_STORE, "readwrite");
+  const transactionDone = transactionComplete(transaction);
+  const store = transaction.objectStore(PACK_STORE);
+  const request = store.get(coursePackId);
+
+  request.onsuccess = () => {
+    const coursePack = request.result as ExerciseResponse | undefined;
+    const course = coursePack?.courses.find((item) => item.id === courseId);
+    if (!coursePack || !course) return;
+
+    course.statementIndex = statementIndex;
+    store.put(coursePack);
+  };
+
+  await transactionDone;
+}
+
+export async function saveLocalExerciseUnitPassed(
+  coursePackId: string,
+  courseId: string,
+  unitKey: string,
+) {
+  if (!isSupported()) return;
+
+  const database = await openDatabase();
+  const transaction = database.transaction(PACK_STORE, "readwrite");
+  const transactionDone = transactionComplete(transaction);
+  const store = transaction.objectStore(PACK_STORE);
+  const request = store.get(coursePackId);
+
+  request.onsuccess = () => {
+    const coursePack = request.result as ExerciseResponse | undefined;
+    const course = coursePack?.courses.find((item) => item.id === courseId);
+    if (!coursePack || !course) return;
+
+    if (course.passedUnitIds?.includes(unitKey)) return;
+    course.passedUnitIds = [...(course.passedUnitIds ?? []), unitKey];
+    store.put(coursePack);
+  };
+
+  await transactionDone;
+}
+
 export async function deleteLocalExercise(coursePackId: string) {
   if (!isSupported()) return;
 
@@ -143,18 +197,31 @@ export function normalizeExerciseImport(
 ): ExerciseResponse[] {
   if (Array.isArray(value)) {
     const coursePacks = value.filter(isExerciseResponse);
-    if (coursePacks.length !== value.length) throw new Error("备份文件包含无效练习");
+    if (coursePacks.length !== value.length) throw new Error("旧版练习请重新生成后导入");
     return coursePacks;
   }
 
-  if (!isLexicalChunksBackup(value)) throw new Error("备份文件格式不正确");
-  if (!value.statements.every(isLexicalChunksStatement)) {
+  if (!isLexicalChunksBackup(value)) throw new Error("旧版练习请重新生成后导入");
+  if (!value.statements.every(isLexicalChunksStatementV4)) {
     throw new Error("备份文件包含无效练习");
+  }
+  if (!hasValidSources(value.statements)) {
+    throw new Error("备份文件包含无效单元关系");
   }
 
   const idFactory = options.idFactory ?? createImportId;
   const coursePackId = idFactory();
   const exerciseTitle = options.title || createImportTitle();
+  const statements = value.statements.map((statement, index) => ({
+    id: idFactory(),
+    order: index + 1,
+    english: statement.english,
+    contextBefore: statement.context_before,
+    contextAfter: statement.context_after,
+    sentenceChinese: statement.sentence_chinese,
+    unitId: statement.unit_id,
+    sourceUnitIds: statement.source_unit_ids,
+  }));
 
   return [
     {
@@ -171,13 +238,8 @@ export function normalizeExerciseImport(
           coursePackId,
           completionCount: 0,
           statementIndex: 0,
-          statements: value.statements.map((statement, index) => ({
-            id: idFactory(),
-            order: index + 1,
-            chinese: statement.chinese,
-            english: statement.english,
-            soundmark: statement.soundmark,
-          })),
+          passedUnitIds: [],
+          statements,
         },
       ],
     },
@@ -218,24 +280,76 @@ function isExerciseResponse(value: unknown): value is ExerciseResponse {
   return (
     typeof coursePack.id === "string" &&
     typeof coursePack.title === "string" &&
-    Array.isArray(coursePack.courses)
+    Array.isArray(coursePack.courses) &&
+    coursePack.courses.every(
+      (course) =>
+        course !== null &&
+        typeof course === "object" &&
+        Array.isArray(course.statements) &&
+        course.statements.every(
+          (statement) =>
+            statement !== null &&
+            typeof statement === "object" &&
+            typeof statement.english === "string" &&
+            statement.english.trim().length > 0 &&
+            typeof statement.contextBefore === "string" &&
+            typeof statement.contextAfter === "string" &&
+            typeof statement.sentenceChinese === "string" &&
+            statement.sentenceChinese.trim().length > 0,
+        ),
+    )
   );
 }
 
 function isLexicalChunksBackup(value: unknown): value is LexicalChunksBackup {
   if (!value || typeof value !== "object") return false;
   const backup = value as Partial<LexicalChunksBackup>;
-  return backup.schema_version === 1 && Array.isArray(backup.statements);
+  return (
+    backup.schema_version === 4 && Array.isArray(backup.statements) && backup.statements.length > 0
+  );
 }
 
-function isLexicalChunksStatement(value: unknown): value is LexicalChunksStatement {
+function isLexicalChunksStatementV4(value: unknown): value is LexicalChunksStatementV4 {
   if (!value || typeof value !== "object") return false;
-  const statement = value as Partial<LexicalChunksStatement>;
+  const statement = value as Partial<LexicalChunksStatementV4>;
   return (
-    typeof statement.chinese === "string" &&
     typeof statement.english === "string" &&
-    typeof statement.soundmark === "string"
+    statement.english.length > 0 &&
+    typeof statement.context_before === "string" &&
+    typeof statement.context_after === "string" &&
+    typeof statement.sentence_chinese === "string" &&
+    statement.sentence_chinese.trim().length > 0 &&
+    typeof statement.unit_id === "string" &&
+    statement.unit_id.length > 0 &&
+    Array.isArray(statement.source_unit_ids) &&
+    [0, 1, 2].includes(statement.source_unit_ids.length) &&
+    statement.source_unit_ids.every((id) => typeof id === "string" && id.length > 0)
   );
+}
+
+function hasValidSources(statements: LexicalChunksStatementV4[]): boolean {
+  const firstById = new Map<string, number>();
+  const canonical = new Map<string, LexicalChunksStatementV4>();
+  statements.forEach((statement, index) => {
+    if (!firstById.has(statement.unit_id)) {
+      firstById.set(statement.unit_id, index);
+      canonical.set(statement.unit_id, statement);
+    }
+  });
+  return statements.every((statement) => {
+    const first = canonical.get(statement.unit_id)!;
+    const sameUnit =
+      statement.english === first.english &&
+      statement.context_before === first.context_before &&
+      statement.context_after === first.context_after &&
+      statement.sentence_chinese === first.sentence_chinese &&
+      JSON.stringify(statement.source_unit_ids) === JSON.stringify(first.source_unit_ids);
+    const sources = statement.source_unit_ids;
+    const sourceOrderValid =
+      new Set(sources).size === sources.length &&
+      sources.every((id) => (firstById.get(id) ?? Infinity) < firstById.get(statement.unit_id)!);
+    return sameUnit && sourceOrderValid;
+  });
 }
 
 function createImportId() {

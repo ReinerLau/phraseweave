@@ -105,9 +105,6 @@ importers:
       start:
         specifier: ^5.1.0
         version: 5.1.0
-      superagent:
-        specifier: ^8.1.2
-        version: 8.1.2
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.1.2

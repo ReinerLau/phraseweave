@@ -1,11 +1,11 @@
 import type { ShareImageTemplateData } from "../share";
 
 export const tpl_2 = ({
-  zhSentence,
-  enSentence,
   courseNum,
   userName,
   dateStr,
+  totalRecordNumber,
+  totalTime,
 }: ShareImageTemplateData) => ({
   type: "div",
   props: {
@@ -80,13 +80,13 @@ export const tpl_2 = ({
                   {
                     type: "p",
                     props: {
-                      children: enSentence,
+                      children: `完成 ${totalRecordNumber} 道题`,
                     },
                   },
                   {
                     type: "p",
                     props: {
-                      children: zhSentence,
+                      children: `用时 ${totalTime}`,
                     },
                   },
                 ],

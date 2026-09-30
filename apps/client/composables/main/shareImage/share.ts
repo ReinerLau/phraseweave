@@ -3,7 +3,6 @@ import type { SatoriNode } from "satori";
 import satori from "satori";
 import { ref } from "vue";
 
-import { useDailySentence } from "../summary";
 import { convertSVGtoImg, copyImage, fontEn, fontZh, initCanvas } from "./helper";
 import { tpl_1 } from "./imageTemplates/tpl_1";
 import { tpl_2 } from "./imageTemplates/tpl_2";
@@ -15,8 +14,6 @@ export enum ShareImageTemplate {
 
 export interface ShareImageTemplateData {
   courseNum: string;
-  zhSentence: string;
-  enSentence: string;
   userName: string;
   dateStr: string;
   totalRecordNumber: number;
@@ -74,8 +71,6 @@ export interface GalleryItem {
 }
 
 export function useGenerateShareImage() {
-  const { zhSentence, enSentence } = useDailySentence();
-
   const currImageSrc = ref("");
   const currImageIndex = ref(0);
   const format = "jpg";
@@ -92,8 +87,6 @@ export function useGenerateShareImage() {
   ) => {
     return imageTemplates[templateKey]({
       courseNum,
-      zhSentence: zhSentence.value,
-      enSentence: enSentence.value,
       userName,
       dateStr,
       totalRecordNumber,

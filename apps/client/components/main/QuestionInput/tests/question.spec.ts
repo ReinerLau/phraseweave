@@ -107,16 +107,12 @@ describe("getWordBlockWidthEm", () => {
 });
 
 describe("getWordCapacityEm", () => {
-  it("容器足够宽时容量就是目标单词实测宽度", () => {
-    expect(getWordCapacityEm(7.5, 100)).toBe(7.5);
-  });
-
-  it("容器更窄时按容器宽度收窄", () => {
-    expect(getWordCapacityEm(12, 10)).toBe(10);
+  it("容量由目标单词宽度决定，不受当前行宽度影响", () => {
+    expect(getWordCapacityEm(0.62)).toBe(0.62);
   });
 
   it("容量不为负数", () => {
-    expect(getWordCapacityEm(7.5, 0)).toBe(0);
+    expect(getWordCapacityEm(-1)).toBe(0);
   });
 });
 

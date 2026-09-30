@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fitInputToWordWidths, useInput } from "../question";
+import {
+  containsAllowedQuestionCharacter,
+  fitInputToWordWidths,
+  sanitizeQuestionInput,
+  useInput,
+} from "../question";
 
 describe("question", () => {
   const characterWidth = (word: string) => word.length;
@@ -125,20 +130,62 @@ describe("question", () => {
     expect(wrongCallback).not.toBeCalled();
   });
 
-  it("should filter input to Latin letters, spaces, and English punctuation", () => {
+  it("accepts numbers and symbols while removing Han characters and control whitespace", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = () => 0;
 
-    const { inputValue, userInputWords, setInputValue } = useInput({
-      source: () => "Abe' .?!-",
+    const { inputValue, userInputWords, setInputValue, submitAnswer } = useInput({
+      source: () => "S$500 costs €20，",
       setInputCursorPosition,
       getInputCursorPosition,
     });
 
-    setInputValue("A中b1\te' .?!-_");
+    setInputValue("S中$500\t costs €20，𠀀");
 
-    expect(inputValue.value).toBe("Abe' .?!-");
-    expect(userInputWords.map((word) => word.userInput)).toEqual(["Abe'", ".?!-"]);
+    expect(inputValue.value).toBe("S$500 costs €20，");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["S$500", "costs", "€20，"]);
+
+    const correctCallback = vi.fn();
+    submitAnswer(correctCallback);
+    expect(correctCallback).toHaveBeenCalledOnce();
+  });
+
+  it("does not treat spaces or removed Han characters as answer input", () => {
+    expect(sanitizeQuestionInput("A中𠀀\nB\u00a0，🙂")).toBe("AB，🙂");
+    expect(containsAllowedQuestionCharacter(" 中𠀀 \n")).toBe(false);
+    expect(containsAllowedQuestionCharacter(" 5 ")).toBe(true);
+    expect(containsAllowedQuestionCharacter(" $ ")).toBe(true);
+  });
+
+  it("requires the correct symbol", () => {
+    const { setInputValue, submitAnswer } = useInput({
+      source: () => "S$500",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+    });
+
+    setInputValue("S€500");
+    const wrongCallback = vi.fn();
+    submitAnswer(undefined, wrongCallback);
+    expect(wrongCallback).toHaveBeenCalledOnce();
+  });
+
+  it("matches straight and curly quotes without mixing single and double quotes", () => {
+    const { setInputValue, submitAnswer } = useInput({
+      source: () => "He said “don’t”",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+    });
+
+    setInputValue('He said "don\'t"');
+    const correctCallback = vi.fn();
+    submitAnswer(correctCallback);
+    expect(correctCallback).toHaveBeenCalledOnce();
+
+    setInputValue("He said 'don't'");
+    const wrongCallback = vi.fn();
+    submitAnswer(undefined, wrongCallback);
+    expect(wrongCallback).toHaveBeenCalledOnce();
   });
 
   it("should filter input that exceeds the configured word capacities", () => {

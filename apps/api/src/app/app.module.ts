@@ -10,7 +10,6 @@ import { GlobalModule } from "../global/global.module";
 import { LogtoModule } from "../logto/logto.module";
 import { MembershipModule } from "../membership/membership.module";
 import { RankModule } from "../rank/rank.module";
-import { ToolModule } from "../tool/tool.module";
 import { UserCourseProgressModule } from "../user-course-progress/user-course-progress.module";
 import { UserLearnRecordModule } from "../user-learn-record/user-learn-record.module";
 import { UserModule } from "../user/user.module";
@@ -24,7 +23,6 @@ import { UserModule } from "../user/user.module";
     CourseModule,
     UserCourseProgressModule,
     UserLearnRecordModule,
-    ToolModule,
     RankModule,
     CronJobModule,
     CourseHistoryModule,

@@ -1,31 +1,6 @@
 <template>
   <div class="min-w-max space-y-8">
     <section class="space-y-4">
-      <h2 class="text-lg font-medium">游戏模式</h2>
-      <table class="table">
-        <tbody>
-          <tr class="hover">
-            <td class="label-text">模式</td>
-            <td class="w-[300px] text-center">
-              <div class="join mr-12">
-                <input
-                  v-for="mode in getGameModeOptions()"
-                  class="btn join-item btn-sm"
-                  type="radio"
-                  name="gameMode"
-                  :value="mode.value"
-                  :aria-label="mode.label"
-                  :checked="currentGameMode === mode.value"
-                  @change="toggleGameMode(mode.value as GameMode)"
-                />
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="space-y-4">
       <h2 class="text-lg font-medium">快捷键设置</h2>
       <table class="table text-base">
         <thead>
@@ -59,64 +34,6 @@
               </td>
             </tr>
           </template>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="space-y-4">
-      <h2 class="text-lg font-medium">声音设置</h2>
-      <table class="table">
-        <tbody>
-          <tr class="hover">
-            <td class="label-text">开启键盘打字音效</td>
-            <td class="w-[300px] text-center">
-              <input
-                type="checkbox"
-                class="toggle toggle-secondary"
-                :checked="keyboardSound"
-                @change="toggleKeyboardSound"
-              />
-            </td>
-          </tr>
-          <tr class="hover">
-            <td class="label-text">答案页面自动播放声音</td>
-            <td class="w-[300px] text-center">
-              <input
-                type="checkbox"
-                class="toggle toggle-secondary"
-                :checked="autoPlaySound"
-                @change="toggleAutoPlaySound"
-              />
-            </td>
-          </tr>
-          <tr class="hover">
-            <td class="label-text">答题时自动播放声音</td>
-            <td class="w-[300px] text-center">
-              <input
-                type="checkbox"
-                class="toggle toggle-secondary"
-                :checked="autoPlayEnglish"
-                @change="toggleAutoPlayEnglish"
-              />
-            </td>
-          </tr>
-          <tr class="hover">
-            <td class="label-text">切换口音</td>
-            <td class="w-[300px] text-center">
-              <div class="join mr-12">
-                <input
-                  v-for="lang in getPronunciationOptions()"
-                  class="btn join-item btn-sm"
-                  type="radio"
-                  name="options"
-                  :value="lang.value"
-                  :aria-label="lang.label"
-                  :checked="pronunciation === lang.value"
-                  @change="togglePronunciation(lang.value as PronunciationType)"
-                />
-              </div>
-            </td>
-          </tr>
         </tbody>
       </table>
     </section>
@@ -201,14 +118,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 
 import Message from "~/components/main/Message/useMessage";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
-import { GameMode, useGameMode } from "~/composables/user/gameMode";
-import { PronunciationType, usePronunciation } from "~/composables/user/pronunciation";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
-import {
-  useAutoPlayEnglish,
-  useAutoPronunciation,
-  useKeyboardSound,
-} from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { parseShortcutKeys } from "~/utils/keyboardShortcuts";
 
@@ -228,15 +138,6 @@ const dialogBoxRef = ref<HTMLElement | null>(null);
 //   }
 // };
 const { autoNextQuestion, toggleAutoQuestion } = useAutoNextQuestion();
-const { keyboardSound, toggleKeyboardSound } = useKeyboardSound();
-const { autoPlaySound, toggleAutoPlaySound } = useAutoPronunciation();
-const { autoPlayEnglish, toggleAutoPlayEnglish } = useAutoPlayEnglish();
-const {
-  pronunciation,
-  // 发音配置列表
-  getPronunciationOptions,
-  togglePronunciation,
-} = usePronunciation();
 const { useSpace, toggleUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const {
   showModal,
@@ -249,13 +150,7 @@ const {
   handleKeydown,
 } = useShortcutKeyMode();
 
-const { getGameModeOptions, currentGameMode, toggleGameMode } = useGameMode();
-
 const shortcutKeyBindList = [
-  {
-    label: "播放发音",
-    type: SHORTCUT_KEY_TYPES.SOUND,
-  },
   {
     label: "返回上个问题",
     type: SHORTCUT_KEY_TYPES.PREVIOUS,

@@ -26,6 +26,7 @@
             开启你的第一节课！
           </p>
           <h3 class="py-2 text-base font-semibold">答题页面</h3>
+          <p class="py-1 leading-7">阅读完整原句的中文提示，在英文原句的空缺处填入当前学习单元。</p>
           <p class="py-1 leading-7">
             看到
             <span class="text-fuchsia-500">紫色下划线</span>
@@ -40,27 +41,11 @@
             <span class="text-red-500">红色</span>
             单词和下划线显示，代表这部分单词存在错误。直接修改错误单词，按下回车键重新提交即可。
           </p>
-          <p class="py-1 leading-7">
-            验证通过后会显示答案页面，同时会播放对应题目语音用于辅助记忆。
-          </p>
+          <p class="py-1 leading-7">验证通过后会显示填好的英文原句。</p>
           <h3 class="py-2 text-base font-semibold">答题小技巧</h3>
-          <p class="py-1 leading-7">
-            底部提示面板的按钮
-            <a
-              class="ml-1 text-[#3498db] hover:text-theme-dark"
-              href="https://www.bilibili.com/video/BV1py421q7Mp/"
-            >
-              👉 一分钟点我快速了解</a
-            >
-          </p>
-          <p class="p-1">
-            <button class="instruction-btn">⌃ Ctrl+'</button>
-            <span class="text-gray-500">（或快捷键 Ctrl+'）</span>
-            播放题目语音
-          </p>
           <p class="p-1">
             <button class="instruction-btn">显示答案</button>
-            显示题目答案
+            查看当前空缺的英文单元
           </p>
           <h3 class="py-2 text-base font-semibold">答案页面</h3>
           <p class="py-1 leading-7">答案下方的按钮</p>
@@ -83,8 +68,7 @@
           </p>
           <h3 class="py-2 text-base font-semibold">用户设置页面</h3>
           <p class="py-1 leading-7">
-            右上角图标进入 User Info
-            切换到设置页面，自定义你喜欢的快捷键，也可以控制语音是否自动播放、单词下划线固定长度、使用空格提交等等……更多个人设置会持续更新
+            右上角图标进入 User Info 切换到设置页面，自定义快捷键、空格提交及答对后自动下一题等选项
             😊
             <i
               class="mx-2 inline h-8 w-1 animate-wink bg-slate-900 p-[2px] text-sm dark:bg-white"
@@ -99,7 +83,7 @@
           class="hide-scrollbar h-[96%] w-[97%] overflow-y-auto overflow-x-hidden rounded-xl border border-gray-700 bg-[#17172e] px-5 py-4"
         >
           <h2 class="mb-3 rounded-lg bg-[#232339] py-4 text-center text-xl font-bold">
-            学习原理：通过连词造句的方法来练习英语 😄
+            学习原理：通过原句填空逐步掌握英语表达 😄
           </h2>
           <h3 class="pb-2 text-base font-semibold">以句子为核心</h3>
           <p class="py-1">每个句子包含单词/词组/语法，所以学会一个句子后，就可以清晰地表达出来。</p>
