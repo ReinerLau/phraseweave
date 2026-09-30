@@ -117,17 +117,17 @@
     </form>
 
     <section
-      v-if="translations.length"
+      v-if="outputFiles.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 class="text-xl font-semibold">中文提示预览</h2>
-          <p class="mt-1 text-sm opacity-70">检查生成结果后下载所需文件。</p>
+          <h2 class="text-xl font-semibold">生成文件</h2>
+          <p class="mt-1 text-sm opacity-70">下载本次生成的文件。</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <button
-            v-for="(file, index) in outputFiles"
+            v-for="file in outputFiles"
             :key="file.name"
             class="btn btn-outline btn-sm"
             type="button"
@@ -137,17 +137,6 @@
           </button>
         </div>
       </div>
-      <ol class="mt-5 flex flex-col gap-4">
-        <li
-          v-for="(item, index) in translations"
-          :key="index"
-          class="rounded-lg bg-base-200 p-4"
-        >
-          <p class="text-xs opacity-60">第 {{ index + 1 }} 句</p>
-          <p class="mt-1">{{ item.sentence }}</p>
-          <p class="mt-2 font-medium">{{ item.sentence_chinese }}</p>
-        </li>
-      </ol>
     </section>
 
     <section
@@ -238,7 +227,6 @@ type GeneratorStatus = {
   modelDownloaded: boolean;
 };
 type OutputFile = { name: string; content: string };
-type TranslationRow = { sentence: string; sentence_chinese: string };
 type MarkdownBlock =
   | { type: "heading"; level: number; text: string }
   | { type: "paragraph"; text: string }
@@ -249,7 +237,7 @@ type JobState = {
   state: "running" | "complete" | "failed";
   message?: string;
   error?: string;
-  result?: { translations: TranslationRow[]; outputs: OutputFile[] };
+  result?: { outputs: OutputFile[] };
 };
 
 const serviceUrl = "http://127.0.0.1:8765";
@@ -263,7 +251,6 @@ const modelDownloaded = ref(false);
 const serviceMessage = ref("启动本地服务后，在此连接。启动命令见下方提示。");
 const activeJob = ref<JobState | null>(null);
 const jobError = ref("");
-const translations = ref<TranslationRow[]>([]);
 const outputFiles = ref<OutputFile[]>([]);
 const markdownFileName = ref("");
 const markdownContent = ref<string | null>(null);
@@ -311,7 +298,6 @@ async function connectService() {
 
 async function startJob(payload: Record<string, unknown>) {
   jobError.value = "";
-  translations.value = [];
   outputFiles.value = [];
   markdownFileName.value = "";
   markdownContent.value = null;
@@ -358,7 +344,6 @@ async function pollJob(jobId: string) {
     }
     await connectService();
     if (job.result) {
-      translations.value = job.result.translations || [];
       outputFiles.value = job.result.outputs || [];
       const markdownFile = outputFiles.value.find((file) => file.name.endsWith(".md"));
       if (markdownFile) {
@@ -473,7 +458,6 @@ function parseMarkdownTableRow(line: string): string[] {
 onUnmounted(() => {
   disposed = true;
   if (pollTimer) clearTimeout(pollTimer);
-  translations.value = [];
   outputFiles.value = [];
   markdownContent.value = null;
 });

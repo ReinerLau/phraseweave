@@ -86,10 +86,6 @@ def _generate(payload: Mapping[str, Any]) -> None:
 
     _emit({
         "ok": True,
-        "translations": [
-            {"sentence": sentence, "sentence_chinese": translated}
-            for sentence, translated in zip(sentences, chinese, strict=True)
-        ],
         "outputs": outputs,
         "model": model_status(),
     })
