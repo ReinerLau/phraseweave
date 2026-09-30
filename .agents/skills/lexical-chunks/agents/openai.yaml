@@ -1,4 +1,0 @@
-interface:
-  display_name: "lexical-chunks"
-  short_description: "按依存树生成常规或重复复习的英文学习单元"
-  default_prompt: "使用 $lexical-chunks 处理我粘贴的英文教材，按依存树生成渐进学习单元、翻译中文提示并导出。未指定时询问模式（常规或复习）和格式（Markdown、PhraseWeave JSON 或两者）。"
