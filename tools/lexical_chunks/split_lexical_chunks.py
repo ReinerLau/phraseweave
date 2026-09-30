@@ -1,23 +1,10 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10,<3.14"
-# dependencies = [
-#   "click",
-#   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
-#   "spacy==3.8.7",
-# ]
-# ///
-
 """Generate learning units by closing adjacent dependency subtrees."""
 
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 from collections.abc import Mapping, Sequence
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
 from typing import Any
 
 SPACY_VERSION = "3.8.7"
@@ -25,36 +12,12 @@ MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
 ALGORITHM_VERSION = 5
-ANNOTATION_SCHEMA_VERSION = 2
 PHRASEWEAVE_SCHEMA_VERSION = 4
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
-OUTPUT_DIR = Path(__file__).resolve().parents[4] / "outputs" / "lexical-chunks"
-DEFAULT_OUTPUT = OUTPUT_DIR / "text.learning-units.md"
-DEFAULT_PHRASEWEAVE_OUTPUT = OUTPUT_DIR / "text.learning-units.json"
-DEFAULT_REVIEW_OUTPUT = OUTPUT_DIR / "text.review.learning-units.md"
-DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT = OUTPUT_DIR / "text.review.learning-units.json"
 
 
 class ConfigurationError(RuntimeError):
     """Raised when plans, annotations, or fixed dependencies are incompatible."""
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate adjacent dependency-subtree learning units or render translations."
-    )
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--plan-output", type=Path, help="analyze English from stdin")
-    mode.add_argument("--render-plan", type=Path, help="render a validated plan")
-    parser.add_argument("--trace-output", type=Path, help="write a Markdown derivation trace")
-    parser.add_argument(
-        "--format", choices=("markdown", "phraseweave", "both"), default="markdown"
-    )
-    parser.add_argument(
-        "--mode", choices=("standard", "review"), default="standard",
-        help="exercise mode for rendered output",
-    )
-    return parser.parse_args()
 
 
 def load_syntax_model() -> Any:
@@ -344,28 +307,6 @@ def _validate_plan(payload: Any, nlp: Any) -> dict[str, Any]:
     }
 
 
-def _parse_annotations(text: str, plan: Mapping[str, Any]) -> dict[str, Any]:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise ConfigurationError(f"invalid sentence prompt JSON: {error}") from error
-    _exact_keys(payload, {"schema_version", "sentences"}, "prompts")
-    if payload["schema_version"] != ANNOTATION_SCHEMA_VERSION:
-        raise ConfigurationError(f"prompts must use schema_version {ANNOTATION_SCHEMA_VERSION}")
-    raw_sentences = payload["sentences"]
-    if not isinstance(raw_sentences, list) or len(raw_sentences) != len(plan["sentences"]):
-        raise ConfigurationError("prompts.sentences must align with the plan")
-    sentences = []
-    for index, raw in enumerate(raw_sentences):
-        location = f"prompts.sentences[{index}]"
-        _exact_keys(raw, {"sentence_chinese"}, location)
-        prompt = raw["sentence_chinese"]
-        if not isinstance(prompt, str) or not prompt.strip():
-            raise ConfigurationError(f"{location}.sentence_chinese must be a non-empty string")
-        sentences.append({"sentence_chinese": prompt.strip()})
-    return {"schema_version": ANNOTATION_SCHEMA_VERSION, "sentences": sentences}
-
-
 def _markdown_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
@@ -467,8 +408,8 @@ def render_markdown(
             "",
             f"中文提示：{translated['sentence_chinese']}",
             "",
-            "| 序号 | 英文填空 | 英文答案 | 组合说明 |",
-            "|---:|---|---|---|",
+            "| 序号 | 英文答案 | 组合说明 |",
+            "|---:|---|---|",
         ])
         explanations = traces[sentence_index - 1]["explanations"] if traces is not None else [
             "" for _ in sentence["units"]
@@ -478,15 +419,12 @@ def render_markdown(
             _exercise_steps(sentence, sentence_trace, mode), start=1
         ):
             unit = sentence["units"][unit_index]
-            span = unit["span"]
-            blank = sentence["sentence"][:span["start"]] + "____" + sentence["sentence"][span["end"]:]
             explanation = "复习" if is_review else explanations[unit_index]
             lines.append(
-                f"| {step} | {_markdown_escape(blank)} | {_markdown_escape(unit['text'])} | {_markdown_escape(explanation)} |"
+                f"| {step} | {_markdown_escape(unit['text'])} | {_markdown_escape(explanation)} |"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
 
 def render_phraseweave(
     plan: Mapping[str, Any],
@@ -545,81 +483,3 @@ def render_trace(traces: Sequence[Mapping[str, Any]]) -> str:
                 lines.append(f"- {item['head']} → {item['child']}：{item['reason']}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
-
-def _unique_path(requested: Path) -> Path:
-    if not requested.exists():
-        return requested
-    index = 2
-    while True:
-        candidate = requested.with_name(f"{requested.stem}-{index}{requested.suffix}")
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
-def _write_output(path: Path, content: str) -> Path:
-    output = _unique_path(path.expanduser()).resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(content, encoding="utf-8")
-    return output
-
-
-def _output_paths(args: argparse.Namespace) -> tuple[Path | None, Path | None]:
-    if args.mode == "review":
-        markdown = DEFAULT_REVIEW_OUTPUT
-        phraseweave = DEFAULT_REVIEW_PHRASEWEAVE_OUTPUT
-    else:
-        markdown = DEFAULT_OUTPUT
-        phraseweave = DEFAULT_PHRASEWEAVE_OUTPUT
-    if args.format == "markdown":
-        return markdown, None
-    if args.format == "phraseweave":
-        return None, phraseweave
-    return markdown, phraseweave
-
-
-def _write_trace(args: argparse.Namespace, traces: Sequence[Mapping[str, Any]]) -> None:
-    if args.trace_output is not None:
-        print(_write_output(args.trace_output, render_trace(traces)))
-
-
-def main() -> int:
-    args = parse_args()
-    try:
-        nlp = load_syntax_model()
-        if args.plan_output is not None:
-            plan, traces = generate_plan(sys.stdin.read(), nlp)
-            plan_path = _write_output(args.plan_output, json.dumps(plan, ensure_ascii=False, indent=2) + "\n")
-            print(plan_path)
-            _write_trace(args, traces)
-            return 0
-        try:
-            raw_plan = json.loads(args.render_plan.expanduser().read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ConfigurationError(f"cannot read plan from {args.render_plan}: {error}") from error
-        plan = _validate_plan(raw_plan, nlp)
-        translations = _parse_annotations(sys.stdin.read(), plan)
-        markdown_path, phraseweave_path = _output_paths(args)
-        traces = []
-        if markdown_path is not None or phraseweave_path is not None or args.trace_output is not None or args.mode == "review":
-            for sentence in plan["sentences"]:
-                _, sentence_traces = generate_plan(sentence["sentence"], nlp)
-                traces.extend(sentence_traces)
-        outputs: list[tuple[Path, str]] = []
-        if markdown_path is not None:
-            outputs.append((markdown_path, render_markdown(plan, translations, traces, args.mode)))
-        if phraseweave_path is not None:
-            outputs.append((phraseweave_path, render_phraseweave(plan, translations, traces, args.mode)))
-        for path, content in outputs:
-            print(_write_output(path, content))
-        if args.trace_output is not None:
-            _write_trace(args, traces)
-        return 0
-    except ConfigurationError as error:
-        print(f"lexical-chunks: {error}", file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

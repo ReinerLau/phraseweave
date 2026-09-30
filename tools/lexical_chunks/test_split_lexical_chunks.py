@@ -1,28 +1,11 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10,<3.14"
-# dependencies = [
-#   "click",
-#   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
-#   "spacy==3.8.7",
-# ]
-# ///
-
 import json
-import os
-from argparse import Namespace
 from copy import deepcopy
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest import main as unittest_main
 
 from split_lexical_chunks import (
     ConfigurationError,
-    OUTPUT_DIR,
     _exercise_steps,
-    _output_paths,
-    _parse_annotations,
     _validate_plan,
     generate_plan,
     load_syntax_model,
@@ -101,19 +84,6 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
 
     def plan(self, text):
         return generate_plan(text, self.nlp)[0]
-
-    def test_render_output_directory_is_fixed_across_working_directories(self):
-        original_directory = Path.cwd()
-        with TemporaryDirectory() as directory:
-            try:
-                os.chdir(directory)
-                for mode in ("standard", "review"):
-                    for output_format in ("markdown", "phraseweave", "both"):
-                        with self.subTest(mode=mode, output_format=output_format):
-                            paths = _output_paths(Namespace(mode=mode, format=output_format))
-                            self.assertTrue(all(path.parent == OUTPUT_DIR for path in paths if path))
-            finally:
-                os.chdir(original_directory)
 
     def test_matches_manual_postorder_examples(self):
         for source, expected in ((FIRST_SENTENCE, FIRST_UNITS), (SECOND_SENTENCE, SECOND_UNITS)):
@@ -276,29 +246,21 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         with self.assertRaisesRegex(ConfigurationError, "do not match"):
             _validate_plan(wrong_order, self.nlp)
 
-    def test_annotation_alignment_and_phraseweave_import_shape(self):
+    def test_translations_render_to_phraseweave_import_shape(self):
         plan, traces = generate_plan("Birdsong is good.", self.nlp)
-        annotations = {"schema_version": 2, "sentences": [{"sentence_chinese": "鸟鸣很好。"}]}
-        parsed = _parse_annotations(json.dumps(annotations), plan)
-        payload = json.loads(render_phraseweave(plan, parsed, traces))
+        translations = {"sentences": [{"sentence_chinese": "鸟鸣很好。"}]}
+        payload = json.loads(render_phraseweave(plan, translations, traces))
         self.assertEqual(payload["schema_version"], 4)
         self.assertEqual(len(payload["statements"]), len(plan["sentences"][0]["units"]))
         self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
         self.assertEqual(set(payload["statements"][0]), {"sentence_chinese", "english", "context_before", "context_after", "unit_id", "source_unit_ids"})
 
-        annotations["sentences"][0]["sentence_chinese"] = ""
-        with self.assertRaisesRegex(ConfigurationError, "non-empty string"):
-            _parse_annotations(json.dumps(annotations), plan)
-
     def test_markdown_and_trace_show_composition_explanations(self):
         plan, traces = generate_plan("the USA grows.", self.nlp)
-        prompts = {
-            "schema_version": 2,
-            "sentences": [{"sentence_chinese": "美国在增长。"}],
-        }
+        prompts = {"sentences": [{"sentence_chinese": "美国在增长。"}]}
         markdown = render_markdown(plan, prompts, traces)
         report = render_trace(traces)
-        self.assertIn("| 序号 | 英文填空 | 英文答案 | 组合说明 |", markdown)
+        self.assertIn("| 序号 | 英文答案 | 组合说明 |", markdown)
         self.assertIn("中心词 USA；左接 the", markdown)
         self.assertIn("| 序号 | 学习单元 | 组合说明 |", report)
         self.assertIn("整句", report)

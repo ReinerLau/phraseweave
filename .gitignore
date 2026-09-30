@@ -137,9 +137,7 @@ dist
 # Python cache files
 __pycache__/
 *.py[cod]
-
-# Generated lexical-chunk reports
-outputs/lexical-chunks/
+**/.venv/
 
 # docker volumes for dev
 .volumes

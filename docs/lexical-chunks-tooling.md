@@ -1,56 +1,32 @@
-# lexical-chunks 工具接口
+# 本地学习单元生成器
 
-`lexical-chunks` 在分句和依存分析前去掉直双引号 `"` 与弯双引号 `“”`；单引号及单词内撇号保留。随后使用固定 spaCy 模型分句并构造依存树。执行器后序处理每个非标点词：同一中心词下先处理有非标点子节点的分支，再处理叶节点，各组保持原文顺序；随后生成中心词单词单元，接入直接子节点已经闭合的完整短语。每轮只接入与当前片段左右紧邻的子短语；两侧同时可接入时，依次输出左侧、右侧、两侧合并，然后以两侧合并的片段继续向外扩展。单词单元不按词性过滤；若单词覆盖整句，同范围只输出整句单元。依存标签只来自 spaCy 的解析结果。
+生成器是 PhraseWeave 客户端中的独立路由，没有清单页入口。部署后直接打开：
 
-## 组合边界
-
-- 子短语必须包含该子节点之下的全部非标点词，且本身是去掉双引号后的连续文本片段。未闭合的子短语不能传给父节点。
-- 邻接按去掉双引号后的 spaCy token 顺序判断；逗号、分号等句中标点阻断局部组合。无法闭合的分支会出现在 `--trace-output` 的说明中。
-- 每个非标点词都参与组合，其单词单元保留在计划中，包括冠词、介词和助动词；与整句同范围的单词单元由整句单元取代。并列结构严格按依存树处理，没有语法特例。
-- 每句最后追加一次完整句子单元，保留其余句内标点，去掉句末标点；若已生成相同文本范围的短语，就将该范围作为整句移到最后。
-
-例如，`The young teacher gave her students a difficult problem after class.` 中，`problem` 先接相邻的 `difficult` 与闭合的 `after class`，再接较远的 `a`。因此生成 `difficult problem`、`problem after class`、`difficult problem after class`、`a difficult problem after class`，不生成 `a difficult problem`。
-
-## 命令行
-
-- `--plan-output <路径>`：从标准输入读取带原文标点的英文，生成计划。
-- `--render-plan <路径>`：校验计划，根据标准输入中逐句提供的中文提示渲染。
-- `--format markdown|phraseweave|both`：最终格式，默认 `markdown`。
-- `--trace-output <路径>`：另存组合说明和未闭合分支。
-
-渲染结果固定写入项目的 `outputs/lexical-chunks/` 目录，与当前工作目录无关；现有文件保留，新文件名使用递增编号。计划与追踪文件仍由调用方指定路径。计划生成与渲染都要求 spaCy 3.8.7 和 `en_core_web_sm` 3.8.0。
-
-## 英文计划 schema 3
-
-计划记录算法和解析器版本。`sentence` 保存去掉双引号后用于依存分析的句子；每个单元的 `span` 是相对于该句的左闭右开字符范围，`text` 必须等于该范围的文本。`kind` 为 `word`、`phrase` 或 `sentence`。旧算法版本的计划需要重新生成。
-
-```json
-{
-  "schema_version": 3,
-  "algorithm_version": 5,
-  "spacy_version": "3.8.7",
-  "model_version": "3.8.0",
-  "sentences": [
-    {
-      "sentence": "the USA.",
-      "units": [
-        { "text": "the", "span": { "start": 0, "end": 3 }, "kind": "word" },
-        { "text": "USA", "span": { "start": 4, "end": 7 }, "kind": "word" },
-        { "text": "the USA", "span": { "start": 0, "end": 7 }, "kind": "sentence" }
-      ]
-    }
-  ]
-}
+```text
+https://reinerlau.github.io/phraseweave/generator
 ```
 
-渲染器按当前版本重新生成英文单元并逐项校验，再验证中文提示 JSON schema 2 中每句都有非空 `sentence_chinese`。例如：
+英文输入、spaCy 依存分析和模型翻译都在运行本地服务的电脑上完成。Markdown 和 PhraseWeave JSON 在本地服务与页面内存中生成和预览，不写入项目目录。页面通过浏览器下载文件；离开页面或开始下一次生成后，页面内的结果会释放。
 
-```json
-{ "schema_version": 2, "sentences": [{ "sentence_chinese": "美国。" }] }
+## 启动本地服务
+
+在仓库根目录运行：
+
+```bash
+python3 tools/lexical_chunks/local_service.py
 ```
 
-Markdown 每句显示整句中文提示，表格列出挖空后的英文原句、目标单元及组合说明。
+保持终端运行，在生成器页面点击“连接本地服务”。启动需要 `uv`。首次启动会创建隔离 Python 环境、安装锁定依赖，并在服务开始监听前下载 Helsinki 模型。后续启动会复用缓存的环境和模型。依赖和模型保存在用户缓存目录，不写入仓库。若初始化失败，服务会退出并在终端显示错误。首次浏览器连接可能询问是否允许页面访问本机服务。
 
-PhraseWeave 导入 JSON 使用 schema 4 的平铺 `statements`。每行有目标单元 `english`、整句译文 `sentence_chinese`、原句挖空前后的 `context_before` 与 `context_after`，以及稳定的 `unit_id` 和 `source_unit_ids`。上下文字段直接用计划中的 `span` 切分原句，能准确定位重复片段。单词或没有可练来源的单元使用空数组；只有一个直接来源时使用单个 ID，两个来源时按原文位置排列。`review` 模式复习直接来源，重复行共用相同的单元 ID 与来源。客户端在答错可拆单元时使用这些关系逐级回退。算法版本 4 的旧计划需重新生成；PhraseWeave JSON schema 不变。
+## 翻译
 
-依存组合、旧词元过滤及其取消分别记于 [ADR 0012](adr/0012-adjacent-subtree-closure.md)、[ADR 0014](adr/0014-filter-function-word-units.md) 和 [ADR 0018](adr/0018-retain-all-word-units.md)。直接来源的复习规则见 [ADR 0016](adr/0016-retain-available-review-sources.md)。
+- 模型固定为 `Helsinki-NLP/opus-mt-en-zh` revision `408d9bc410a388e1d9aef112a2daba955b945255`，输出语言前缀为 `>>cmn_Hans<<`。
+- 使用 Transformers/PyTorch 在本机运行固定版本的 Helsinki 模型。翻译只保留这一条路径，不再进行 CTranslate2 转换。
+- 模型输入上限为 512 个 tokenizer token；超长句会显示错误，不会截断翻译或导出部分文件。
+- 每个完整原句生成一条中文提示。同句所有学习单元共用该提示。
+
+## 学习单元与导出
+
+分句、双引号处理和依存树闭合算法沿用 [ADR 0012](adr/0012-adjacent-subtree-closure.md)、[ADR 0015](adr/0015-ignore-double-quotes-in-learning-units.md) 和 [ADR 0018](adr/0018-retain-all-word-units.md)。`standard` 和 `review` 模式以及 `markdown`、`phraseweave`、`both` 导出格式保持原行为。PhraseWeave JSON 使用 schema 4，含稳定 `unit_id`、直接来源 `source_unit_ids` 及原句上下文。
+
+下载文件名包含 UTC 时间戳，重复生成时也能得到不同文件名。生成器服务仅绑定 `127.0.0.1:8765`，并校验客户端来源后接受生成请求；页面确认接收任务结果后，服务会释放对应的内存内容。若页面在任务完成前关闭，未领取的结果会在下次任务启动时清理。
