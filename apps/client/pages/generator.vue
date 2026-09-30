@@ -16,7 +16,7 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <button
-            class="btn btn-ghost btn-square btn-sm"
+            class="btn btn-square btn-ghost btn-sm"
             type="button"
             :disabled="connecting"
             :aria-label="connecting ? '正在连接本地服务' : '刷新本地服务连接'"
@@ -66,7 +66,33 @@
       </p>
     </section>
 
+    <section
+      v-if="captureMode"
+      class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
+      aria-live="polite"
+    >
+      <h2 class="font-semibold">从选中文本创建练习</h2>
+      <p class="mt-2 whitespace-pre-wrap text-sm opacity-75">{{ captureStatus }}</p>
+      <p
+        v-if="captureError"
+        class="mt-3 text-sm text-error"
+        role="alert"
+      >
+        {{ captureError }}
+      </p>
+      <button
+        v-if="captureText && captureError && captureText.length <= 30000"
+        class="btn btn-primary mt-4"
+        type="button"
+        :disabled="captureRunning"
+        @click="runCapture"
+      >
+        {{ captureRunning ? "正在处理…" : "重试" }}
+      </button>
+    </section>
+
     <form
+      v-if="!captureMode"
       class="flex flex-col gap-5 rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
       @submit.prevent="generate"
     >
@@ -115,15 +141,19 @@
           生成学习单元
         </button>
         <p class="text-sm opacity-70">
-          <template v-if="!serviceConnected">请先启动本地服务；连接失败后点击上方刷新按钮。</template>
-          <template v-else-if="!runtimeReady || !modelDownloaded">请等待本地服务完成依赖和 Helsinki 模型初始化。</template>
+          <template v-if="!serviceConnected"
+            >请先启动本地服务；连接失败后点击上方刷新按钮。</template
+          >
+          <template v-else-if="!runtimeReady || !modelDownloaded"
+            >请等待本地服务完成依赖和 Helsinki 模型初始化。</template
+          >
           <template v-else>模型运行在本机；生成结果暂存在本页内存，下载后由浏览器保存。</template>
         </p>
       </div>
     </form>
 
     <section
-      v-if="outputFiles.length"
+      v-if="!captureMode && outputFiles.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -146,7 +176,7 @@
     </section>
 
     <section
-      v-if="markdownContent !== null"
+      v-if="!captureMode && markdownContent !== null"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
       <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -223,7 +253,11 @@
 </template>
 
 <script setup lang="ts">
+import { navigateTo, useRoute } from "#app";
 import { computed, onMounted, onUnmounted, ref } from "vue";
+
+import { useActiveCourseMap } from "~/composables/courses/activeCourse";
+import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExerciseDb";
 
 type ExerciseMode = "standard" | "review";
 type OutputFormat = "markdown" | "phraseweave" | "both";
@@ -247,6 +281,10 @@ type JobState = {
 };
 
 const serviceUrl = "http://127.0.0.1:8765";
+const route = useRoute();
+const rawCaptureId = route.query.capture;
+const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
+const captureMode = Boolean(captureId);
 const exerciseMode = ref<ExerciseMode>("standard");
 const outputFormat = ref<OutputFormat>("markdown");
 const englishText = ref("");
@@ -261,8 +299,15 @@ const outputFiles = ref<OutputFile[]>([]);
 const markdownFileName = ref("");
 const markdownContent = ref<string | null>(null);
 const markdownBlocks = computed(() => parseMarkdown(markdownContent.value || ""));
+const captureText = ref("");
+const captureStatus = ref("正在接收选中文本…");
+const captureError = ref("");
+const captureRunning = ref(false);
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
+let captureTimer: ReturnType<typeof setTimeout> | undefined;
+
+const { updateActiveCourseMap } = useActiveCourseMap();
 
 const canGenerate = computed(
   () =>
@@ -273,8 +318,65 @@ const canGenerate = computed(
 );
 
 onMounted(() => {
-  void connectService();
+  if (captureMode) {
+    window.addEventListener("message", receiveCaptureMessage);
+    if (!/^[a-f0-9-]{32,36}$/i.test(captureId)) {
+      captureError.value = "无效的浏览器扩展请求，请从文章中重新选择文本。";
+      captureStatus.value = "无法读取选中文本。";
+      return;
+    }
+    requestCapture();
+  } else {
+    void connectService();
+  }
 });
+
+function requestCapture() {
+  captureStatus.value = "正在接收选中文本…";
+  captureError.value = "";
+  window.postMessage(
+    { type: "PHRASEWEAVE_CAPTURE_READY", requestId: captureId },
+    window.location.origin,
+  );
+  if (captureTimer) clearTimeout(captureTimer);
+  captureTimer = setTimeout(() => {
+    if (!captureText.value) {
+      captureError.value = "未能连接 PhraseWeave 浏览器扩展。请重新从文章选择文本并右键操作。";
+      captureStatus.value = "等待扩展传入选中文本。";
+    }
+  }, 10000);
+}
+
+function receiveCaptureMessage(event: MessageEvent) {
+  const message = event.data as { type?: string; requestId?: string; text?: string } | null;
+  if (
+    event.source !== window ||
+    event.origin !== window.location.origin ||
+    message?.type !== "PHRASEWEAVE_CAPTURE_RESULT" ||
+    message.requestId !== captureId ||
+    typeof message.text !== "string"
+  ) {
+    return;
+  }
+
+  if (captureTimer) clearTimeout(captureTimer);
+  captureText.value = message.text.trim();
+  window.postMessage(
+    { type: "PHRASEWEAVE_CAPTURE_ACK", requestId: captureId },
+    window.location.origin,
+  );
+  if (!captureText.value) {
+    captureError.value = "没有收到选中文本，请重新选择后再试。";
+    captureStatus.value = "无法创建练习。";
+    return;
+  }
+  if (captureText.value.length > 30000) {
+    captureError.value = "选中文本超过 30,000 个字符，请缩短选择后再试。";
+    captureStatus.value = `已接收 ${captureText.value.length.toLocaleString()} 个字符。`;
+    return;
+  }
+  void runCapture();
+}
 
 async function localFetch(path: string, init: RequestInit = {}) {
   const options: LocalFetchInit = { ...init, targetAddressSpace: "loopback" };
@@ -304,7 +406,7 @@ async function connectService() {
   }
 }
 
-async function startJob(payload: Record<string, unknown>) {
+async function startJob(payload: Record<string, unknown>): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   outputFiles.value = [];
   markdownFileName.value = "";
@@ -318,41 +420,47 @@ async function startJob(payload: Record<string, unknown>) {
     const body = await response.json();
     if (!response.ok) throw new Error(body.error || "无法启动本地任务。");
     activeJob.value = { id: body.id, state: "running", message: "正在启动…" };
-    await pollJob(body.id);
+    return await pollJob(body.id);
   } catch (error) {
     jobError.value = describeError(error);
+    return undefined;
   }
 }
 
 async function generate() {
   if (!canGenerate.value) return;
-  await startJob({
+  const outputs = await startJob({
     text: englishText.value,
     mode: exerciseMode.value,
     format: outputFormat.value,
   });
+  if (captureMode && outputs) await importGeneratedExercise(outputs);
 }
 
-async function pollJob(jobId: string) {
-  if (disposed) return;
+async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
+  if (disposed) return undefined;
   try {
     const response = await localFetch(`/api/jobs/${jobId}`);
     const job = (await response.json()) as JobState;
     if (!response.ok) throw new Error(job.error || "无法读取任务状态。");
     activeJob.value = job;
     if (job.state === "running") {
-      pollTimer = setTimeout(() => void pollJob(jobId), 900);
-      return;
+      return await new Promise<OutputFile[] | undefined>((resolve) => {
+        pollTimer = setTimeout(() => {
+          void pollJob(jobId).then(resolve);
+        }, 900);
+      });
     }
     activeJob.value = null;
     if (job.state === "failed") {
       jobError.value = job.error || "本地任务失败。";
       await releaseJob(jobId);
-      return;
+      return undefined;
     }
     await connectService();
+    const outputs = job.result?.outputs || [];
     if (job.result) {
-      outputFiles.value = job.result.outputs || [];
+      outputFiles.value = outputs;
       const markdownFile = outputFiles.value.find((file) => file.name.endsWith(".md"));
       if (markdownFile) {
         markdownFileName.value = markdownFile.name;
@@ -360,10 +468,59 @@ async function pollJob(jobId: string) {
       }
     }
     await releaseJob(jobId);
+    return outputs;
   } catch (error) {
     activeJob.value = null;
     jobError.value = describeError(error);
+    return undefined;
   }
+}
+
+async function runCapture() {
+  if (!captureText.value || captureRunning.value) return;
+  captureRunning.value = true;
+  captureError.value = "";
+  jobError.value = "";
+  captureStatus.value = "正在连接本地生成服务…";
+  exerciseMode.value = "standard";
+  outputFormat.value = "phraseweave";
+  englishText.value = captureText.value;
+
+  try {
+    await connectService();
+    if (!canGenerate.value) {
+      throw new Error(serviceMessage.value || "本地生成服务尚未就绪。请启动服务后重试。");
+    }
+    captureStatus.value = "正在生成学习单元…";
+    const outputs = await startJob({
+      text: captureText.value,
+      mode: "standard",
+      format: "phraseweave",
+    });
+    if (!outputs) throw new Error(jobError.value || "学习单元生成失败，请重试。");
+    captureStatus.value = "正在导入练习…";
+    await importGeneratedExercise(outputs);
+  } catch (error) {
+    captureError.value = describeError(error);
+    captureStatus.value = "练习尚未创建。选中文本仍保留在此页面，可以重试。";
+  } finally {
+    captureRunning.value = false;
+  }
+}
+
+async function importGeneratedExercise(outputs: OutputFile[]) {
+  const jsonFile = outputs.find((file) => file.name.endsWith(".json"));
+  if (!jsonFile) throw new Error("生成结果中没有 PhraseWeave JSON 文件。");
+  const [coursePack] = normalizeExerciseImport(JSON.parse(jsonFile.content), {
+    title: captureText.value.replace(/\s+/g, " ").trim().slice(0, 80),
+  });
+  const course = coursePack?.courses[0];
+  if (!course || course.statements.length === 0)
+    throw new Error("生成结果中没有可练习的学习单元。");
+  await saveLocalExercise(coursePack);
+  updateActiveCourseMap(coursePack.id, course.id);
+  captureStatus.value = "练习已导入，正在打开练习…";
+  await navigateTo(`/game/${coursePack.id}/${course.id}`);
 }
 
 async function releaseJob(jobId: string) {
@@ -466,6 +623,8 @@ function parseMarkdownTableRow(line: string): string[] {
 onUnmounted(() => {
   disposed = true;
   if (pollTimer) clearTimeout(pollTimer);
+  if (captureTimer) clearTimeout(captureTimer);
+  window.removeEventListener("message", receiveCaptureMessage);
   outputFiles.value = [];
   markdownContent.value = null;
 });
