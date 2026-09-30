@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.10,<3.14"
 dependencies = [
   "click==8.2.1",
-  "ctranslate2==4.8.2",
   "huggingface-hub==0.34.4",
   "sacremoses==0.1.1",
   "sentencepiece==0.2.2",

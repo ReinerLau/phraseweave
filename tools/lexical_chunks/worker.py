@@ -49,15 +49,12 @@ def _build_outputs(
 
 def _generate(payload: Mapping[str, Any]) -> None:
     text = payload.get("text")
-    engine = payload.get("engine")
     exercise_mode = payload.get("mode")
     output_format = payload.get("format")
     if not isinstance(text, str) or not text.strip():
         raise ValueError("Enter English text before generating.")
     if len(text) > 30000:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
-    if engine not in {"ctranslate2", "transformers"}:
-        raise ValueError("Choose a supported translation engine.")
     if exercise_mode not in {"standard", "review"}:
         raise ValueError("Choose standard or review mode.")
     if output_format not in {"markdown", "phraseweave", "both"}:
@@ -66,7 +63,7 @@ def _generate(payload: Mapping[str, Any]) -> None:
     nlp = load_syntax_model()
     plan, traces = generate_plan(text, nlp)
     sentences = [item["sentence"] for item in plan["sentences"]]
-    chinese = translate_sentences(sentences, engine)
+    chinese = translate_sentences(sentences)
     if len(chinese) != len(sentences) or any(not line for line in chinese):
         raise RuntimeError("The translation engine did not return one prompt for each sentence.")
     translations = {

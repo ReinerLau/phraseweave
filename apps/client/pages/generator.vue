@@ -23,19 +23,6 @@
           >
             {{ connecting ? "连接中…" : "连接本地服务" }}
           </button>
-          <button
-            v-if="
-              serviceConnected &&
-              uvAvailable &&
-              (!enginesInstalled || !modelDownloaded || !ctranslate2Ready)
-            "
-            class="btn btn-primary btn-sm"
-            type="button"
-            :disabled="Boolean(activeJob)"
-            @click="startJob('/api/setup', {})"
-          >
-            安装引擎和模型
-          </button>
         </div>
       </div>
       <div
@@ -44,21 +31,15 @@
       >
         <span
           class="badge"
-          :class="enginesInstalled ? 'badge-success' : 'badge-ghost'"
+          :class="runtimeReady ? 'badge-success' : 'badge-ghost'"
         >
-          引擎 {{ enginesInstalled ? "已安装" : "未安装" }}
+          Transformers {{ runtimeReady ? "已就绪" : "未就绪" }}
         </span>
         <span
           class="badge"
           :class="modelDownloaded ? 'badge-success' : 'badge-ghost'"
         >
           Helsinki 模型 {{ modelDownloaded ? "已下载" : "未下载" }}
-        </span>
-        <span
-          class="badge"
-          :class="ctranslate2Ready ? 'badge-success' : 'badge-ghost'"
-        >
-          CTranslate2 {{ ctranslate2Ready ? "已转换" : "未转换" }}
         </span>
       </div>
       <div
@@ -95,17 +76,7 @@
         <span class="mt-1 text-right text-xs opacity-60">{{ englishText.length }} / 30,000</span>
       </label>
 
-      <div class="grid gap-4 sm:grid-cols-3">
-        <label class="form-control">
-          <span class="label-text mb-2 font-semibold">翻译引擎</span>
-          <select
-            v-model="engine"
-            class="select select-bordered"
-          >
-            <option value="ctranslate2">CTranslate2（默认）</option>
-            <option value="transformers">Transformers</option>
-          </select>
-        </label>
+      <div class="grid gap-4 sm:grid-cols-2">
         <label class="form-control">
           <span class="label-text mb-2 font-semibold">练习模式</span>
           <select
@@ -139,7 +110,7 @@
         </button>
         <p class="text-sm opacity-70">
           <template v-if="!serviceConnected">先启动并连接本地服务。</template>
-          <template v-else-if="!enginesInstalled || !modelDownloaded">先安装引擎和模型。</template>
+          <template v-else-if="!runtimeReady || !modelDownloaded">请等待本地服务完成依赖和 Helsinki 模型初始化。</template>
           <template v-else>模型运行在本机；生成结果暂存在本页内存，下载后由浏览器保存。</template>
         </p>
       </div>
@@ -257,17 +228,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 
-type Engine = "ctranslate2" | "transformers";
 type ExerciseMode = "standard" | "review";
 type OutputFormat = "markdown" | "phraseweave" | "both";
 type LocalFetchInit = RequestInit & { targetAddressSpace: "loopback" };
 type GeneratorStatus = {
-  uvAvailable: boolean;
-  enginesInstalled: boolean;
+  runtimeReady: boolean;
   modelDownloaded: boolean;
-  ctranslate2Ready: boolean;
 };
 type OutputFile = { name: string; content: string };
 type TranslationRow = { sentence: string; sentence_chinese: string };
@@ -285,17 +253,13 @@ type JobState = {
 };
 
 const serviceUrl = "http://127.0.0.1:8765";
-const allowedEngines: Engine[] = ["ctranslate2", "transformers"];
-const engine = ref<Engine>("ctranslate2");
 const exerciseMode = ref<ExerciseMode>("standard");
 const outputFormat = ref<OutputFormat>("markdown");
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
-const uvAvailable = ref(false);
-const enginesInstalled = ref(false);
+const runtimeReady = ref(false);
 const modelDownloaded = ref(false);
-const ctranslate2Ready = ref(false);
 const serviceMessage = ref("启动本地服务后，在此连接。启动命令见下方提示。");
 const activeJob = ref<JobState | null>(null);
 const jobError = ref("");
@@ -310,18 +274,10 @@ let disposed = false;
 const canGenerate = computed(
   () =>
     serviceConnected.value &&
-    enginesInstalled.value &&
+    runtimeReady.value &&
     modelDownloaded.value &&
-    (engine.value === "ctranslate2" ? ctranslate2Ready.value : true) &&
     englishText.value.trim().length > 0,
 );
-
-watch(engine, (value) => localStorage.setItem("phraseweave-generator-engine", value));
-
-onMounted(() => {
-  const savedEngine = localStorage.getItem("phraseweave-generator-engine");
-  if (allowedEngines.includes(savedEngine as Engine)) engine.value = savedEngine as Engine;
-});
 
 async function localFetch(path: string, init: RequestInit = {}) {
   const options: LocalFetchInit = { ...init, targetAddressSpace: "loopback" };
@@ -336,35 +292,31 @@ async function connectService() {
     if (!response.ok) throw new Error(`本地服务返回错误（${response.status}）。`);
     const status = (await response.json()) as GeneratorStatus;
     serviceConnected.value = true;
-    uvAvailable.value = status.uvAvailable;
-    enginesInstalled.value = status.enginesInstalled;
+    runtimeReady.value = status.runtimeReady;
     modelDownloaded.value = status.modelDownloaded;
-    ctranslate2Ready.value = status.ctranslate2Ready;
-    if (!status.uvAvailable && !status.enginesInstalled) {
-      serviceMessage.value = "已连接。请先安装 uv，再重启本地服务。";
-    } else if (!status.enginesInstalled || !status.modelDownloaded || !status.ctranslate2Ready) {
-      serviceMessage.value = "已连接。点击“安装引擎和模型”完成首次设置。";
+    if (!status.runtimeReady || !status.modelDownloaded) {
+      serviceMessage.value = "本地服务尚未完成初始化，请查看启动服务的终端。";
     } else {
       serviceMessage.value = "本地服务和翻译模型已就绪。";
     }
   } catch {
     serviceConnected.value = false;
     serviceMessage.value =
-      "无法连接。请在项目目录运行 python3 tools/lexical_chunks/local_service.py，再重试。";
-    jobError.value = "连接失败。确认本地服务正在运行，并在浏览器提示中允许访问本机。";
+      "无法连接。请确认本地服务已完成初始化并保持运行。";
+    jobError.value = "连接失败。确认 uv 已安装、服务终端没有初始化错误，并允许浏览器访问本机服务。";
   } finally {
     connecting.value = false;
   }
 }
 
-async function startJob(path: "/api/setup" | "/api/generate", payload: Record<string, unknown>) {
+async function startJob(payload: Record<string, unknown>) {
   jobError.value = "";
   translations.value = [];
   outputFiles.value = [];
   markdownFileName.value = "";
   markdownContent.value = null;
   try {
-    const response = await localFetch(path, {
+    const response = await localFetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -380,9 +332,8 @@ async function startJob(path: "/api/setup" | "/api/generate", payload: Record<st
 
 async function generate() {
   if (!canGenerate.value) return;
-  await startJob("/api/generate", {
+  await startJob({
     text: englishText.value,
-    engine: engine.value,
     mode: exerciseMode.value,
     format: outputFormat.value,
   });

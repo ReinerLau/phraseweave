@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -14,19 +13,29 @@ MAX_INPUT_TOKENS = 512
 MAX_OUTPUT_TOKENS = 256
 CACHE_DIR = Path.home() / ".cache" / "phraseweave" / "lexical-chunks"
 SOURCE_MODEL_DIR = CACHE_DIR / "opus-mt-en-zh" / MODEL_REVISION
-CT2_MODEL_DIR = CACHE_DIR / "opus-mt-en-zh-ct2-int8" / MODEL_REVISION
+MODEL_FILES = (
+    "config.json",
+    "pytorch_model.bin",
+    "source.spm",
+    "target.spm",
+    "tokenizer_config.json",
+    "vocab.json",
+)
 
 
 def model_status() -> dict[str, bool]:
     return {
-        "source_downloaded": (SOURCE_MODEL_DIR / "config.json").is_file(),
-        "ctranslate2_ready": (CT2_MODEL_DIR / "model.bin").is_file(),
+        "model_downloaded": all((SOURCE_MODEL_DIR / name).is_file() for name in MODEL_FILES),
     }
 
 
 def install_model(progress: Any = None) -> None:
-    from ctranslate2.converters import TransformersConverter
     from huggingface_hub import snapshot_download
+
+    if model_status()["model_downloaded"]:
+        if progress:
+            progress("Helsinki translation model is already downloaded")
+        return
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if progress:
@@ -46,33 +55,14 @@ def install_model(progress: Any = None) -> None:
         ],
     )
 
-    if model_status()["ctranslate2_ready"]:
-        if progress:
-            progress("CTranslate2 model is already ready")
-        return
-
-    if progress:
-        progress("Converting the model to INT8 CTranslate2 format")
-    staged_dir = CT2_MODEL_DIR.with_name(CT2_MODEL_DIR.name + ".installing")
-    if staged_dir.exists():
-        shutil.rmtree(staged_dir)
-    staged_dir.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        TransformersConverter(str(SOURCE_MODEL_DIR)).convert(
-            str(staged_dir), quantization="int8"
-        )
-        CT2_MODEL_DIR.parent.mkdir(parents=True, exist_ok=True)
-        staged_dir.replace(CT2_MODEL_DIR)
-    except Exception:
-        if staged_dir.exists():
-            shutil.rmtree(staged_dir)
-        raise
+    if not model_status()["model_downloaded"]:
+        raise RuntimeError("The Helsinki model download is incomplete. Restart the service to retry.")
 
 
 def _load_tokenizer() -> Any:
     from transformers import AutoTokenizer
 
-    if not model_status()["source_downloaded"]:
+    if not model_status()["model_downloaded"]:
         raise RuntimeError("Download the translation model before generating learning units.")
     return AutoTokenizer.from_pretrained(SOURCE_MODEL_DIR, local_files_only=True)
 
@@ -91,45 +81,18 @@ def _prepare_sentences(sentences: list[str], tokenizer: Any) -> tuple[list[str],
     return prefixed, input_ids
 
 
-def translate_sentences(sentences: list[str], engine: str) -> list[str]:
-    if engine not in {"ctranslate2", "transformers"}:
-        raise ValueError("engine must be ctranslate2 or transformers")
+def translate_sentences(sentences: list[str]) -> list[str]:
     tokenizer = _load_tokenizer()
-    prefixed, input_ids = _prepare_sentences(sentences, tokenizer)
-
-    if engine == "ctranslate2":
-        return _translate_ctranslate2(input_ids, tokenizer)
+    prefixed, _ = _prepare_sentences(sentences, tokenizer)
     return _translate_transformers(prefixed, tokenizer)
-
-
-def _translate_ctranslate2(input_ids: list[list[int]], tokenizer: Any) -> list[str]:
-    import ctranslate2
-
-    if not model_status()["ctranslate2_ready"]:
-        raise RuntimeError("Install the translation engines and model before selecting CTranslate2.")
-    translator = ctranslate2.Translator(
-        str(CT2_MODEL_DIR), device="cpu", compute_type="int8"
-    )
-    tokenized = [tokenizer.convert_ids_to_tokens(ids) for ids in input_ids]
-    results = translator.translate_batch(
-        tokenized,
-        beam_size=4,
-        max_input_length=MAX_INPUT_TOKENS,
-        max_decoding_length=MAX_OUTPUT_TOKENS,
-    )
-    outputs = []
-    for result in results:
-        token_ids = tokenizer.convert_tokens_to_ids(result.hypotheses[0])
-        outputs.append(tokenizer.decode(token_ids, skip_special_tokens=True).strip())
-    return outputs
 
 
 def _translate_transformers(prefixed: list[str], tokenizer: Any) -> list[str]:
     import torch
     from transformers import AutoModelForSeq2SeqLM
 
-    if not model_status()["source_downloaded"]:
-        raise RuntimeError("Install the translation engines and model before selecting Transformers.")
+    if not model_status()["model_downloaded"]:
+        raise RuntimeError("The Helsinki translation model is not downloaded.")
     torch.set_num_threads(max(1, min(os.cpu_count() or 1, 8)))
     model = AutoModelForSeq2SeqLM.from_pretrained(
         SOURCE_MODEL_DIR, local_files_only=True

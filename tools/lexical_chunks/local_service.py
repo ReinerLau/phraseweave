@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from model_runtime import CACHE_DIR, CT2_MODEL_DIR, SOURCE_MODEL_DIR
+from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -38,7 +38,7 @@ ACTIVE_JOB: str | None = None
 
 def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, Any]:
     if not PYTHON.is_file():
-        raise RuntimeError("Install the engines and model first.")
+        raise RuntimeError("The local Python environment is missing. Restart the service to initialize it.")
     result = subprocess.run(
         [str(PYTHON), str(WORKER)],
         input=json.dumps(payload, ensure_ascii=False),
@@ -66,35 +66,6 @@ def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, A
         message = parsed.get("error") if parsed else result.stdout[-1200:]
         raise RuntimeError(message or "Local worker failed.")
     return parsed
-
-
-def _setup(job_id: str) -> None:
-    global ACTIVE_JOB
-    try:
-        uv = shutil.which("uv")
-        if not uv:
-            raise RuntimeError("Install uv, then restart the local service and try again.")
-        _update_job(job_id, message="Installing Python runtime and translation engines")
-        process = subprocess.Popen(
-            [uv, "sync", "--project", str(PROJECT_DIR), "--locked", "--python", "3.13", "--no-install-project"],
-            cwd=ROOT,
-            env=UV_ENV,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        assert process.stdout is not None
-        for line in process.stdout:
-            _update_job(job_id, message=line.strip()[-300:])
-        if process.wait() != 0:
-            raise RuntimeError("uv could not install the Python engines. See the local service terminal for details.")
-        _update_job(job_id, message="Downloading and converting Helsinki translation model")
-        result = _run_worker({"action": "install-model"}, lambda message: _update_job(job_id, message=message))
-        _finish_job(job_id, result)
-    except Exception as error:
-        _finish_job(job_id, error=str(error))
-    finally:
-        ACTIVE_JOB = None
 
 
 def _generate(job_id: str, payload: dict[str, Any]) -> None:
@@ -175,10 +146,8 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/status":
             self._json({
-                "uvAvailable": shutil.which("uv") is not None,
-                "enginesInstalled": PYTHON.is_file(),
-                "modelDownloaded": (SOURCE_MODEL_DIR / "config.json").is_file(),
-                "ctranslate2Ready": (CT2_MODEL_DIR / "model.bin").is_file(),
+                "runtimeReady": PYTHON.is_file(),
+                "modelDownloaded": all((SOURCE_MODEL_DIR / name).is_file() for name in MODEL_FILES),
                 "activeJob": ACTIVE_JOB,
             })
             return
@@ -222,7 +191,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._valid_origin():
             self._json({"error": "Origin is not allowed."}, 403)
             return
-        if urlparse(self.path).path not in {"/api/setup", "/api/generate"}:
+        if urlparse(self.path).path != "/api/generate":
             self.send_error(404)
             return
         try:
@@ -240,15 +209,39 @@ class Handler(BaseHTTPRequestHandler):
             job_id = uuid.uuid4().hex
             ACTIVE_JOB = job_id
             JOBS[job_id] = {"id": job_id, "state": "running", "message": "Starting"}
-        if self.path == "/api/setup":
-            thread = threading.Thread(target=_setup, args=(job_id,), daemon=True)
-        else:
-            thread = threading.Thread(target=_generate, args=(job_id, payload), daemon=True)
+        thread = threading.Thread(target=_generate, args=(job_id, payload), daemon=True)
         thread.start()
         self._json({"id": job_id}, 202)
 
 
+def _initialize_runtime() -> None:
+    uv = shutil.which("uv")
+    if not uv:
+        raise RuntimeError("uv is required. Install uv, then restart the local service.")
+
+    print("Installing or updating the local Python environment…", flush=True)
+    result = subprocess.run(
+        [uv, "sync", "--project", str(PROJECT_DIR), "--locked", "--python", "3.13", "--no-install-project"],
+        cwd=ROOT,
+        env=UV_ENV,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("uv could not install the locked Python dependencies.")
+
+    print("Checking the Helsinki translation model…", flush=True)
+    _run_worker(
+        {"action": "install-model"},
+        lambda message: print(message, flush=True),
+    )
+
+
 if __name__ == "__main__":
+    try:
+        _initialize_runtime()
+    except Exception as error:
+        print(f"Local service setup failed: {error}", file=sys.stderr, flush=True)
+        raise SystemExit(1) from error
     print(f"PhraseWeave generator service: http://{HOST}:{PORT}", flush=True)
     print("Keep this terminal open while using the /generator route.", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
