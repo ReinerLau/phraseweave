@@ -416,16 +416,23 @@ async function connectService() {
     }
   } catch {
     serviceConnected.value = false;
+    runtimeReady.value = false;
+    modelDownloaded.value = false;
+    initializationState.value = "starting";
+    initializationError.value = "";
     serviceMessage.value = isDesktop()
       ? "正在启动桌面生成引擎，请稍候。"
-      : "无法连接本地服务。请先启动本地服务，再点击刷新按钮重试。";
+      : "无法连接本地服务。请启动 PhraseWeave 桌面版或本地服务。";
   } finally {
     connecting.value = false;
-    if (isDesktop() && !disposed && !serviceReady.value && !initializationError.value && !statusTimer) {
+    const refreshDelay = isDesktop()
+      ? (!serviceReady.value && !initializationError.value ? 1500 : undefined)
+      : (serviceReady.value ? 10000 : 3000);
+    if (!disposed && refreshDelay !== undefined && !statusTimer) {
       statusTimer = setTimeout(() => {
         statusTimer = undefined;
         void connectService();
-      }, 1500);
+      }, refreshDelay);
     }
   }
 }

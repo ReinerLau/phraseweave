@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -115,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            if self.headers.get("Access-Control-Request-Private-Network") == "true":
+                self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Vary", "Origin")
 
     def _json(self, value: dict[str, Any], status: int = 200) -> None:
@@ -131,7 +134,11 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Origin", "") in ALLOWED_ORIGINS
 
     def _desktop_authorized(self) -> bool:
-        return not DESKTOP_TOKEN or self.headers.get("Authorization", "") == f"Bearer {DESKTOP_TOKEN}"
+        return (
+            not DESKTOP_TOKEN
+            or self.headers.get("Authorization", "") == f"Bearer {DESKTOP_TOKEN}"
+            or self._valid_origin()
+        )
 
     def _body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
@@ -275,7 +282,13 @@ def _initialize_in_background() -> None:
 def run_desktop_service() -> None:
     if not DESKTOP_TOKEN:
         raise RuntimeError("Desktop service requires a session token.")
-    server = ThreadingHTTPServer((HOST, 0), Handler)
+    try:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as error:
+        if error.errno != errno.EADDRINUSE or PORT == 0:
+            raise
+        print(f"Port {PORT} is already in use; desktop service will use a private port.", file=sys.stderr)
+        server = ThreadingHTTPServer((HOST, 0), Handler)
     print(json.dumps({"type": "ready", "port": server.server_port}), flush=True)
     threading.Thread(target=_initialize_in_background, daemon=True).start()
     server.serve_forever()
