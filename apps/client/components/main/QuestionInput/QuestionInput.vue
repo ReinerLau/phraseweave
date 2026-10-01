@@ -58,6 +58,7 @@ import {
 } from "~/composables/main/question";
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
+import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useExerciseStore } from "~/store/exercise";
 import {
@@ -67,6 +68,7 @@ import {
   useQuestionInput,
   useWordWidths,
 } from "./questionInputHelper";
+import { useTypingSound } from "./useTypingSound";
 
 defineProps<{ inline?: boolean }>();
 
@@ -77,6 +79,8 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 const { showAnswer } = useGameMode();
 const { showSummary } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
+const { isKeyboardSoundEnabled } = useKeyboardSound();
+const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
@@ -90,10 +94,17 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     source: () => courseStore.currentStatement?.english!,
     setInputCursorPosition,
     getInputCursorPosition,
+    inputChangedCallback,
     getInputWordWidth,
     getInputWordCapacity,
   });
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+
+function inputChangedCallback(event: KeyboardEvent) {
+  if (isKeyboardSoundEnabled() && checkPlayTypingSound(event)) {
+    void playTypingSound();
+  }
+}
 
 function handleInputFocus() {
   focusInput();
