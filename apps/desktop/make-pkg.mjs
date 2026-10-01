@@ -1,25 +1,41 @@
 import { spawnSync } from "node:child_process";
-import { constants, cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { constants, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.join(desktopDir, "out", "make");
 const stagingRoot = path.join(desktopDir, ".build", "installer-root");
+const stagedApp = path.join(stagingRoot, "PhraseWeave.app");
 const packageVersion = JSON.parse(readFileSync(path.join(desktopDir, "package.json"), "utf8")).version;
 const version = process.env.PHRASEWEAVE_DESKTOP_VERSION || packageVersion;
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid desktop version: ${version}`);
 mkdirSync(outputDir, { recursive: true });
 rmSync(stagingRoot, { recursive: true, force: true });
 mkdirSync(stagingRoot, { recursive: true });
-cpSync(
-  path.join(desktopDir, "out", "PhraseWeave-darwin-arm64", "PhraseWeave.app"),
-  path.join(stagingRoot, "PhraseWeave.app"),
-  { recursive: true, mode: constants.COPYFILE_FICLONE },
-);
-let result;
+
+function assertBundleSymlinks(directory) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const location = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      assertBundleSymlinks(location);
+    } else if (entry.isSymbolicLink()) {
+      const target = readlinkSync(location);
+      if (path.isAbsolute(target) || !existsSync(location)) {
+        throw new Error(`Invalid app bundle symlink: ${location} -> ${target}`);
+      }
+    }
+  }
+}
+
 try {
-  result = spawnSync(
+  cpSync(
+    path.join(desktopDir, "out", "PhraseWeave-darwin-arm64", "PhraseWeave.app"),
+    stagedApp,
+    { recursive: true, mode: constants.COPYFILE_FICLONE, verbatimSymlinks: true },
+  );
+  assertBundleSymlinks(stagedApp);
+  const result = spawnSync(
     "pkgbuild",
     [
       "--root",
@@ -38,8 +54,8 @@ try {
     ],
     { stdio: "inherit" },
   );
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`pkgbuild exited with ${result.status}`);
 } finally {
   rmSync(stagingRoot, { recursive: true, force: true });
 }
-if (result.error) throw result.error;
-if (result.status !== 0) throw new Error(`pkgbuild exited with ${result.status}`);
