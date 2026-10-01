@@ -5,6 +5,11 @@ host_dir="/Library/Google/Chrome/NativeMessagingHosts"
 host_manifest="$host_dir/com.phraseweave.capture.json"
 host_binary="/Applications/PhraseWeave.app/Contents/Resources/native-host"
 
+if [ ! -x "$host_binary" ]; then
+  echo "PhraseWeave native host is missing from /Applications." >&2
+  exit 1
+fi
+
 mkdir -p "$host_dir"
 cat > "$host_manifest" <<'JSON'
 {
@@ -16,6 +21,5 @@ cat > "$host_manifest" <<'JSON'
 }
 JSON
 chmod 644 "$host_manifest"
-chmod 755 "$host_binary"
 
 exit 0
