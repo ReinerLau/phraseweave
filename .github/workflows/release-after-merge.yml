@@ -6,8 +6,7 @@ on:
       - main
 
 permissions:
-  actions: write
-  contents: write
+  contents: read
 
 jobs:
   release:
@@ -25,12 +24,12 @@ jobs:
 
       - name: Tag untagged main commits and start desktop releases
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [[ -z "${GH_TOKEN:-}" ]]; then
+          if [[ -z "${RELEASE_TOKEN:-}" ]]; then
             echo "::error::Configure the RELEASE_TOKEN repository secret before enabling automatic releases."
             exit 1
           fi
@@ -100,15 +99,5 @@ jobs:
               exit 1
             fi
 
-            if ! gh release view "$release_tag" >/dev/null 2>&1; then
-              active_runs="$(gh run list --workflow desktop.yml --branch "$release_tag" --json status --jq '[.[] | select(.status == "queued" or .status == "in_progress")] | length')"
-              if [[ "$active_runs" == "0" ]]; then
-                gh workflow run desktop.yml --ref "$release_tag"
-                echo "Started desktop release workflow for $release_tag ($commit)."
-              else
-                echo "Desktop release workflow for $release_tag is already running."
-              fi
-            else
-              echo "$release_tag already has a GitHub Release."
-            fi
+            echo "Pushed $release_tag for $commit; the tag push starts the desktop release workflow."
           done
