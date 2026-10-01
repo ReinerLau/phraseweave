@@ -14,7 +14,7 @@ The delivery loop is intentionally manual: plan, implement, run any useful check
 
 ### Protected release branch
 
-Treat `main` as the production release branch and protected branch. A release consists of merging a pull request into `main`; the existing GitHub Pages workflow then deploys the merged revision. Re-running that workflow manually is allowed for a previously merged revision, but it does not replace the pull request requirement for new code.
+Treat `main` as the production release branch and protected branch. Merging a pull request into `main` deploys GitHub Pages and builds a desktop installer from the merged revision. A version tag on a merged commit publishes a GitHub Release with the desktop installer; see `docs/desktop.md`. Re-running a workflow for a previously merged revision does not replace the pull request requirement for new code.
 
 ### Worktree and local main synchronization
 

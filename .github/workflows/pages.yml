@@ -22,7 +22,7 @@ jobs:
       - name: Checkout production source
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.sha }}
           path: source-main
       - uses: pnpm/action-setup@v6
         with:
