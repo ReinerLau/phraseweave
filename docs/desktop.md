@@ -19,11 +19,13 @@ pnpm desktop:make:mac
 
 每次 PR 合并到 `main`，GitHub Actions 都会从合并提交分别构建并部署 GitHub Pages、构建 Apple Silicon 桌面安装包。安装包作为该次 Actions 运行的产物保留 7 天；桌面构建失败不会阻止 Pages 部署。
 
-正式发布时，在已合并到 `main` 的提交上创建并推送 `vMAJOR.MINOR.PATCH` 标签。桌面工作流会用标签版本号构建 PKG，并把 PKG 和浏览器扩展 ZIP 发布到同名 GitHub Release。例如：
+每个 PR 合并到 `main` 后，GitHub Actions 会按第一父线为尚未发布的合并提交依次递增 patch 版本、创建 `vMAJOR.MINOR.PATCH` 标签，并触发桌面工作流。桌面工作流会用标签版本号构建 PKG，并把 PKG 和浏览器扩展 ZIP 发布到同名 GitHub Release。若多个 PR 在前一个发布完成前合并，后续工作流会按顺序补齐这些版本。
+
+需要发布新的 major 或 minor 版本时，可在已合并到 `main` 的提交上创建并推送对应的 `vMAJOR.MINOR.PATCH` 标签；桌面工作流会为该标签创建 Release，之后每次合并继续递增 patch。例如：
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 发布新版后，已经安装的桌面应用不会自动更新，用户需要下载安装新版 PKG。
