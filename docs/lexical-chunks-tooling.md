@@ -18,13 +18,13 @@ https://reinerlau.github.io/phraseweave/generator
 python3 tools/lexical_chunks/local_service.py
 ```
 
-保持终端运行，在生成器页面点击“连接本地服务”。启动需要 `uv`。首次启动会创建隔离 Python 环境、安装锁定依赖，并在服务开始监听前下载 Helsinki 模型。后续启动会复用缓存的环境和模型。依赖和模型保存在用户缓存目录，不写入仓库。若初始化失败，服务会退出并在终端显示错误。首次浏览器连接可能询问是否允许页面访问本机服务。
+保持终端运行，在生成器页面点击“连接本地服务”。启动需要 `uv`。首次启动会创建隔离 Python 环境、安装锁定依赖，并在服务开始监听前下载 Hy-MT2-1.8B 模型（约 4 GB）。后续启动会复用缓存的环境和模型。依赖和模型保存在用户缓存目录，不写入仓库。若初始化失败，服务会退出并在终端显示错误。首次浏览器连接可能询问是否允许页面访问本机服务。
 
 ## 翻译
 
-- 模型固定为 `Helsinki-NLP/opus-mt-en-zh` revision `408d9bc410a388e1d9aef112a2daba955b945255`；输入英文原句，不添加多语言模型专用的目标语言前缀。
-- 使用 Transformers/PyTorch 在本机运行固定版本的 Helsinki 模型。翻译只保留这一条路径，不再进行 CTranslate2 转换。
-- 模型输入上限为 512 个 tokenizer token；超长句会显示错误，不会截断翻译或导出部分文件。
+- 模型固定为 `tencent/Hy-MT2-1.8B` revision `9a341cd1b679d3efd23b46e847b01745a71ed792`；按模型的聊天模板发送整句翻译指令，不改写英文原句。
+- 使用 Transformers/PyTorch 在本机 CPU 运行固定版本的 Hy-MT2 模型。
+- 单句英文输入上限为 512 个 tokenizer token；超长句会显示错误，不会截断翻译或导出部分文件。
 - 每个完整原句生成一条中文提示。同句所有学习单元共用该提示。
 
 ## 学习单元与导出
