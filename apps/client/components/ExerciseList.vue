@@ -3,6 +3,12 @@
     <div class="my-10 flex shrink-0 items-center justify-between gap-4">
       <h2 class="text-2xl font-bold">练习清单</h2>
       <div class="flex gap-2">
+        <NuxtLink
+          class="btn btn-sm"
+          to="/generator"
+        >
+          生成练习
+        </NuxtLink>
         <button
           class="btn btn-sm"
           type="button"
