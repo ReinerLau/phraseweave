@@ -20,7 +20,7 @@ python3 tools/lexical_chunks/local_service.py
 
 ## 翻译
 
-- 模型固定为 `Helsinki-NLP/opus-mt-en-zh` revision `408d9bc410a388e1d9aef112a2daba955b945255`，输出语言前缀为 `>>cmn_Hans<<`。
+- 模型固定为 `Helsinki-NLP/opus-mt-en-zh` revision `408d9bc410a388e1d9aef112a2daba955b945255`；输入英文原句，不添加多语言模型专用的目标语言前缀。
 - 使用 Transformers/PyTorch 在本机运行固定版本的 Helsinki 模型。翻译只保留这一条路径，不再进行 CTranslate2 转换。
 - 模型输入上限为 512 个 tokenizer token；超长句会显示错误，不会截断翻译或导出部分文件。
 - 每个完整原句生成一条中文提示。同句所有学习单元共用该提示。

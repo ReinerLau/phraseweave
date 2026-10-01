@@ -8,7 +8,6 @@ from typing import Any
 
 MODEL_ID = "Helsinki-NLP/opus-mt-en-zh"
 MODEL_REVISION = "408d9bc410a388e1d9aef112a2daba955b945255"
-TARGET_PREFIX = ">>cmn_Hans<<"
 MAX_INPUT_TOKENS = 512
 MAX_OUTPUT_TOKENS = 256
 CACHE_DIR = Path.home() / ".cache" / "phraseweave" / "lexical-chunks"
@@ -67,9 +66,8 @@ def _load_tokenizer() -> Any:
     return AutoTokenizer.from_pretrained(SOURCE_MODEL_DIR, local_files_only=True)
 
 
-def _prepare_sentences(sentences: list[str], tokenizer: Any) -> tuple[list[str], list[list[int]]]:
-    prefixed = [f"{TARGET_PREFIX} {sentence}" for sentence in sentences]
-    encoded = tokenizer(prefixed, add_special_tokens=True, truncation=False)
+def _prepare_sentences(sentences: list[str], tokenizer: Any) -> list[list[int]]:
+    encoded = tokenizer(sentences, add_special_tokens=True, truncation=False)
     input_ids = encoded["input_ids"]
     too_long = [index + 1 for index, ids in enumerate(input_ids) if len(ids) > MAX_INPUT_TOKENS]
     if too_long:
@@ -78,16 +76,16 @@ def _prepare_sentences(sentences: list[str], tokenizer: Any) -> tuple[list[str],
             f"Sentence(s) {joined} exceed the model's {MAX_INPUT_TOKENS}-token input limit. "
             "Shorten or split the English text and try again."
         )
-    return prefixed, input_ids
+    return input_ids
 
 
 def translate_sentences(sentences: list[str]) -> list[str]:
     tokenizer = _load_tokenizer()
-    prefixed, _ = _prepare_sentences(sentences, tokenizer)
-    return _translate_transformers(prefixed, tokenizer)
+    _prepare_sentences(sentences, tokenizer)
+    return _translate_transformers(sentences, tokenizer)
 
 
-def _translate_transformers(prefixed: list[str], tokenizer: Any) -> list[str]:
+def _translate_transformers(sentences: list[str], tokenizer: Any) -> list[str]:
     import torch
     from transformers import AutoModelForSeq2SeqLM
 
@@ -98,7 +96,7 @@ def _translate_transformers(prefixed: list[str], tokenizer: Any) -> list[str]:
         SOURCE_MODEL_DIR, local_files_only=True
     ).to("cpu")
     inputs = tokenizer(
-        prefixed,
+        sentences,
         return_tensors="pt",
         padding=True,
         truncation=False,
