@@ -21,13 +21,19 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Tag untagged main commits and start desktop releases
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::Configure the RELEASE_TOKEN repository secret before enabling automatic releases."
+            exit 1
+          fi
 
           latest_version_tag() {
             while IFS= read -r tag; do
