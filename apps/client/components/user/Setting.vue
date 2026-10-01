@@ -39,6 +39,25 @@
     </section>
 
     <section class="space-y-4">
+      <h2 class="text-lg font-medium">声音设置</h2>
+      <table class="table">
+        <tbody>
+          <tr class="hover">
+            <td class="label-text">开启键盘打字音效</td>
+            <td class="w-[300px] text-center">
+              <input
+                type="checkbox"
+                class="toggle toggle-secondary"
+                :checked="keyboardSound"
+                @change="toggleKeyboardSound"
+              />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="space-y-4">
       <h2 class="text-lg font-medium">答题设置</h2>
       <table class="table">
         <tbody>
@@ -119,6 +138,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 import Message from "~/components/main/Message/useMessage";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
+import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { parseShortcutKeys } from "~/utils/keyboardShortcuts";
 
@@ -138,6 +158,7 @@ const dialogBoxRef = ref<HTMLElement | null>(null);
 //   }
 // };
 const { autoNextQuestion, toggleAutoQuestion } = useAutoNextQuestion();
+const { keyboardSound, toggleKeyboardSound } = useKeyboardSound();
 const { useSpace, toggleUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const {
   showModal,
