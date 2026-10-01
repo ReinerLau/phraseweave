@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_all
 datas = []
 binaries = []
 hiddenimports = []
-for package in ("spacy", "en_core_web_sm", "torch", "transformers", "sentencepiece"):
+for package in ("spacy", "en_core_web_sm", "torch", "transformers"):
     package_datas, package_binaries, package_imports = collect_all(package)
     datas += package_datas
     binaries += package_binaries

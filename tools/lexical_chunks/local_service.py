@@ -254,7 +254,7 @@ def _initialize_runtime() -> None:
         if result.returncode != 0:
             raise RuntimeError("uv could not install the locked Python dependencies.")
 
-    print("Checking the Helsinki translation model…", flush=True)
+    print("Checking the Hy-MT2 translation model…", flush=True)
     _run_worker(
         {"action": "install-model"},
         lambda message: _set_initialization("downloading", str(message)),

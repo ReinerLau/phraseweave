@@ -6,19 +6,18 @@ import os
 from pathlib import Path
 from typing import Any
 
-MODEL_ID = "Helsinki-NLP/opus-mt-en-zh"
-MODEL_REVISION = "408d9bc410a388e1d9aef112a2daba955b945255"
+MODEL_ID = "tencent/Hy-MT2-1.8B"
+MODEL_REVISION = "9a341cd1b679d3efd23b46e847b01745a71ed792"
 MAX_INPUT_TOKENS = 512
-MAX_OUTPUT_TOKENS = 256
+MAX_OUTPUT_TOKENS = 512
 CACHE_DIR = Path.home() / ".cache" / "phraseweave" / "lexical-chunks"
-SOURCE_MODEL_DIR = CACHE_DIR / "opus-mt-en-zh" / MODEL_REVISION
+SOURCE_MODEL_DIR = CACHE_DIR / "hy-mt2-1.8b" / MODEL_REVISION
 MODEL_FILES = (
     "config.json",
-    "pytorch_model.bin",
-    "source.spm",
-    "target.spm",
+    "model.safetensors",
+    "chat_template.jinja",
+    "tokenizer.json",
     "tokenizer_config.json",
-    "vocab.json",
 )
 
 
@@ -33,29 +32,21 @@ def install_model(progress: Any = None) -> None:
 
     if model_status()["model_downloaded"]:
         if progress:
-            progress("Helsinki translation model is already downloaded")
+            progress("Hy-MT2 translation model is already downloaded")
         return
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     if progress:
-        progress("Downloading the pinned Helsinki model")
+        progress("Downloading the pinned Hy-MT2 model")
     snapshot_download(
         repo_id=MODEL_ID,
         revision=MODEL_REVISION,
         local_dir=SOURCE_MODEL_DIR,
-        allow_patterns=[
-            "config.json",
-            "generation_config.json",
-            "pytorch_model.bin",
-            "source.spm",
-            "target.spm",
-            "tokenizer_config.json",
-            "vocab.json",
-        ],
+        allow_patterns=[*MODEL_FILES, "generation_config.json", "special_tokens_map.json", "LICENSE.txt"],
     )
 
     if not model_status()["model_downloaded"]:
-        raise RuntimeError("The Helsinki model download is incomplete. Restart the service to retry.")
+        raise RuntimeError("The Hy-MT2 model download is incomplete. Restart the service to retry.")
 
 
 def _load_tokenizer() -> Any:
@@ -87,25 +78,39 @@ def translate_sentences(sentences: list[str]) -> list[str]:
 
 def _translate_transformers(sentences: list[str], tokenizer: Any) -> list[str]:
     import torch
-    from transformers import AutoModelForSeq2SeqLM
+    from transformers import AutoModelForCausalLM
 
     if not model_status()["model_downloaded"]:
-        raise RuntimeError("The Helsinki translation model is not downloaded.")
+        raise RuntimeError("The Hy-MT2 translation model is not downloaded.")
     torch.set_num_threads(max(1, min(os.cpu_count() or 1, 8)))
-    model = AutoModelForSeq2SeqLM.from_pretrained(
-        SOURCE_MODEL_DIR, local_files_only=True
+    model = AutoModelForCausalLM.from_pretrained(
+        SOURCE_MODEL_DIR, local_files_only=True, dtype=torch.bfloat16
     ).to("cpu")
-    inputs = tokenizer(
-        sentences,
-        return_tensors="pt",
-        padding=True,
-        truncation=False,
-    )
-    with torch.inference_mode():
-        output_ids = model.generate(
-            **inputs,
-            num_beams=4,
-            max_new_tokens=MAX_OUTPUT_TOKENS,
-            early_stopping=True,
+    model.eval()
+    translations = []
+    for sentence in sentences:
+        prompt = (
+            "将以下文本翻译为中文，注意只需要输出翻译后的结果，不要额外解释：\n"
+            f"{sentence}"
         )
-    return [text.strip() for text in tokenizer.batch_decode(output_ids, skip_special_tokens=True)]
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        )
+        with torch.inference_mode():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=MAX_OUTPUT_TOKENS,
+                do_sample=False,
+                repetition_penalty=1.05,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+        translation = tokenizer.decode(
+            output_ids[0][inputs["input_ids"].shape[-1]:],
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        ).strip()
+        translations.append(translation)
+    return translations

@@ -52,7 +52,7 @@
           class="badge"
           :class="modelDownloaded ? 'badge-success' : 'badge-ghost'"
         >
-          Helsinki 模型 {{ modelDownloaded ? "已下载" : "未下载" }}
+          Hy-MT2 模型 {{ modelDownloaded ? "已下载" : "未下载" }}
         </span>
       </div>
       <div
@@ -152,7 +152,7 @@
             >请先启动本地服务；连接失败后点击上方刷新按钮。</template
           >
           <template v-else-if="!runtimeReady || !modelDownloaded"
-            >请等待本地服务完成依赖和 Helsinki 模型初始化。</template
+            >请等待本地服务完成依赖和 Hy-MT2 模型初始化。</template
           >
           <template v-else>模型运行在本机；生成结果暂存在本页内存，下载后由浏览器保存。</template>
         </p>
