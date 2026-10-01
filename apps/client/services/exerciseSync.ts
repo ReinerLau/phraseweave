@@ -41,6 +41,12 @@ export function isValidRoomToken(roomToken: string) {
 
 export function createExerciseSyncUrl(roomToken: string) {
   const config = useRuntimeConfig();
+  const configuredReceiveUrl = String(config.public.exerciseSyncReceiveUrl || "");
+  if (configuredReceiveUrl) {
+    const url = new URL(configuredReceiveUrl);
+    url.searchParams.set("room", roomToken);
+    return url.toString();
+  }
   const baseURL = config.app.baseURL || "/";
   const path = `${baseURL.replace(/\/$/, "")}/receive`;
   const url = new URL(path, window.location.origin);

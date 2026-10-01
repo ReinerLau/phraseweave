@@ -21,7 +21,7 @@
             :disabled="connecting"
             :aria-label="connecting ? '正在连接本地服务' : '刷新本地服务连接'"
             :title="connecting ? '正在连接本地服务' : '刷新本地服务连接'"
-            @click="connectService"
+            @click="refreshService"
           >
             <span
               class="i-ph-arrows-clockwise h-5 w-5"
@@ -257,30 +257,25 @@ import { navigateTo, useRoute } from "#app";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
+import {
+  getGeneratorJob,
+  getGeneratorStatus,
+  isDesktop,
+  releaseGeneratorJob,
+  startGeneratorJob,
+  type GeneratorJob,
+  type GeneratorOutput,
+} from "~/services/generatorClient";
 import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExerciseDb";
 
 type ExerciseMode = "standard" | "review";
 type OutputFormat = "markdown" | "phraseweave" | "both";
-type LocalFetchInit = RequestInit & { targetAddressSpace: "loopback" };
-type GeneratorStatus = {
-  runtimeReady: boolean;
-  modelDownloaded: boolean;
-};
-type OutputFile = { name: string; content: string };
+type OutputFile = GeneratorOutput;
 type MarkdownBlock =
   | { type: "heading"; level: number; text: string }
   | { type: "paragraph"; text: string }
   | { type: "code"; text: string }
   | { type: "table"; headers: string[]; rows: string[][] };
-type JobState = {
-  id: string;
-  state: "running" | "complete" | "failed";
-  message?: string;
-  error?: string;
-  result?: { outputs: OutputFile[] };
-};
-
-const serviceUrl = "http://127.0.0.1:8765";
 const route = useRoute();
 const rawCaptureId = route.query.capture;
 const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
@@ -292,8 +287,10 @@ const serviceConnected = ref(false);
 const connecting = ref(false);
 const runtimeReady = ref(false);
 const modelDownloaded = ref(false);
+const initializationState = ref("starting");
+const initializationError = ref("");
 const serviceMessage = ref("正在连接本地服务…");
-const activeJob = ref<JobState | null>(null);
+const activeJob = ref<GeneratorJob | null>(null);
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
 const markdownFileName = ref("");
@@ -304,30 +301,40 @@ const captureStatus = ref("正在接收选中文本…");
 const captureError = ref("");
 const captureRunning = ref(false);
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
+let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 let captureTimer: ReturnType<typeof setTimeout> | undefined;
 
 const { updateActiveCourseMap } = useActiveCourseMap();
 let serviceCheck: Promise<void> | undefined;
 
-const canGenerate = computed(
+const serviceReady = computed(
   () =>
     serviceConnected.value &&
     runtimeReady.value &&
     modelDownloaded.value &&
-    englishText.value.trim().length > 0,
+    initializationState.value === "ready" &&
+    !initializationError.value,
 );
+const canGenerate = computed(() => serviceReady.value && englishText.value.trim().length > 0);
 
 onMounted(() => {
   serviceCheck = connectService();
   if (captureMode) {
-    window.addEventListener("message", receiveCaptureMessage);
     if (!/^[a-f0-9-]{32,36}$/i.test(captureId)) {
       captureError.value = "无效的浏览器扩展请求，请从文章中重新选择文本。";
       captureStatus.value = "无法读取选中文本。";
       return;
     }
-    requestCapture();
+    if (window.phraseweaveDesktop) {
+      void window.phraseweaveDesktop.consumeCapture(captureId).then(receiveCaptureText).catch((error) => {
+        captureError.value = describeError(error);
+        captureStatus.value = "无法读取选中文本。";
+      });
+    } else {
+      window.addEventListener("message", receiveCaptureMessage);
+      requestCapture();
+    }
   }
 });
 
@@ -360,11 +367,15 @@ function receiveCaptureMessage(event: MessageEvent) {
   }
 
   if (captureTimer) clearTimeout(captureTimer);
-  captureText.value = message.text.trim();
   window.postMessage(
     { type: "PHRASEWEAVE_CAPTURE_ACK", requestId: captureId },
     window.location.origin,
   );
+  receiveCaptureText(message.text);
+}
+
+function receiveCaptureText(text: string) {
+  captureText.value = text.trim();
   if (!captureText.value) {
     captureError.value = "没有收到选中文本，请重新选择后再试。";
     captureStatus.value = "无法创建练习。";
@@ -378,47 +389,55 @@ function receiveCaptureMessage(event: MessageEvent) {
   void runCapture();
 }
 
-async function localFetch(path: string, init: RequestInit = {}) {
-  const options: LocalFetchInit = { ...init, targetAddressSpace: "loopback" };
-  return fetch(`${serviceUrl}${path}`, options);
-}
-
 async function connectService() {
   connecting.value = true;
-  jobError.value = "";
   try {
-    const response = await localFetch("/api/status");
-    if (!response.ok) throw new Error(`本地服务返回错误（${response.status}）。`);
-    const status = (await response.json()) as GeneratorStatus;
+    const status = await getGeneratorStatus();
     serviceConnected.value = true;
     runtimeReady.value = status.runtimeReady;
     modelDownloaded.value = status.modelDownloaded;
-    if (!status.runtimeReady || !status.modelDownloaded) {
+    initializationState.value = status.initialization?.state || "ready";
+    initializationError.value = status.initialization?.error || "";
+    if (status.initialization?.state === "error") {
+      serviceMessage.value = status.initialization.error || "本地模型初始化失败。";
+    } else if (status.initialization?.state === "downloading") {
+      serviceMessage.value = status.initialization.message;
+    } else if (!status.runtimeReady || !status.modelDownloaded) {
       serviceMessage.value = "本地服务尚未完成初始化，请查看启动服务的终端。";
     } else {
       serviceMessage.value = "本地服务和翻译模型已就绪。";
     }
   } catch {
     serviceConnected.value = false;
-    serviceMessage.value = "无法连接本地服务。请先启动本地服务，再点击刷新按钮重试。";
+    serviceMessage.value = isDesktop()
+      ? "正在启动桌面生成引擎，请稍候。"
+      : "无法连接本地服务。请先启动本地服务，再点击刷新按钮重试。";
   } finally {
     connecting.value = false;
+    if (isDesktop() && !disposed && !serviceReady.value && !initializationError.value && !statusTimer) {
+      statusTimer = setTimeout(() => {
+        statusTimer = undefined;
+        void connectService();
+      }, 1500);
+    }
   }
 }
 
-async function startJob(payload: Record<string, unknown>): Promise<OutputFile[] | undefined> {
+async function refreshService() {
+  if (isDesktop() && initializationError.value) {
+    await window.phraseweaveDesktop?.retryGenerator();
+    initializationError.value = "";
+  }
+  await connectService();
+}
+
+async function startJob(payload: { text: string; mode: ExerciseMode; format: OutputFormat }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   outputFiles.value = [];
   markdownFileName.value = "";
   markdownContent.value = null;
   try {
-    const response = await localFetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error || "无法启动本地任务。");
+    const body = await startGeneratorJob(payload);
     activeJob.value = { id: body.id, state: "running", message: "正在启动…" };
     return await pollJob(body.id);
   } catch (error) {
@@ -440,9 +459,7 @@ async function generate() {
 async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
   if (disposed) return undefined;
   try {
-    const response = await localFetch(`/api/jobs/${jobId}`);
-    const job = (await response.json()) as JobState;
-    if (!response.ok) throw new Error(job.error || "无法读取任务状态。");
+    const job = await getGeneratorJob(jobId);
     activeJob.value = job;
     if (job.state === "running") {
       return await new Promise<OutputFile[] | undefined>((resolve) => {
@@ -454,7 +471,7 @@ async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
     activeJob.value = null;
     if (job.state === "failed") {
       jobError.value = job.error || "本地任务失败。";
-      await releaseJob(jobId);
+      await releaseGeneratorJob(jobId);
       return undefined;
     }
     await connectService();
@@ -467,7 +484,7 @@ async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
         markdownContent.value = markdownFile.content;
       }
     }
-    await releaseJob(jobId);
+    await releaseGeneratorJob(jobId);
     return outputs;
   } catch (error) {
     activeJob.value = null;
@@ -491,6 +508,16 @@ async function runCapture() {
     serviceCheck = undefined;
     if (pendingServiceCheck) await pendingServiceCheck;
     else await connectService();
+    if (isDesktop()) {
+      while (!disposed && !serviceReady.value) {
+        captureStatus.value = serviceMessage.value;
+        if (initializationError.value) {
+          throw new Error(serviceMessage.value);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await connectService();
+      }
+    }
     if (!canGenerate.value) {
       throw new Error(serviceMessage.value || "本地生成服务尚未就绪。请启动服务后重试。");
     }
@@ -524,11 +551,6 @@ async function importGeneratedExercise(outputs: OutputFile[]) {
   updateActiveCourseMap(coursePack.id, course.id);
   captureStatus.value = "练习已导入，正在打开练习…";
   await navigateTo(`/game/${coursePack.id}/${course.id}`);
-}
-
-async function releaseJob(jobId: string) {
-  const response = await localFetch(`/api/jobs/${jobId}`, { method: "DELETE" });
-  if (!response.ok) throw new Error("无法释放本地任务结果，请重启本地服务后重试。");
 }
 
 function downloadFile(file: OutputFile) {
@@ -626,6 +648,7 @@ function parseMarkdownTableRow(line: string): string[] {
 onUnmounted(() => {
   disposed = true;
   if (pollTimer) clearTimeout(pollTimer);
+  if (statusTimer) clearTimeout(statusTimer);
   if (captureTimer) clearTimeout(captureTimer);
   window.removeEventListener("message", receiveCaptureMessage);
   outputFiles.value = [];

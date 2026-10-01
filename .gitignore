@@ -138,6 +138,9 @@ dist
 __pycache__/
 *.py[cod]
 **/.venv/
+apps/desktop/.build/
+apps/desktop/out/
+tools/lexical_chunks/build/
 
 # docker volumes for dev
 .volumes

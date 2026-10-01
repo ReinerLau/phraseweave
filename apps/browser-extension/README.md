@@ -1,17 +1,11 @@
 # PhraseWeave browser extension
 
-This Chrome Manifest V3 extension adds **用 PhraseWeave 练习选中文本** to the right-click menu for selected text. It opens PhraseWeave's `/generator` page, which creates and imports an exercise before opening the first practice card.
+This Chrome extension adds two selected-text actions: **导入 PhraseWeave 网页版** and **导入 PhraseWeave 桌面版**. Both use the same generator page and import the resulting exercise into the chosen app's own exercise list.
 
 ## Install in Chrome
 
-1. Start the local generator service from the repository root:
+1. Open `chrome://extensions`, turn on **Developer mode**, and choose **Load unpacked** with this `apps/browser-extension` directory. Reload the extension if it was installed before the two-destination update.
+2. For the website action, start the local generator with `python3 tools/lexical_chunks/local_service.py`.
+3. For the desktop action, install the [macOS app](../../docs/desktop.md). Its installer registers the native messaging host, which can launch the app when needed.
 
-   ```bash
-   python3 tools/lexical_chunks/local_service.py
-   ```
-
-2. Open `chrome://extensions` and turn on **Developer mode**.
-3. Choose **Load unpacked** and select this `apps/browser-extension` directory.
-4. In an article, select English text, right-click, and choose **用 PhraseWeave 练习选中文本**.
-
-Generation runs on the computer through the local service. The selected text stays in extension session storage only until the PhraseWeave page receives it; it is not put in the URL. The extension injects its content script only on the PhraseWeave generator page. It also supports local development at `http://localhost:3000` and `http://127.0.0.1:3000`.
+The website action keeps selected text in extension session storage until the generator page claims it. The desktop action sends text through Chrome Native Messaging. Neither action places text in a URL. If desktop delivery fails, the extension shows a notification and does not silently import into the website.
