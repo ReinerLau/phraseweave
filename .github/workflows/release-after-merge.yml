@@ -55,6 +55,8 @@ jobs:
           base_tag="$(latest_version_tag)"
           git merge-base --is-ancestor "$base_tag" "$main_tip"
           mapfile -t commits < <(git rev-list --first-parent --reverse "$base_tag..$main_tip")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           for commit in "${commits[@]}"; do
             release_tag=""
