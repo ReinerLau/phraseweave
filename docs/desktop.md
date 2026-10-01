@@ -21,7 +21,7 @@ pnpm desktop:make:mac
 
 每个 PR 合并到 `main` 后，GitHub Actions 会按第一父线为尚未发布的合并提交依次递增 patch 版本、创建 `vMAJOR.MINOR.PATCH` 标签，并触发桌面工作流。桌面工作流会用标签版本号构建 PKG，并把 PKG 和浏览器扩展 ZIP 发布到同名 GitHub Release。若多个 PR 在前一个发布完成前合并，后续工作流会按顺序补齐这些版本。
 
-自动发布需要在仓库的 Actions Secrets 中配置 `RELEASE_TOKEN`。使用可访问此仓库的细粒度 token，并授予 `Contents: write`、`Workflows: write` 和 `Actions: write`；工作流用它推送版本标签并触发桌面发布。
+自动发布需要在仓库的 Actions Secrets 中配置 `RELEASE_TOKEN`。使用只授权本仓库的细粒度 token，并授予 `Contents: write` 和 `Workflows: write`；工作流用它推送版本标签，tag push 会自动触发桌面发布。
 
 需要发布新的 major 或 minor 版本时，可在已合并到 `main` 的提交上创建并推送对应的 `vMAJOR.MINOR.PATCH` 标签；桌面工作流会为该标签创建 Release，之后每次合并继续递增 patch。例如：
 
