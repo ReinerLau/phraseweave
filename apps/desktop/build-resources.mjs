@@ -33,6 +33,7 @@ run("pnpm", ["-F", "client", "generate"], {
   env: {
     ...process.env,
     NODE_ENV: "production",
+    BUILD_VERSION: process.env.BUILD_VERSION || process.env.PHRASEWEAVE_DESKTOP_VERSION || "",
     NUXT_APP_BASE_URL: "/",
     DEPLOYMENT_ENVIRONMENT: "desktop",
     BACKEND_ENDPOINT: "",

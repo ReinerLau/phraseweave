@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.join(desktopDir, "out", "make");
+const packageVersion = JSON.parse(readFileSync(path.join(desktopDir, "package.json"), "utf8")).version;
+const version = process.env.PHRASEWEAVE_DESKTOP_VERSION || packageVersion;
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid desktop version: ${version}`);
 mkdirSync(outputDir, { recursive: true });
 const result = spawnSync(
   "pkgbuild",
@@ -18,8 +21,8 @@ const result = spawnSync(
     "--identifier",
     "com.reinerlau.phraseweave",
     "--version",
-    "1.0.0",
-    path.join(outputDir, "PhraseWeave-1.0.0-arm64.pkg"),
+    version,
+    path.join(outputDir, `PhraseWeave-${version}-arm64.pkg`),
   ],
   { stdio: "inherit" },
 );

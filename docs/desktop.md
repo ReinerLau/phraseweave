@@ -15,6 +15,19 @@ pnpm desktop:make:mac
 
 本机构建的 PKG 尚未签名或公证；对外分发前需要配置 Apple Developer 签名和公证。
 
+## 自动构建与发布
+
+每次 PR 合并到 `main`，GitHub Actions 都会从合并提交分别构建并部署 GitHub Pages、构建 Apple Silicon 桌面安装包。安装包作为该次 Actions 运行的产物保留 7 天；桌面构建失败不会阻止 Pages 部署。
+
+正式发布时，在已合并到 `main` 的提交上创建并推送 `vMAJOR.MINOR.PATCH` 标签。桌面工作流会用标签版本号构建 PKG，并把 PKG 和浏览器扩展 ZIP 发布到同名 GitHub Release。例如：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+发布新版后，已经安装的桌面应用不会自动更新，用户需要下载安装新版 PKG。
+
 安装 PKG 后，在 Chrome 中加载 `apps/browser-extension`。选中网页英文时，右键菜单可分别导入网页版或桌面版；桌面版未运行时会自动打开。网页版导入仍须单独启动本地服务。桌面版导入失败时，扩展会显示错误通知，不会把练习转存到另一端。
 
 桌面版通过现有信令 Worker 同步练习到手机；二维码指向 GitHub Pages 的接收页。这一步需要网络，离线练习不需要。
