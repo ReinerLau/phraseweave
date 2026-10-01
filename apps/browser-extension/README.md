@@ -5,7 +5,7 @@ This Chrome extension adds two selected-text actions: **导入 PhraseWeave 网�
 ## Install in Chrome
 
 1. Open `chrome://extensions`, turn on **Developer mode**, and choose **Load unpacked** with this `apps/browser-extension` directory. Reload the extension if it was installed before the two-destination update.
-2. For the website action, start the local generator with `python3 tools/lexical_chunks/local_service.py`.
+2. For the website action, open PhraseWeave Desktop or start the local generator with `python3 tools/lexical_chunks/local_service.py`.
 3. For the desktop action, install the [macOS app](../../docs/desktop.md). Its installer registers the native messaging host, which can launch the app when needed.
 
 The website action keeps selected text in extension session storage until the generator page claims it. The desktop action sends text through Chrome Native Messaging. Neither action places text in a URL. If desktop delivery fails, the extension shows a notification and does not silently import into the website.

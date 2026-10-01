@@ -160,7 +160,7 @@ function ensureRuntime() {
       env: {
         ...process.env,
         PHRASEWEAVE_DESKTOP_TOKEN: runtimeToken,
-        PHRASEWEAVE_GENERATOR_PORT: "0",
+        PHRASEWEAVE_GENERATOR_PORT: "8765",
       },
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
