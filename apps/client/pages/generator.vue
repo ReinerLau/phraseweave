@@ -1,11 +1,18 @@
 <template>
   <main class="mx-auto flex w-full max-w-4xl flex-col gap-6 py-8">
-    <header>
-      <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
-      <h1 class="mt-1 text-3xl font-bold">渐进学习单元生成器</h1>
-      <p class="mt-2 max-w-2xl text-sm opacity-75">
-        使用本机模型生成整句中文提示。英文原句和学习单元只在本机处理。
-      </p>
+    <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
+        <h1 class="mt-1 text-3xl font-bold">渐进学习单元生成器</h1>
+        <p class="mt-2 max-w-2xl text-sm opacity-75">
+          使用本机模型生成整句中文提示。英文原句和学习单元只在本机处理。
+        </p>
+      </div>
+      <CommonBackLink
+        class="shrink-0"
+        label="返回练习清单"
+        to="/"
+      />
     </header>
 
     <section class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm">
