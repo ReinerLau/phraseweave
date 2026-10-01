@@ -1,6 +1,6 @@
 # 本地学习单元生成器
 
-生成器是 PhraseWeave 客户端中的独立路由，没有清单页入口。部署后直接打开：
+生成器是网页版与桌面版共用的 PhraseWeave 客户端页面。网页版地址：
 
 ```text
 https://reinerlau.github.io/phraseweave/generator
@@ -8,7 +8,9 @@ https://reinerlau.github.io/phraseweave/generator
 
 英文输入、spaCy 依存分析和模型翻译都在运行本地服务的电脑上完成。Markdown 和 PhraseWeave JSON 在本地服务与页面内存中生成和预览，不写入项目目录。页面通过浏览器下载文件；离开页面或开始下一次生成后，页面内的结果会释放。
 
-## 启动本地服务
+桌面版将页面与服务一起安装并自动启动，使用方法见 [macOS 桌面版](desktop.md)。网页版需要单独启动本地服务。
+
+## 启动网页版的本地服务
 
 在仓库根目录运行：
 
@@ -27,7 +29,7 @@ python3 tools/lexical_chunks/local_service.py
 
 ## 学习单元与导出
 
-Chrome 用户也可以安装 [选中文本浏览器扩展](../apps/browser-extension/README.md)。在文章中选择英文后使用右键菜单，扩展会把文本交给 `/generator` 自动生成、导入并打开练习。扩展仍使用上面的本地服务。
+Chrome 用户也可以安装 [选中文本浏览器扩展](../apps/browser-extension/README.md)。右键菜单可以选择导入网页版或桌面版，两个入口都使用同一个 `/generator` 页面自动生成、导入并打开练习。网页版使用上面的本地服务；桌面版使用应用自动管理的服务。
 
 分句、双引号处理和依存树闭合算法沿用 [ADR 0012](adr/0012-adjacent-subtree-closure.md)、[ADR 0015](adr/0015-ignore-double-quotes-in-learning-units.md) 和 [ADR 0018](adr/0018-retain-all-word-units.md)。`standard` 和 `review` 模式以及 `markdown`、`phraseweave`、`both` 导出格式保持原行为。PhraseWeave JSON 使用 schema 4，含稳定 `unit_id`、直接来源 `source_unit_ids` 及原句上下文。
 

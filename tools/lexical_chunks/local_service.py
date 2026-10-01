@@ -25,6 +25,7 @@ UV_ENV = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(VENV_DIR)}
 PYTHON = VENV_DIR / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("PHRASEWEAVE_GENERATOR_PORT", "8765"))
+DESKTOP_TOKEN = os.environ.get("PHRASEWEAVE_DESKTOP_TOKEN", "")
 ALLOWED_ORIGINS = {
     "https://reinerlau.github.io",
     "http://localhost:3000",
@@ -34,13 +35,19 @@ MAX_BODY_BYTES = 120_000
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
 ACTIVE_JOB: str | None = None
+INITIALIZATION: dict[str, str] = {"state": "starting", "message": "Starting local generator"}
 
 
 def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, Any]:
-    if not PYTHON.is_file():
+    if not getattr(sys, "frozen", False) and not PYTHON.is_file():
         raise RuntimeError("The local Python environment is missing. Restart the service to initialize it.")
+    command = (
+        [sys.executable, "--worker"]
+        if getattr(sys, "frozen", False)
+        else [str(PYTHON), str(WORKER)]
+    )
     result = subprocess.run(
-        [str(PYTHON), str(WORKER)],
+        command,
         input=json.dumps(payload, ensure_ascii=False),
         text=True,
         stdout=subprocess.PIPE,
@@ -123,6 +130,9 @@ class Handler(BaseHTTPRequestHandler):
     def _valid_origin(self) -> bool:
         return self.headers.get("Origin", "") in ALLOWED_ORIGINS
 
+    def _desktop_authorized(self) -> bool:
+        return not DESKTOP_TOKEN or self.headers.get("Authorization", "") == f"Bearer {DESKTOP_TOKEN}"
+
     def _body(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0 or length > MAX_BODY_BYTES:
@@ -143,12 +153,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
+        if not self._desktop_authorized():
+            self._json({"error": "Unauthorized."}, 403)
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/status":
             self._json({
-                "runtimeReady": PYTHON.is_file(),
+                "runtimeReady": getattr(sys, "frozen", False) or PYTHON.is_file(),
                 "modelDownloaded": all((SOURCE_MODEL_DIR / name).is_file() for name in MODEL_FILES),
                 "activeJob": ACTIVE_JOB,
+                "initialization": INITIALIZATION,
             })
             return
         if parsed.path.startswith("/api/jobs/"):
@@ -163,7 +177,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_DELETE(self) -> None:
-        if not self._valid_origin():
+        if not self._desktop_authorized() or (not DESKTOP_TOKEN and not self._valid_origin()):
             self._json({"error": "Origin is not allowed."}, 403)
             return
         path = urlparse(self.path).path
@@ -188,8 +202,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         global ACTIVE_JOB
-        if not self._valid_origin():
+        if not self._desktop_authorized() or (not DESKTOP_TOKEN and not self._valid_origin()):
             self._json({"error": "Origin is not allowed."}, 403)
+            return
+        if INITIALIZATION["state"] != "ready":
+            self._json({"error": INITIALIZATION.get("error") or "Generator is initializing."}, 503)
             return
         if urlparse(self.path).path != "/api/generate":
             self.send_error(404)
@@ -215,25 +232,53 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def _initialize_runtime() -> None:
-    uv = shutil.which("uv")
-    if not uv:
-        raise RuntimeError("uv is required. Install uv, then restart the local service.")
+    if not getattr(sys, "frozen", False):
+        uv = shutil.which("uv")
+        if not uv:
+            raise RuntimeError("uv is required. Install uv, then restart the local service.")
 
-    print("Installing or updating the local Python environment…", flush=True)
-    result = subprocess.run(
-        [uv, "sync", "--project", str(PROJECT_DIR), "--locked", "--python", "3.13", "--no-install-project"],
-        cwd=ROOT,
-        env=UV_ENV,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError("uv could not install the locked Python dependencies.")
+        print("Installing or updating the local Python environment…", flush=True)
+        result = subprocess.run(
+            [uv, "sync", "--project", str(PROJECT_DIR), "--locked", "--python", "3.13", "--no-install-project"],
+            cwd=ROOT,
+            env=UV_ENV,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("uv could not install the locked Python dependencies.")
 
     print("Checking the Helsinki translation model…", flush=True)
     _run_worker(
         {"action": "install-model"},
-        lambda message: print(message, flush=True),
+        lambda message: _set_initialization("downloading", str(message)),
     )
+
+
+def _set_initialization(state: str, message: str, error: str = "") -> None:
+    global INITIALIZATION
+    next_state = {"state": state, "message": message}
+    if error:
+        next_state["error"] = error
+    INITIALIZATION = next_state
+    print(message, flush=True)
+
+
+def _initialize_in_background() -> None:
+    try:
+        _set_initialization("downloading", "Checking the translation model…")
+        _initialize_runtime()
+        _set_initialization("ready", "Local generator is ready")
+    except Exception as error:
+        _set_initialization("error", "Local generator setup failed", str(error))
+
+
+def run_desktop_service() -> None:
+    if not DESKTOP_TOKEN:
+        raise RuntimeError("Desktop service requires a session token.")
+    server = ThreadingHTTPServer((HOST, 0), Handler)
+    print(json.dumps({"type": "ready", "port": server.server_port}), flush=True)
+    threading.Thread(target=_initialize_in_background, daemon=True).start()
+    server.serve_forever()
 
 
 if __name__ == "__main__":
@@ -242,6 +287,7 @@ if __name__ == "__main__":
     except Exception as error:
         print(f"Local service setup failed: {error}", file=sys.stderr, flush=True)
         raise SystemExit(1) from error
+    _set_initialization("ready", "Local generator is ready")
     print(f"PhraseWeave generator service: http://{HOST}:{PORT}", flush=True)
     print("Keep this terminal open while using the /generator route.", flush=True)
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

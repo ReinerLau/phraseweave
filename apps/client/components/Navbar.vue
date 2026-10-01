@@ -23,6 +23,7 @@
         </div>
 
         <div class="flex items-center">
+          <NuxtLink class="btn btn-ghost btn-sm mr-2" to="/generator">生成练习</NuxtLink>
           <!-- 显示用户信息 -->
           <div
             v-if="isAuthenticated()"

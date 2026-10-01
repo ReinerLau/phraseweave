@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+host_dir="/Library/Google/Chrome/NativeMessagingHosts"
+host_manifest="$host_dir/com.phraseweave.capture.json"
+host_binary="/Applications/PhraseWeave.app/Contents/Resources/native-host"
+
+mkdir -p "$host_dir"
+cat > "$host_manifest" <<'JSON'
+{
+  "name": "com.phraseweave.capture",
+  "description": "Send selected text to PhraseWeave Desktop",
+  "path": "/Applications/PhraseWeave.app/Contents/Resources/native-host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://mdjoodikmclnnbcdaiiiibihemokenjg/"]
+}
+JSON
+chmod 644 "$host_manifest"
+chmod 755 "$host_binary"
+
+exit 0

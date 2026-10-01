@@ -68,6 +68,7 @@ export default defineNuxtConfig({
       signInRedirectURI: process.env.LOGTO_SIGN_IN_REDIRECT_URI || "",
       signOutRedirectURI: process.env.LOGTO_SIGN_OUT_REDIRECT_URI || "",
       exerciseSyncSignalUrl,
+      exerciseSyncReceiveUrl: process.env.EXERCISE_SYNC_RECEIVE_URL || "",
       appVersion,
       deploymentEnvironment,
     },

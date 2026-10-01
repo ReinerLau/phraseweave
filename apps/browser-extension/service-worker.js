@@ -1,4 +1,6 @@
-const MENU_ID = "phraseweave-practice-selection";
+const WEB_MENU_ID = "phraseweave-practice-web";
+const DESKTOP_MENU_ID = "phraseweave-practice-desktop";
+const NATIVE_HOST = "com.phraseweave.capture";
 const STORAGE_PREFIX = "capture:";
 const CAPTURE_TTL_MS = 10 * 60 * 1000;
 
@@ -6,17 +8,39 @@ chrome.runtime.onInstalled.addListener(() => {
   void chrome.storage.session.clear();
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: MENU_ID,
-      title: "用 PhraseWeave 练习选中文本",
+      id: WEB_MENU_ID,
+      title: "导入 PhraseWeave 网页版",
+      contexts: ["selection"],
+    });
+    chrome.contextMenus.create({
+      id: DESKTOP_MENU_ID,
+      title: "导入 PhraseWeave 桌面版",
       contexts: ["selection"],
     });
   });
 });
 
 chrome.contextMenus.onClicked.addListener((info) => {
-  if (info.menuItemId !== MENU_ID) return;
-  void openCapture(info.selectionText || "");
+  if (info.menuItemId === WEB_MENU_ID) void openCapture(info.selectionText || "");
+  if (info.menuItemId === DESKTOP_MENU_ID) void openDesktopCapture(info.selectionText || "");
 });
+
+async function openDesktopCapture(selectedText) {
+  try {
+    const result = await chrome.runtime.sendNativeMessage(NATIVE_HOST, {
+      type: "capture",
+      text: selectedText,
+    });
+    if (!result?.ok) throw new Error(result?.error || "桌面应用未能接收选中文本");
+  } catch (error) {
+    await chrome.notifications.create({
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icon.png"),
+      title: "PhraseWeave 桌面导入失败",
+      message: error?.message || "请确认桌面应用已经安装，然后重试。",
+    });
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (
