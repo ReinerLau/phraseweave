@@ -1,6 +1,8 @@
 # 本地 npm 包与 macOS 桌面版
 
-PhraseWeave 的本地页面和生成引擎由 GitHub Packages 上的 `@reinerlau/phraseweave` 提供。首版支持 Apple Silicon macOS。终端运行 `phraseweave` 会在本机启动页面，桌面应用则在启动时检查并安装最新 npm 包，然后在窗口内打开同一页面。模型和练习数据仍只保存在本机；网页浏览器与桌面窗口各用自己的浏览器数据目录。
+PhraseWeave 的本地页面和生成引擎由 GitHub Packages 上的 `@reinerlau/phraseweave` 提供。首版支持 Apple Silicon macOS。终端运行 `phraseweave` 会在本机启动页面，桌面应用则在启动时检查并安装最新 npm 包，然后在窗口内打开同一页面。练习、练习目录和学习进度保存在 `~/Library/Application Support/PhraseWeave/phraseweave.sqlite3`，由 npm 页面与桌面应用共用；两种浏览器配置中的显示偏好仍各自保存。
+
+首次使用共享存储时，应用会把当前浏览器配置中的旧 IndexedDB 练习和进度导入本机数据库。桌面端会保持本地页面端口，以便升级后继续读取原配置中的旧数据。数据库仅保存在本机，不会自动同步到其他设备。
 
 ## 首次安装
 

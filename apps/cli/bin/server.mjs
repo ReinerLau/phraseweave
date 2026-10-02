@@ -8,6 +8,7 @@ const CAPTURE_ID = /^[a-f0-9]{32}$/;
 const JOB_ID = /^[a-f0-9]{32}$/;
 const MAX_CAPTURE_AGE_MS = 10 * 60 * 1000;
 const MAX_BODY_BYTES = 120_000;
+const MAX_LOCAL_DATA_BODY_BYTES = 50 * 1024 * 1024;
 const MIME = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -35,11 +36,11 @@ function json(response, status, value) {
   response.end(JSON.stringify(value));
 }
 
-async function readBody(request) {
+async function readBody(request, maxBytes = MAX_BODY_BYTES) {
   let body = "";
   for await (const chunk of request) {
     body += chunk;
-    if (Buffer.byteLength(body) > MAX_BODY_BYTES) throw new Error("Request body is too large.");
+    if (Buffer.byteLength(body) > maxBytes) throw new Error("Request body is too large.");
   }
   return body;
 }
@@ -137,17 +138,32 @@ export async function startPageServer({ clientRoot, runtime, port = 3000 }) {
           json(response, 200, { ok: true });
           return;
         }
+        const localDataRoute =
+          (request.method === "GET" &&
+            (url.pathname === "/api/local-exercises" ||
+              url.pathname === "/api/local-exercise-catalog" ||
+              /^\/api\/local-exercises\/[^/]+$/.test(url.pathname))) ||
+          (request.method === "PUT" &&
+            (/^\/api\/local-exercises\/[^/]+(?:\/progress|\/passed-units)?$/.test(url.pathname) ||
+              url.pathname === "/api/local-exercise-catalog")) ||
+          (request.method === "POST" && url.pathname === "/api/local-exercises/migrate") ||
+          (request.method === "DELETE" && /^\/api\/local-exercises\/[^/]+$/.test(url.pathname));
         const valid =
           (request.method === "GET" && url.pathname === "/api/status") ||
           (request.method === "POST" && url.pathname === "/api/generate") ||
           ((request.method === "GET" || request.method === "DELETE") &&
             url.pathname.startsWith("/api/jobs/") &&
-            JOB_ID.test(url.pathname.slice(10)));
+            JOB_ID.test(url.pathname.slice(10))) ||
+          localDataRoute;
         if (!valid) {
           json(response, 404, { error: "Not found." });
           return;
         }
-        const body = request.method === "POST" ? await readBody(request) : undefined;
+        const localDataRequest = url.pathname.startsWith("/api/local-");
+        const body =
+          request.method === "POST" || request.method === "PUT"
+            ? await readBody(request, localDataRequest ? MAX_LOCAL_DATA_BODY_BYTES : MAX_BODY_BYTES)
+            : undefined;
         let upstream;
         try {
           upstream = await runtime.request(url.pathname, request.method, body);
