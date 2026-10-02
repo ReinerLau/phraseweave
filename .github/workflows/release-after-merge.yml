@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Tag untagged main commits and start desktop releases
+      - name: Tag untagged main commits and start package releases
         env:
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         shell: bash
@@ -99,5 +99,5 @@ jobs:
               exit 1
             fi
 
-            echo "Pushed $release_tag for $commit; the tag push starts the desktop release workflow."
+            echo "Pushed $release_tag for $commit; the tag push starts the package release workflow."
           done

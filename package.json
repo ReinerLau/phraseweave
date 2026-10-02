@@ -1,5 +1,6 @@
 {
   "name": "phraseweave",
+  "private": true,
   "version": "1.0.0",
   "description": "",
   "packageManager": "pnpm@9.0.6",
@@ -19,7 +20,10 @@
     "docker:down": "docker-compose -p phraseweave down --volumes",
     "build:serve": "pnpm schema:build && pnpm -F api build",
     "build:client": "pnpm -F client generate",
-    "desktop:dev": "node apps/desktop/build-resources.mjs --dev && pnpm -F desktop start",
+    "desktop:dev": "pnpm -F @reinerlau/phraseweave build && node apps/desktop/build-resources.mjs && PHRASEWEAVE_CLI_ROOT=$PWD/apps/cli PHRASEWEAVE_DEV_RUNTIME=1 pnpm -F desktop start",
+    "cli:build": "pnpm -F @reinerlau/phraseweave build",
+    "cli:test": "pnpm -F @reinerlau/phraseweave test",
+    "desktop:test": "node --test apps/desktop/package-launcher.test.cjs",
     "desktop:make:mac": "node apps/desktop/build-resources.mjs && pnpm -F desktop make",
     "prod:serve": "pnpm -F api start:prod:pm",
     "format": "prettier --write --cache .",
