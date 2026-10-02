@@ -4,7 +4,7 @@ export default defineNuxtPlugin(() => {
   if (!("serviceWorker" in navigator)) return;
 
   const runtimeConfig = useRuntimeConfig();
-  if (runtimeConfig.public.deploymentEnvironment === "desktop") return;
+  if (["desktop", "local-package"].includes(runtimeConfig.public.deploymentEnvironment)) return;
   const baseURL = runtimeConfig.app.baseURL;
   if (import.meta.dev) {
     void navigator.serviceWorker

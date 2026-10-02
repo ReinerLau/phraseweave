@@ -164,6 +164,8 @@ importers:
         specifier: ^5.1.3
         version: 5.3.3
 
+  apps/cli: {}
+
   apps/client:
     dependencies:
       '@logto/vue':

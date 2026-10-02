@@ -140,6 +140,7 @@ __pycache__/
 **/.venv/
 apps/desktop/.build/
 apps/desktop/out/
+apps/cli/runtime/
 tools/lexical_chunks/build/
 
 # docker volumes for dev

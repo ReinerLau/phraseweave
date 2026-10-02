@@ -15,11 +15,7 @@ module.exports = {
     icon: path.join(__dirname, ".build", "PhraseWeave.icns"),
     asar: true,
     protocols: [{ name: "PhraseWeave capture", schemes: ["phraseweave"] }],
-    extraResource: [
-      path.join(__dirname, ".build", "client"),
-      path.join(__dirname, ".build", "phraseweave-runtime"),
-      path.join(__dirname, ".build", "native-host"),
-    ],
+    extraResource: [path.join(__dirname, ".build", "native-host")],
     ignore: [/^\/\.build($|\/)/, /^\/scripts($|\/)/, /^\/native-host\.swift$/],
   },
 };

@@ -263,15 +263,16 @@
 import { navigateTo, useRoute } from "#app";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
+import type { GeneratorJob, GeneratorOutput } from "~/services/generatorClient";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import {
+  consumeCapture,
   getGeneratorJob,
   getGeneratorStatus,
-  isDesktop,
+  isLocalPackage,
   releaseGeneratorJob,
+  retryGenerator,
   startGeneratorJob,
-  type GeneratorJob,
-  type GeneratorOutput,
 } from "~/services/generatorClient";
 import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExerciseDb";
 
@@ -333,11 +334,13 @@ onMounted(() => {
       captureStatus.value = "无法读取选中文本。";
       return;
     }
-    if (window.phraseweaveDesktop) {
-      void window.phraseweaveDesktop.consumeCapture(captureId).then(receiveCaptureText).catch((error) => {
-        captureError.value = describeError(error);
-        captureStatus.value = "无法读取选中文本。";
-      });
+    if (isLocalPackage()) {
+      void consumeCapture(captureId)
+        .then(receiveCaptureText)
+        .catch((error) => {
+          captureError.value = describeError(error);
+          captureStatus.value = "无法读取选中文本。";
+        });
     } else {
       window.addEventListener("message", receiveCaptureMessage);
       requestCapture();
@@ -410,7 +413,9 @@ async function connectService() {
     } else if (status.initialization?.state === "downloading") {
       serviceMessage.value = status.initialization.message;
     } else if (!status.runtimeReady || !status.modelDownloaded) {
-      serviceMessage.value = "本地服务尚未完成初始化，请查看启动服务的终端。";
+      serviceMessage.value = isLocalPackage()
+        ? "本地服务尚未完成初始化，请稍候。"
+        : "本地服务尚未完成初始化，请查看启动服务的终端。";
     } else {
       serviceMessage.value = "本地服务和翻译模型已就绪。";
     }
@@ -420,14 +425,18 @@ async function connectService() {
     modelDownloaded.value = false;
     initializationState.value = "starting";
     initializationError.value = "";
-    serviceMessage.value = isDesktop()
-      ? "正在启动桌面生成引擎，请稍候。"
+    serviceMessage.value = isLocalPackage()
+      ? "正在启动本地生成引擎，请稍候。"
       : "无法连接本地服务。请启动 PhraseWeave 桌面版或本地服务。";
   } finally {
     connecting.value = false;
-    const refreshDelay = isDesktop()
-      ? (!serviceReady.value && !initializationError.value ? 1500 : undefined)
-      : (serviceReady.value ? 10000 : 3000);
+    const refreshDelay = isLocalPackage()
+      ? !serviceReady.value && !initializationError.value
+        ? 1500
+        : undefined
+      : serviceReady.value
+        ? 10000
+        : 3000;
     if (!disposed && refreshDelay !== undefined && !statusTimer) {
       statusTimer = setTimeout(() => {
         statusTimer = undefined;
@@ -438,14 +447,23 @@ async function connectService() {
 }
 
 async function refreshService() {
-  if (isDesktop() && initializationError.value) {
-    await window.phraseweaveDesktop?.retryGenerator();
-    initializationError.value = "";
+  if (isLocalPackage() && initializationError.value) {
+    try {
+      await retryGenerator();
+      initializationError.value = "";
+    } catch (error) {
+      serviceMessage.value = describeError(error);
+      return;
+    }
   }
   await connectService();
 }
 
-async function startJob(payload: { text: string; mode: ExerciseMode; format: OutputFormat }): Promise<OutputFile[] | undefined> {
+async function startJob(payload: {
+  text: string;
+  mode: ExerciseMode;
+  format: OutputFormat;
+}): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   outputFiles.value = [];
   markdownFileName.value = "";
@@ -522,7 +540,7 @@ async function runCapture() {
     serviceCheck = undefined;
     if (pendingServiceCheck) await pendingServiceCheck;
     else await connectService();
-    if (isDesktop()) {
+    if (isLocalPackage()) {
       while (!disposed && !serviceReady.value) {
         captureStatus.value = serviceMessage.value;
         if (initializationError.value) {

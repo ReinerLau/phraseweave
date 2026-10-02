@@ -1,12 +1,12 @@
-name: Build macOS desktop
+name: Build macOS desktop launcher
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v[0-9]*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing merged release tag (for example v1.0.10)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,68 +15,46 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - name: Check out triggering revision
+      - name: Check out release tag
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
       - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Expected a vMAJOR.MINOR.PATCH release tag." >&2
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Expected vMAJOR.MINOR.PATCH.' >&2
             exit 1
           fi
           git fetch origin main:refs/remotes/origin/main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "Release tags must point to a commit on main." >&2
-            exit 1
-          }
-          echo "PHRASEWEAVE_DESKTOP_VERSION=$version" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor HEAD origin/main
+          echo "PHRASEWEAVE_DESKTOP_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v6
         with:
           version: 9.0.6
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20.12.2
           cache: pnpm
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v10.2.0
-        with:
-          version: 0.11.2
-      - name: Install Python
-        run: uv python install 3.13
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build desktop installer
+      - name: Check launcher behavior
+        run: pnpm desktop:test
+      - name: Build launcher installer
         run: pnpm desktop:make:mac
-      - name: Upload build from main
-        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:
-          name: PhraseWeave-macOS-${{ github.sha }}
+          name: PhraseWeave-macOS-${{ inputs.tag }}
           path: apps/desktop/out/make/*.pkg
           if-no-files-found: error
           retention-days: 7
-      - name: Package Chrome extension
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          cd apps/browser-extension
-          zip -q "$GITHUB_WORKSPACE/PhraseWeave-Chrome-extension-${PHRASEWEAVE_DESKTOP_VERSION}.zip" \
-            manifest.json service-worker.js content-script.js icon.png README.md
-      - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Attach installer to release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        shell: bash
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "apps/desktop/out/make/PhraseWeave-${PHRASEWEAVE_DESKTOP_VERSION}-arm64.pkg" \
-            "PhraseWeave-Chrome-extension-${PHRASEWEAVE_DESKTOP_VERSION}.zip" \
-            --verify-tag \
-            --title "PhraseWeave ${PHRASEWEAVE_DESKTOP_VERSION}" \
-            --generate-notes \
-            --notes 'The macOS PKG is unsigned and unnotarized. First launch downloads the translation model.'
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release upload "$RELEASE_TAG" apps/desktop/out/make/*.pkg --clobber

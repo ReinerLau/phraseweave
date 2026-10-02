@@ -1,0 +1,88 @@
+name: Publish PhraseWeave GitHub Package
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: macos-15
+    steps:
+      - name: Check out tagged revision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Expected vMAJOR.MINOR.PATCH.' >&2
+            exit 1
+          fi
+          git fetch origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          echo "PHRASEWEAVE_VERSION=$version" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.0.6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20.12.2
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: "@reinerlau"
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: 0.11.2
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check local page and package code
+        run: pnpm -F client type-check && pnpm cli:test
+      - name: Set package version from tag
+        working-directory: apps/cli
+        run: npm pkg set "version=$PHRASEWEAVE_VERSION"
+      - name: Build npm package
+        run: pnpm cli:build
+      - name: Check tarball contents and size
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd apps/cli
+          npm pack --dry-run --json > package-files.json
+          node -e 'const p=require("./package-files.json")[0]; if (p.size >= 256*1024*1024 || !p.files.some(f => f.path === "runtime/client/index.html") || !p.files.some(f => f.path === "runtime/bin/uv") || !p.files.some(f => f.path === "runtime/python/uv.lock")) process.exit(1)'
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm view "@reinerlau/phraseweave@$PHRASEWEAVE_VERSION" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo 'This version is already published.'
+          else
+            cd apps/cli
+            npm publish --registry=https://npm.pkg.github.com
+          fi
+      - name: Package Chrome extension
+        shell: bash
+        run: |
+          cd apps/browser-extension
+          zip -q "$GITHUB_WORKSPACE/PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" \
+            manifest.json service-worker.js content-script.js icon.png README.md
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" \
+              --verify-tag --title "PhraseWeave ${PHRASEWEAVE_VERSION}" --generate-notes
+          fi

@@ -1,37 +1,49 @@
-# macOS 桌面版
+# 本地 npm 包与 macOS 桌面版
 
-桌面版和 GitHub Pages 版都从 `apps/client` 构建，使用相同的练习清单、生成器及练习页面。桌面版将页面和 Python 生成引擎一同安装；首次启动时下载 Hy-MT2-1.8B 翻译模型（约 4 GB）。模型下载后，桌面生成和练习可以离线使用。网页练习与桌面练习分别保存在各自的浏览器数据目录中。
+PhraseWeave 的本地页面和生成引擎由 GitHub Packages 上的 `@reinerlau/phraseweave` 提供。首版支持 Apple Silicon macOS。终端运行 `phraseweave` 会在本机启动页面，桌面应用则在启动时检查并安装最新 npm 包，然后在窗口内打开同一页面。模型和练习数据仍只保存在本机；网页浏览器与桌面窗口各用自己的浏览器数据目录。
+
+## 首次安装
+
+先安装 Node.js（版本至少为 20.12.2）。GitHub Packages 安装公开 npm 包也需要凭据：创建具有 `read:packages` 权限的 GitHub classic personal access token，并执行一次：
+
+```sh
+npm login --scope=@reinerlau --auth-type=legacy --registry=https://npm.pkg.github.com
+```
+
+按提示输入 GitHub 用户名，并以 token 作为密码。凭据保存在当前用户的 npm 配置中；桌面应用使用同一用户的 npm 登录状态，不会接收或保存 token。
+
+可直接从终端安装并启动：
+
+```sh
+npm install -g @reinerlau/phraseweave
+phraseweave
+```
+
+打开终端输出的 `http://127.0.0.1:端口/` 地址。默认端口是 3000；若被占用，命令会输出实际使用的端口。服务只监听本机，按 Ctrl-C 结束。首次启动自动准备 Python 3.13、锁定的依赖和约 4 GB 的 Hy-MT2 模型，页面会显示生成引擎的准备状态。
+
+已安装新版桌面启动器的用户可直接点击图标。启动器会等待 npm 包更新完成，再打开窗口；离线或更新失败时使用已安装的版本。如果包尚未安装且无法访问 GitHub Packages，窗口会显示错误和登录指引。终端与桌面同时运行时各自启动服务，互不依赖。
+
+旧桌面版需要重新安装一次新版启动器。旧版桌面的练习和进度不会迁移到新页面来源。
 
 ## 本机构建
 
-首版面向 Apple Silicon Mac。在仓库根目录执行：
+在仓库根目录执行：
 
-```bash
+```sh
 pnpm install
+pnpm cli:build
+pnpm cli:test
 pnpm desktop:make:mac
 ```
 
-构建会生成 Nuxt 静态页面、冻结锁定版本的 Python 运行环境、编译 Chrome Native Messaging 宿主，最后产出安装到 `/Applications/PhraseWeave.app` 的 PKG。构建需要 `uv`、Swift 编译器和 macOS 的打包工具。桌面开发模式可运行 `pnpm desktop:dev`，它使用当前电脑的 `python3` 与 `uv`，不生成安装包。
+`pnpm cli:build` 生成 GitHub Packages 的 npm 内容，需要 Apple Silicon Mac、`uv 0.11.2` 和 Node.js。`pnpm desktop:make:mac` 只编译图标、Chrome Native Messaging 宿主和轻量 Electron 启动器，不再构建页面或冻结 Python。桌面开发模式为 `pnpm desktop:dev`，使用当前工作树构建的 npm 包内容。
 
-本机构建的 PKG 尚未签名或公证；对外分发前需要配置 Apple Developer 签名和公证。
+本机构建的 PKG 尚未签名或公证；对外分发前仍需配置 Apple Developer 签名和公证。
 
-## 自动构建与发布
+## 发布
 
-每次 PR 合并到 `main`，GitHub Actions 都会从合并提交分别构建并部署 GitHub Pages、构建 Apple Silicon 桌面安装包。安装包作为该次 Actions 运行的产物保留 7 天；桌面构建失败不会阻止 Pages 部署。
+每个 PR 合并到受保护的 `main` 后，现有流程递增 patch 版本并创建标签。标签工作流从该提交构建 `@reinerlau/phraseweave`，用仓库 `GITHUB_TOKEN` 发布到 GitHub Packages，同时创建 GitHub Release 并附上浏览器扩展 ZIP。首次发布后，在 GitHub Packages 设置中将包改为公开。包只发布到 GitHub Packages，不发布到 npmjs.org。
 
-每个 PR 合并到 `main` 后，GitHub Actions 会按第一父线为尚未发布的合并提交依次递增 patch 版本、创建 `vMAJOR.MINOR.PATCH` 标签，并触发桌面工作流。桌面工作流会用标签版本号构建 PKG，并把 PKG 和浏览器扩展 ZIP 发布到同名 GitHub Release。若多个 PR 在前一个发布完成前合并，后续工作流会按顺序补齐这些版本。
+只有启动器本身需要更新时，才手动运行 **Build macOS desktop launcher** 工作流并输入已有的 `vMAJOR.MINOR.PATCH` 标签；它从该标签构建 PKG，附加到对应 GitHub Release。普通页面与生成器更新只需发布 npm 包，已安装的新启动器下次打开时会自动安装。
 
-自动发布需要在仓库的 Actions Secrets 中配置 `RELEASE_TOKEN`。使用只授权本仓库的细粒度 token，并授予 `Contents: write` 和 `Workflows: write`；工作流用它推送版本标签，tag push 会自动触发桌面发布。
-
-需要发布新的 major 或 minor 版本时，可在已合并到 `main` 的提交上创建并推送对应的 `vMAJOR.MINOR.PATCH` 标签；桌面工作流会为该标签创建 Release，之后每次合并继续递增 patch。例如：
-
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-发布新版后，已经安装的桌面应用不会自动更新，用户需要下载安装新版 PKG。
-
-安装 PKG 后，在 Chrome 中加载 `apps/browser-extension`。选中网页英文时，右键菜单可分别导入网页版或桌面版；桌面版未运行时会自动打开。桌面应用运行时也会在 `127.0.0.1:8765` 提供生成服务，GitHub Pages 的生成器页面可以直接使用；浏览器首次连接可能询问是否允许访问本机服务。关闭桌面应用后，这个服务也会停止。若 `8765` 已被独立启动的本地服务占用，网页版继续使用已有服务，桌面应用会改用自己的随机端口；之后若关闭独立服务，需要重启桌面应用才能让它接管 `8765`。桌面版导入失败时，扩展会显示错误通知，不会把练习转存到另一端。
-
-桌面版通过现有信令 Worker 同步练习到手机；二维码指向 GitHub Pages 的接收页。这一步需要网络，离线练习不需要。
+Chrome 扩展的桌面导入仍通过 Native Messaging 唤起桌面应用；GitHub Pages 生成器仍可访问运行中的本地 `127.0.0.1:8765` 服务。如果该端口已被另一实例占用，后一实例使用私有端口，但其自身页面和桌面窗口仍可正常生成。

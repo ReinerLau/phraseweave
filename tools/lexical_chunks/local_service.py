@@ -21,7 +21,7 @@ from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT_DIR = Path(__file__).resolve().parent
 WORKER = PROJECT_DIR / "worker.py"
-VENV_DIR = CACHE_DIR / "venv"
+VENV_DIR = Path(os.environ.get("PHRASEWEAVE_RUNTIME_VENV", str(CACHE_DIR / "venv")))
 UV_ENV = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(VENV_DIR)}
 PYTHON = VENV_DIR / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 HOST = "127.0.0.1"
