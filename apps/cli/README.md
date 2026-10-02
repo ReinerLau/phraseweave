@@ -12,6 +12,9 @@ phraseweave
 
 Open the local URL printed by the command. The first start downloads Python dependencies
 and the translation model. The server listens only on `127.0.0.1`; press Ctrl-C to stop it.
+Exercises, exercise catalogs, and progress are stored in
+`~/Library/Application Support/PhraseWeave/phraseweave.sqlite3` and shared with the desktop app.
+On first use, existing local IndexedDB data is imported automatically.
 
 This package includes the `uv` executable from Astral Software Inc. Its MIT license is
 included in `third-party/uv/LICENSE-MIT`.

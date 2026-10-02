@@ -1,4 +1,5 @@
 import type { ExerciseResponse, ExercisesResponse } from "~/api/exercise";
+import { isLocalPackage } from "~/services/generatorClient";
 import { scopedStorageName } from "~/utils/storageScope";
 
 const DATABASE_NAME = "phraseweave-local";
@@ -6,6 +7,7 @@ const DATABASE_VERSION = 1;
 const PACK_STORE = "coursePacks";
 const CATALOG_STORE = "coursePackCatalog";
 const META_STORE = "metadata";
+const MIGRATION_KEY = "phraseweave-shared-data-migrated-v1";
 
 interface StoredMetadata {
   key: string;
@@ -13,6 +15,7 @@ interface StoredMetadata {
 }
 
 let databasePromise: Promise<IDBDatabase> | undefined;
+let migrationPromise: Promise<void> | undefined;
 
 interface LexicalChunksStatementV4 {
   english: string;
@@ -35,6 +38,10 @@ export interface ExerciseImportOptions {
 
 function isSupported() {
   return typeof window !== "undefined" && "indexedDB" in window;
+}
+
+function usesSharedStorage() {
+  return typeof window !== "undefined" && isLocalPackage();
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -78,38 +85,132 @@ function requestResult<T>(request: IDBRequest<T>) {
   });
 }
 
-export async function getLocalExercise(coursePackId: string) {
-  if (!isSupported()) return undefined;
+async function localRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const result = (await response.json()) as T & { error?: string };
+  if (!response.ok)
+    throw new Error(result.error || `Local storage request failed (${response.status}).`);
+  return result;
+}
 
-  const database = await openDatabase();
-  const transaction = database.transaction(PACK_STORE, "readonly");
-  return requestResult<ExerciseResponse | undefined>(
-    transaction.objectStore(PACK_STORE).get(coursePackId),
+async function readLegacyData() {
+  const empty = { coursePacks: [] as ExerciseResponse[], catalog: [] as ExercisesResponse };
+  if (!isSupported()) return empty;
+  const databaseName = scopedStorageName(DATABASE_NAME);
+  const indexedDbFactory = window.indexedDB as IDBFactory & {
+    databases?: () => Promise<Array<{ name?: string }>>;
+  };
+  const knownDatabases = await indexedDbFactory.databases?.();
+  if (knownDatabases && !knownDatabases.some((database) => database.name === databaseName)) {
+    return empty;
+  }
+
+  const database = await new Promise<IDBDatabase | undefined>((resolve, reject) => {
+    const request = window.indexedDB.open(databaseName);
+    request.onupgradeneeded = () => request.transaction?.abort();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      if (request.error?.name === "AbortError") resolve(undefined);
+      else reject(request.error ?? new Error("Unable to read the previous local database."));
+    };
+  });
+  if (!database) return empty;
+
+  try {
+    const stores = [PACK_STORE, CATALOG_STORE].filter((name) =>
+      database.objectStoreNames.contains(name),
+    );
+    if (!stores.length) return empty;
+    const transaction = database.transaction(stores, "readonly");
+    const coursePacksRequest = database.objectStoreNames.contains(PACK_STORE)
+      ? (transaction.objectStore(PACK_STORE).getAll() as IDBRequest<ExerciseResponse[]>)
+      : undefined;
+    const catalogRequest = database.objectStoreNames.contains(CATALOG_STORE)
+      ? (transaction.objectStore(CATALOG_STORE).getAll() as IDBRequest<ExercisesResponse>)
+      : undefined;
+    const [coursePacks, catalog] = await Promise.all([
+      coursePacksRequest ? requestResult(coursePacksRequest) : Promise.resolve([]),
+      catalogRequest ? requestResult(catalogRequest) : Promise.resolve([]),
+    ]);
+    return { coursePacks, catalog };
+  } finally {
+    database.close();
+  }
+}
+
+function migrateLegacyData() {
+  if (!usesSharedStorage()) return Promise.resolve();
+  if (migrationPromise) return migrationPromise;
+  migrationPromise = (async () => {
+    const marker = scopedStorageName(MIGRATION_KEY);
+    if (typeof window !== "undefined" && window.localStorage.getItem(marker) === "1") return;
+    const legacy = await readLegacyData();
+    if (legacy.coursePacks.length || legacy.catalog.length) {
+      await localRequest("/api/local-exercises/migrate", "POST", legacy);
+    }
+    if (typeof window !== "undefined") window.localStorage.setItem(marker, "1");
+  })().catch((error) => {
+    migrationPromise = undefined;
+    throw error;
+  });
+  return migrationPromise;
+}
+
+export async function getLocalExercise(coursePackId: string) {
+  if (typeof window === "undefined") return undefined;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return undefined;
+    const database = await openDatabase();
+    const transaction = database.transaction(PACK_STORE, "readonly");
+    return requestResult<ExerciseResponse | undefined>(
+      transaction.objectStore(PACK_STORE).get(coursePackId),
+    );
+  }
+  await migrateLegacyData();
+  const result = await localRequest<{ item?: ExerciseResponse }>(
+    `/api/local-exercises/${encodeURIComponent(coursePackId)}`,
   );
+  return result.item;
 }
 
 export async function listLocalExercises() {
-  if (!isSupported()) return [] as ExercisesResponse;
-
-  const database = await openDatabase();
-  const transaction = database.transaction(CATALOG_STORE, "readonly");
-  return requestResult<ExercisesResponse>(transaction.objectStore(CATALOG_STORE).getAll());
+  if (typeof window === "undefined") return [] as ExercisesResponse;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return [] as ExercisesResponse;
+    const database = await openDatabase();
+    const transaction = database.transaction(CATALOG_STORE, "readonly");
+    return requestResult<ExercisesResponse>(transaction.objectStore(CATALOG_STORE).getAll());
+  }
+  await migrateLegacyData();
+  const result = await localRequest<{ items: ExercisesResponse }>("/api/local-exercise-catalog");
+  return result.items;
 }
 
 export async function saveLocalExercise(coursePack: ExerciseResponse) {
-  if (!isSupported()) return;
-
-  const database = await openDatabase();
-  const transaction = database.transaction([PACK_STORE, CATALOG_STORE], "readwrite");
-  transaction.objectStore(PACK_STORE).put(coursePack);
-  transaction.objectStore(CATALOG_STORE).put({
-    id: coursePack.id,
-    title: coursePack.title,
-    description: coursePack.description,
-    isFree: coursePack.isFree,
-    cover: coursePack.cover,
+  if (typeof window === "undefined") return;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return;
+    const database = await openDatabase();
+    const transaction = database.transaction([PACK_STORE, CATALOG_STORE], "readwrite");
+    transaction.objectStore(PACK_STORE).put(coursePack);
+    transaction.objectStore(CATALOG_STORE).put({
+      id: coursePack.id,
+      title: coursePack.title,
+      description: coursePack.description,
+      isFree: coursePack.isFree,
+      cover: coursePack.cover,
+    });
+    await transactionComplete(transaction);
+    return;
+  }
+  await migrateLegacyData();
+  await localRequest(`/api/local-exercises/${encodeURIComponent(coursePack.id)}`, "PUT", {
+    coursePack,
   });
-  await transactionComplete(transaction);
 }
 
 export async function saveLocalExerciseProgress(
@@ -117,24 +218,29 @@ export async function saveLocalExerciseProgress(
   courseId: string,
   statementIndex: number,
 ) {
-  if (!isSupported()) return;
-
-  const database = await openDatabase();
-  const transaction = database.transaction(PACK_STORE, "readwrite");
-  const transactionDone = transactionComplete(transaction);
-  const store = transaction.objectStore(PACK_STORE);
-  const request = store.get(coursePackId);
-
-  request.onsuccess = () => {
-    const coursePack = request.result as ExerciseResponse | undefined;
-    const course = coursePack?.courses.find((item) => item.id === courseId);
-    if (!coursePack || !course) return;
-
-    course.statementIndex = statementIndex;
-    store.put(coursePack);
-  };
-
-  await transactionDone;
+  if (typeof window === "undefined") return;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return;
+    const database = await openDatabase();
+    const transaction = database.transaction(PACK_STORE, "readwrite");
+    const transactionDone = transactionComplete(transaction);
+    const store = transaction.objectStore(PACK_STORE);
+    const request = store.get(coursePackId);
+    request.onsuccess = () => {
+      const coursePack = request.result as ExerciseResponse | undefined;
+      const course = coursePack?.courses.find((item) => item.id === courseId);
+      if (!coursePack || !course) return;
+      course.statementIndex = statementIndex;
+      store.put(coursePack);
+    };
+    await transactionDone;
+    return;
+  }
+  await migrateLegacyData();
+  await localRequest(`/api/local-exercises/${encodeURIComponent(coursePackId)}/progress`, "PUT", {
+    courseId,
+    statementIndex,
+  });
 }
 
 export async function saveLocalExerciseUnitPassed(
@@ -142,53 +248,76 @@ export async function saveLocalExerciseUnitPassed(
   courseId: string,
   unitKey: string,
 ) {
-  if (!isSupported()) return;
-
-  const database = await openDatabase();
-  const transaction = database.transaction(PACK_STORE, "readwrite");
-  const transactionDone = transactionComplete(transaction);
-  const store = transaction.objectStore(PACK_STORE);
-  const request = store.get(coursePackId);
-
-  request.onsuccess = () => {
-    const coursePack = request.result as ExerciseResponse | undefined;
-    const course = coursePack?.courses.find((item) => item.id === courseId);
-    if (!coursePack || !course) return;
-
-    if (course.passedUnitIds?.includes(unitKey)) return;
-    course.passedUnitIds = [...(course.passedUnitIds ?? []), unitKey];
-    store.put(coursePack);
-  };
-
-  await transactionDone;
+  if (typeof window === "undefined") return;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return;
+    const database = await openDatabase();
+    const transaction = database.transaction(PACK_STORE, "readwrite");
+    const transactionDone = transactionComplete(transaction);
+    const store = transaction.objectStore(PACK_STORE);
+    const request = store.get(coursePackId);
+    request.onsuccess = () => {
+      const coursePack = request.result as ExerciseResponse | undefined;
+      const course = coursePack?.courses.find((item) => item.id === courseId);
+      if (!coursePack || !course || course.passedUnitIds?.includes(unitKey)) return;
+      course.passedUnitIds = [...(course.passedUnitIds ?? []), unitKey];
+      store.put(coursePack);
+    };
+    await transactionDone;
+    return;
+  }
+  await migrateLegacyData();
+  await localRequest(
+    `/api/local-exercises/${encodeURIComponent(coursePackId)}/passed-units`,
+    "PUT",
+    {
+      courseId,
+      unitKey,
+    },
+  );
 }
 
 export async function deleteLocalExercise(coursePackId: string) {
-  if (!isSupported()) return;
-
-  const database = await openDatabase();
-  const transaction = database.transaction([PACK_STORE, CATALOG_STORE], "readwrite");
-  transaction.objectStore(PACK_STORE).delete(coursePackId);
-  transaction.objectStore(CATALOG_STORE).delete(coursePackId);
-  await transactionComplete(transaction);
+  if (typeof window === "undefined") return;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return;
+    const database = await openDatabase();
+    const transaction = database.transaction([PACK_STORE, CATALOG_STORE], "readwrite");
+    transaction.objectStore(PACK_STORE).delete(coursePackId);
+    transaction.objectStore(CATALOG_STORE).delete(coursePackId);
+    await transactionComplete(transaction);
+    return;
+  }
+  await migrateLegacyData();
+  await localRequest(`/api/local-exercises/${encodeURIComponent(coursePackId)}`, "DELETE");
 }
 
 export async function saveLocalExerciseCatalog(coursePacks: ExercisesResponse) {
-  if (!isSupported()) return;
-
-  const database = await openDatabase();
-  const transaction = database.transaction(CATALOG_STORE, "readwrite");
-  const store = transaction.objectStore(CATALOG_STORE);
-  coursePacks.forEach((coursePack) => store.put(coursePack));
-  await transactionComplete(transaction);
+  if (typeof window === "undefined") return;
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return;
+    const database = await openDatabase();
+    const transaction = database.transaction(CATALOG_STORE, "readwrite");
+    const store = transaction.objectStore(CATALOG_STORE);
+    coursePacks.forEach((coursePack) => store.put(coursePack));
+    await transactionComplete(transaction);
+    return;
+  }
+  await migrateLegacyData();
+  await localRequest("/api/local-exercise-catalog", "PUT", { items: coursePacks });
 }
 
 export async function exportLocalExercises() {
-  if (!isSupported()) return [] as ExerciseResponse[];
-
-  const database = await openDatabase();
-  const transaction = database.transaction(PACK_STORE, "readonly");
-  return requestResult<ExerciseResponse[]>(transaction.objectStore(PACK_STORE).getAll());
+  if (typeof window === "undefined") return [] as ExerciseResponse[];
+  if (!usesSharedStorage()) {
+    if (!isSupported()) return [] as ExerciseResponse[];
+    const database = await openDatabase();
+    const transaction = database.transaction(PACK_STORE, "readonly");
+    return requestResult<ExerciseResponse[]>(transaction.objectStore(PACK_STORE).getAll());
+  }
+  await migrateLegacyData();
+  const result = await localRequest<{ items: ExerciseResponse[] }>("/api/local-exercises");
+  return result.items;
 }
 
 export function normalizeExerciseImport(
