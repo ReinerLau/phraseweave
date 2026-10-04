@@ -122,10 +122,10 @@ async function installOrUpdate(
 function startPackage(installation, onProgress = () => {}) {
   return new Promise((resolve, reject) => {
     const entry = path.join(installation.directory, "bin", "phraseweave.mjs");
-    const child = spawn(installation.node, [entry, "--port", "0", "--json-ready"], {
+    const child = spawn(installation.node, [entry, "--json-ready", "--launcher-client"], {
       env: installation.env,
       detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     let ready = false;
     let buffer = "";
@@ -144,12 +144,7 @@ function startPackage(installation, onProgress = () => {}) {
         try {
           const record = JSON.parse(line);
           const url = new URL(record.url);
-          if (
-            record.type === "ready" &&
-            record.version === installation.version &&
-            url.protocol === "http:" &&
-            url.hostname === "127.0.0.1"
-          ) {
+          if (record.type === "ready" && url.protocol === "http:" && url.hostname === "127.0.0.1") {
             clearTimeout(timer);
             ready = true;
             resolve({ child, url: url.toString() });

@@ -33,21 +33,6 @@
           >
             <li>
               <button
-                type="button"
-                aria-label="同步"
-                title="同步"
-                role="menuitem"
-                @click="handleSync"
-              >
-                <span
-                  class="i-ph-arrows-clockwise h-4 w-4"
-                  aria-hidden="true"
-                ></span>
-                同步
-              </button>
-            </li>
-            <li>
-              <button
                 class="text-error"
                 type="button"
                 aria-label="删除"
@@ -87,7 +72,6 @@ interface Props {
 const { exercise } = defineProps<Props>();
 const emit = defineEmits<{
   delete: [exercise: Exercise];
-  sync: [exercise: Exercise];
 }>();
 const { updateActiveCourseMap } = useActiveCourseMap();
 const actionsMenu = ref<HTMLElement>();
@@ -96,11 +80,6 @@ const showActions = ref(false);
 onClickOutside(actionsMenu, () => {
   showActions.value = false;
 });
-
-function handleSync() {
-  showActions.value = false;
-  emit("sync", exercise);
-}
 
 function handleDelete() {
   showActions.value = false;

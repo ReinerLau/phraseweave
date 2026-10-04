@@ -70,6 +70,48 @@ test("rejects cross-origin mutation and DNS rebinding hosts", async () => {
   assert.equal(reboundStatus, 403);
 });
 
+test("accepts only the configured remote origin for API mutations", async () => {
+  const remote = await startPageServer({
+    clientRoot: root,
+    runtime: {
+      request: async () => new Response(JSON.stringify({ ok: true })),
+    },
+    port: 0,
+    remoteOrigin: "https://phraseweave.example.com",
+  });
+  try {
+    const api = new URL("/api/generate", remote.url);
+    const allowed = await fetch(api, {
+      method: "POST",
+      headers: { Origin: "https://phraseweave.example.com" },
+      body: "{}",
+    });
+    assert.equal(allowed.status, 200);
+    const rejected = await fetch(api, {
+      method: "POST",
+      headers: { Origin: "https://other.example.com" },
+      body: "{}",
+    });
+    assert.equal(rejected.status, 403);
+  } finally {
+    await new Promise((resolve) => remote.server.close(resolve));
+  }
+});
+
+test("uses a free page port when the preferred port belongs to another program", async () => {
+  const occupied = http.createServer((_request, response) => response.end("other app"));
+  await new Promise((resolve) => occupied.listen(0, "127.0.0.1", resolve));
+  const preferred = occupied.address().port;
+  const fallback = await startPageServer({ clientRoot: root, runtime: {}, port: preferred });
+  try {
+    assert.notEqual(new URL(fallback.url).port, String(preferred));
+    assert.match(await (await fetch(fallback.url)).text(), /PhraseWeave/);
+  } finally {
+    await new Promise((resolve) => fallback.server.close(resolve));
+    await new Promise((resolve) => occupied.close(resolve));
+  }
+});
+
 test("reports a stopped generator so the page can offer retry", async () => {
   runtimeFails = true;
   try {

@@ -103,7 +103,7 @@ async function staticFile(root, pathname, response) {
   json(response, 404, { error: "Not found." });
 }
 
-export async function startPageServer({ clientRoot, runtime, port = 3000 }) {
+export async function startPageServer({ clientRoot, runtime, port = 3000, remoteOrigin }) {
   const server = http.createServer((request, response) => {
     void (async () => {
       const address = server.address();
@@ -116,12 +116,18 @@ export async function startPageServer({ clientRoot, runtime, port = 3000 }) {
       if (url.pathname.startsWith("/api/")) {
         if (
           request.headers["sec-fetch-site"] === "cross-site" ||
-          (request.headers.origin && request.headers.origin !== origin)
+          (request.headers.origin &&
+            request.headers.origin !== origin &&
+            request.headers.origin !== remoteOrigin)
         ) {
           json(response, 403, { error: "Invalid origin." });
           return;
         }
-        if (request.method !== "GET" && request.headers.origin !== origin) {
+        if (
+          request.method !== "GET" &&
+          request.headers.origin !== origin &&
+          request.headers.origin !== remoteOrigin
+        ) {
           json(response, 403, { error: "Invalid origin." });
           return;
         }

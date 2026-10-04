@@ -4,7 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
 
-const { installOrUpdate } = require("./package-launcher.cjs");
+const { installOrUpdate, startPackage, stopPackage } = require("./package-launcher.cjs");
 
 const fakeNpm = `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -86,4 +86,27 @@ test("keeps the installed version when an update fails", async () => {
     assert.equal(installed.version, "1.0.10");
     assert.ok(progress.some((message) => message.includes("更新失败")));
   });
+});
+
+test("launcher attaches to a running older service version", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "phraseweave-launch-test-"));
+  const bin = path.join(directory, "bin");
+  await fs.mkdir(bin);
+  await fs.writeFile(
+    path.join(bin, "phraseweave.mjs"),
+    'process.stdout.write(JSON.stringify({ type: "ready", url: "http://127.0.0.1:43127/", version: "1.0.10" }) + "\\n"); process.stdin.resume();',
+  );
+  let started;
+  try {
+    started = await startPackage({
+      directory,
+      node: process.execPath,
+      env: process.env,
+      version: "1.0.11",
+    });
+    assert.equal(started.url, "http://127.0.0.1:43127/");
+  } finally {
+    stopPackage(started?.child);
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });

@@ -38,35 +38,24 @@
             <ExerciseCard
               :exercise="exercise"
               @delete="deleteExercise"
-              @sync="openSync"
             />
           </template>
         </div>
       </div>
     </template>
-
-    <ExerciseSyncDialog
-      v-if="selectedExercise"
-      :exercise-id="selectedExercise.id"
-      :title="selectedExercise.title"
-      @close="selectedExercise = undefined"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
 
-import type { ExercisesResponse } from "~/api/exercise";
 import ExerciseCard from "~/components/exercises/ExerciseCard.vue";
-import ExerciseSyncDialog from "~/components/exercises/ExerciseSyncDialog.vue";
 import { importLocalExercises } from "~/services/localExerciseDb";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 
 const exerciseCatalogStore = useExerciseCatalogStore();
 const isLoading = ref(false);
 const importInput = ref<HTMLInputElement>();
-const selectedExercise = ref<ExercisesResponse[number]>();
 
 setup();
 
@@ -81,10 +70,6 @@ async function setup() {
 
 function openImport() {
   importInput.value?.click();
-}
-
-function openSync(exercise: ExercisesResponse[number]) {
-  selectedExercise.value = exercise;
 }
 
 async function deleteExercise(exercise: { id: string; title: string }) {
