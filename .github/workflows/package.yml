@@ -74,7 +74,7 @@ jobs:
         run: |
           cd apps/browser-extension
           zip -q "$GITHUB_WORKSPACE/PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" \
-            manifest.json service-worker.js content-script.js icon.png README.md
+            manifest.json service-worker.js icon.png README.md
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

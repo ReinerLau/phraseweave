@@ -7,10 +7,6 @@ const appBaseURL = process.env.NUXT_APP_BASE_URL || "/";
 const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT || "local";
 const appVersion = process.env.BUILD_VERSION || formatBuildTimestamp(new Date());
 const clarityId = process.env.CLARITY?.trim();
-const exerciseSyncSignalUrl =
-  process.env.EXERCISE_SYNC_SIGNAL_URL ||
-  process.env.COURSE_TRANSFER_SIGNAL_URL ||
-  (process.env.NODE_ENV === "development" ? "ws://localhost:8787/room" : "");
 if (process.env.NODE_ENV === "production" && clarityId) {
   addClarity(clarityId);
 }
@@ -68,8 +64,6 @@ export default defineNuxtConfig({
       backendEndpoint: process.env.BACKEND_ENDPOINT || "",
       signInRedirectURI: process.env.LOGTO_SIGN_IN_REDIRECT_URI || "",
       signOutRedirectURI: process.env.LOGTO_SIGN_OUT_REDIRECT_URI || "",
-      exerciseSyncSignalUrl,
-      exerciseSyncReceiveUrl: process.env.EXERCISE_SYNC_RECEIVE_URL || "",
       appVersion,
       deploymentEnvironment,
     },

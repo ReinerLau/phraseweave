@@ -154,7 +154,7 @@
           <template v-else-if="!runtimeReady || !modelDownloaded"
             >请等待本地服务完成依赖和 Hy-MT2 模型初始化。</template
           >
-          <template v-else>模型运行在本机；生成结果暂存在本页内存，下载后由浏览器保存。</template>
+          <template v-else>模型运行在 Mac 上；可保存练习或下载生成文件。</template>
         </p>
       </div>
     </form>
@@ -169,6 +169,15 @@
           <p class="mt-1 text-sm opacity-70">下载本次生成的文件。</p>
         </div>
         <div class="flex flex-wrap gap-2">
+          <button
+            v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
+            class="btn btn-primary btn-sm"
+            type="button"
+            :disabled="savingExercise"
+            @click="saveAndOpenExercise"
+          >
+            {{ savingExercise ? "正在保存…" : "保存并打开练习" }}
+          </button>
           <button
             v-for="file in outputFiles"
             :key="file.name"
@@ -289,7 +298,7 @@ const rawCaptureId = route.query.capture;
 const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
 const captureMode = Boolean(captureId);
 const exerciseMode = ref<ExerciseMode>("standard");
-const outputFormat = ref<OutputFormat>("markdown");
+const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
@@ -301,6 +310,7 @@ const serviceMessage = ref("正在连接本地服务…");
 const activeJob = ref<GeneratorJob | null>(null);
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
+const savingExercise = ref(false);
 const markdownFileName = ref("");
 const markdownContent = ref<string | null>(null);
 const markdownBlocks = computed(() => parseMarkdown(markdownContent.value || ""));
@@ -311,7 +321,6 @@ const captureRunning = ref(false);
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
-let captureTimer: ReturnType<typeof setTimeout> | undefined;
 
 const { updateActiveCourseMap } = useActiveCourseMap();
 let serviceCheck: Promise<void> | undefined;
@@ -334,55 +343,14 @@ onMounted(() => {
       captureStatus.value = "无法读取选中文本。";
       return;
     }
-    if (isLocalPackage()) {
-      void consumeCapture(captureId)
-        .then(receiveCaptureText)
-        .catch((error) => {
-          captureError.value = describeError(error);
-          captureStatus.value = "无法读取选中文本。";
-        });
-    } else {
-      window.addEventListener("message", receiveCaptureMessage);
-      requestCapture();
-    }
+    void consumeCapture(captureId)
+      .then(receiveCaptureText)
+      .catch((error) => {
+        captureError.value = describeError(error);
+        captureStatus.value = "无法读取选中文本。";
+      });
   }
 });
-
-function requestCapture() {
-  captureStatus.value = "正在接收选中文本…";
-  captureError.value = "";
-  window.postMessage(
-    { type: "PHRASEWEAVE_CAPTURE_READY", requestId: captureId },
-    window.location.origin,
-  );
-  if (captureTimer) clearTimeout(captureTimer);
-  captureTimer = setTimeout(() => {
-    if (!captureText.value) {
-      captureError.value = "未能连接 PhraseWeave 浏览器扩展。请重新从文章选择文本并右键操作。";
-      captureStatus.value = "等待扩展传入选中文本。";
-    }
-  }, 10000);
-}
-
-function receiveCaptureMessage(event: MessageEvent) {
-  const message = event.data as { type?: string; requestId?: string; text?: string } | null;
-  if (
-    event.source !== window ||
-    event.origin !== window.location.origin ||
-    message?.type !== "PHRASEWEAVE_CAPTURE_RESULT" ||
-    message.requestId !== captureId ||
-    typeof message.text !== "string"
-  ) {
-    return;
-  }
-
-  if (captureTimer) clearTimeout(captureTimer);
-  window.postMessage(
-    { type: "PHRASEWEAVE_CAPTURE_ACK", requestId: captureId },
-    window.location.origin,
-  );
-  receiveCaptureText(message.text);
-}
 
 function receiveCaptureText(text: string) {
   captureText.value = text.trim();
@@ -480,12 +448,11 @@ async function startJob(payload: {
 
 async function generate() {
   if (!canGenerate.value) return;
-  const outputs = await startJob({
+  await startJob({
     text: englishText.value,
     mode: exerciseMode.value,
     format: outputFormat.value,
   });
-  if (captureMode && outputs) await importGeneratedExercise(outputs);
 }
 
 async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
@@ -561,7 +528,7 @@ async function runCapture() {
     });
     if (!outputs) throw new Error(jobError.value || "学习单元生成失败，请重试。");
     captureStatus.value = "正在导入练习…";
-    await importGeneratedExercise(outputs);
+    await importGeneratedExercise(outputs, captureText.value);
   } catch (error) {
     captureError.value = describeError(error);
     captureStatus.value = "练习尚未创建。选中文本仍保留在此页面，可以重试。";
@@ -570,11 +537,23 @@ async function runCapture() {
   }
 }
 
-async function importGeneratedExercise(outputs: OutputFile[]) {
+async function saveAndOpenExercise() {
+  if (savingExercise.value) return;
+  savingExercise.value = true;
+  try {
+    await importGeneratedExercise(outputFiles.value, englishText.value);
+  } catch (error) {
+    jobError.value = describeError(error);
+  } finally {
+    savingExercise.value = false;
+  }
+}
+
+async function importGeneratedExercise(outputs: OutputFile[], sourceText: string) {
   const jsonFile = outputs.find((file) => file.name.endsWith(".json"));
   if (!jsonFile) throw new Error("生成结果中没有 PhraseWeave JSON 文件。");
   const [coursePack] = normalizeExerciseImport(JSON.parse(jsonFile.content), {
-    title: captureText.value.replace(/\s+/g, " ").trim().slice(0, 80),
+    title: sourceText.replace(/\s+/g, " ").trim().slice(0, 80),
   });
   const course = coursePack?.courses[0];
   if (!course || course.statements.length === 0)
@@ -681,8 +660,6 @@ onUnmounted(() => {
   disposed = true;
   if (pollTimer) clearTimeout(pollTimer);
   if (statusTimer) clearTimeout(statusTimer);
-  if (captureTimer) clearTimeout(captureTimer);
-  window.removeEventListener("message", receiveCaptureMessage);
   outputFiles.value = [];
   markdownContent.value = null;
 });

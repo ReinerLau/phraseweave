@@ -14,7 +14,7 @@ The delivery loop is intentionally manual: plan, implement, run any useful check
 
 ### Protected release branch
 
-Treat `main` as the production release branch and protected branch. Merging a pull request into `main` deploys GitHub Pages and creates a version tag; the tag publishes the GitHub Packages npm runtime and a GitHub Release. Build the desktop launcher installer from an existing merged tag only when the launcher changes; see `docs/desktop.md`. Re-running a workflow for a previously merged revision does not replace the pull request requirement for new code.
+Treat `main` as the production release branch and protected branch. Merging a pull request into `main` creates a version tag; the tag publishes the GitHub Packages npm runtime and a GitHub Release. Build the desktop launcher installer from an existing merged tag only when the launcher changes; see `docs/desktop.md`. Re-running a workflow for a previously merged revision does not replace the pull request requirement for new code.
 
 ### Worktree and local main synchronization
 

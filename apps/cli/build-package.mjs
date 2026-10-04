@@ -42,10 +42,6 @@ run("pnpm", ["-F", "client", "generate"], {
     BACKEND_ENDPOINT: "",
     LOGTO_ENDPOINT: "",
     LOGTO_APP_ID: "",
-    EXERCISE_SYNC_SIGNAL_URL:
-      process.env.EXERCISE_SYNC_SIGNAL_URL ||
-      "https://phraseweave-course-signal.lk850593913.workers.dev",
-    EXERCISE_SYNC_RECEIVE_URL: "https://reinerlau.github.io/phraseweave/receive",
   },
 });
 cpSync(path.join(root, "apps/client/.output/public"), path.join(runtime, "client"), {

@@ -1,36 +1,9 @@
-# 本地学习单元生成器
+# 渐进学习单元生成器
 
-生成器是网页版与桌面版共用的 PhraseWeave 客户端页面。网页版地址：
+PhraseWeave 的 `/generator` 页面由本机 CLI 提供。输入文本、spaCy 分析和 Hy-MT2 翻译在 Mac 上处理。普通生成可下载 Markdown、PhraseWeave JSON，或点击“保存并打开练习”将结果写入共享练习库。
 
-```text
-https://reinerlau.github.io/phraseweave/generator
-```
+从终端运行 `phraseweave`，或打开桌面启动器，均连接同一份本机服务；两个入口同时使用时不会启动第二份模型。页面端口优先沿用上次端口，若被其他程序占用则选择空闲端口。完整安装与手机访问方式见 [本地应用与远程访问](desktop.md)。
 
-英文输入、spaCy 依存分析和模型翻译都在运行本地服务的电脑上完成。Markdown 和 PhraseWeave JSON 在本地服务与页面内存中生成和预览，不写入项目目录。页面通过浏览器下载文件；离开页面或开始下一次生成后，页面内的结果会释放。
+Chrome 扩展通过 Native Messaging 将选中文本交给本机应用，自动生成并打开练习。扩展不再打开 GitHub Pages。
 
-桌面版将页面与服务一起安装并自动启动，使用方法见 [macOS 桌面版](desktop.md)。桌面应用运行时，网页版也可以连接它在 `127.0.0.1:8765` 提供的服务；无需再手动启动一份。未安装或未打开桌面应用时，可按下文单独启动本地服务。网页版会定时重连并更新连接状态。
-
-## 启动网页版的本地服务
-
-在仓库根目录运行：
-
-```bash
-python3 tools/lexical_chunks/local_service.py
-```
-
-保持终端运行，在生成器页面点击“连接本地服务”。启动需要 `uv`。首次启动会创建隔离 Python 环境、安装锁定依赖，并在服务开始监听前下载 Hy-MT2-1.8B 模型（约 4 GB）。后续启动会复用缓存的环境和模型。依赖和模型保存在用户缓存目录，不写入仓库。若初始化失败，服务会退出并在终端显示错误。首次浏览器连接可能询问是否允许页面访问本机服务。
-
-## 翻译
-
-- 模型固定为 `tencent/Hy-MT2-1.8B` revision `9a341cd1b679d3efd23b46e847b01745a71ed792`；按模型的聊天模板发送整句翻译指令，不改写英文原句。
-- 使用 Transformers/PyTorch 在本机 CPU 运行固定版本的 Hy-MT2 模型。
-- 单句英文输入上限为 512 个 tokenizer token；超长句会显示错误，不会截断翻译或导出部分文件。
-- 每个完整原句生成一条中文提示。同句所有学习单元共用该提示。
-
-## 学习单元与导出
-
-Chrome 用户也可以安装 [选中文本浏览器扩展](../apps/browser-extension/README.md)。右键菜单可以选择导入网页版或桌面版，两个入口都使用同一个 `/generator` 页面自动生成、导入并打开练习。网页版使用上面的本地服务；桌面版使用应用自动管理的服务。
-
-分句、双引号处理和依存树闭合算法沿用 [ADR 0012](adr/0012-adjacent-subtree-closure.md)、[ADR 0015](adr/0015-ignore-double-quotes-in-learning-units.md) 和 [ADR 0018](adr/0018-retain-all-word-units.md)。`standard` 和 `review` 模式以及 `markdown`、`phraseweave`、`both` 导出格式保持原行为。PhraseWeave JSON 使用 schema 4，含稳定 `unit_id`、直接来源 `source_unit_ids` 及原句上下文。
-
-下载文件名包含 UTC 时间戳，重复生成时也能得到不同文件名。供网页版使用的生成器服务仅绑定 `127.0.0.1:8765`，并校验客户端来源后接受生成请求。若该端口已被独立服务占用，桌面应用的内置服务会改用随机端口，只供桌面应用使用。页面确认接收任务结果后，服务会释放对应的内存内容。若页面在任务完成前关闭，未领取的结果会在下次任务启动时清理。
+模型固定为 `tencent/Hy-MT2-1.8B` revision `9a341cd1b679d3efd23b46e847b01745a71ed792`，按聊天模板翻译整句。单句英文输入上限为 512 个 tokenizer token；过长时显示错误。每个完整原句生成一条共用的中文提示。PhraseWeave JSON 使用 schema 4，包含稳定的 `unit_id`、直接来源 `source_unit_ids` 和原句上下文。
