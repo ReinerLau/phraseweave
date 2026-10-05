@@ -8,18 +8,17 @@
       class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       :class="inline ? 'w-fit' : 'w-full'"
     >
-      <template
-        v-for="(w, i) in courseStore.words"
-        :key="i"
-      >
-        <div
-          class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
-          :class="getWordsClassNames(i)"
-          :style="{ width: `${inputWidth(i)}em` }"
-        >
-          {{ isAnswerTip() ? w : userInputWords[i]["userInput"] }}
-        </div>
-      </template>
+      <ClozeText :tokens="courseStore.clozeTokens">
+        <template #word="{ token }">
+          <span
+            class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
+            :class="getWordsClassNames(token.wordIndex)"
+            :style="{ width: `${inputWidth(token.wordIndex)}em` }"
+          >
+            {{ isAnswerTip() ? token.text : userInputWords[token.wordIndex]?.userInput }}
+          </span>
+        </template>
+      </ClozeText>
       <input
         ref="inputEl"
         class="absolute h-full w-full opacity-0"
@@ -61,6 +60,7 @@ import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useExerciseStore } from "~/store/exercise";
+import ClozeText from "./ClozeText.vue";
 import {
   getInputWordWidthEm,
   getWordBlockWidthEm,
@@ -91,7 +91,7 @@ let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
 
 const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
   useInput({
-    source: () => courseStore.currentStatement?.english!,
+    source: () => courseStore.currentStatement?.english ?? "",
     setInputCursorPosition,
     getInputCursorPosition,
     inputChangedCallback,

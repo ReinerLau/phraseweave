@@ -1,4 +1,8 @@
-import { reactive, ref, watchEffect } from "vue";
+import { nextTick, reactive, ref, watchEffect } from "vue";
+
+import { getClozeWords, normalizeClozeInput, normalizeClozeWord } from "~/utils/clozeText";
+
+export { containsAllowedQuestionCharacter, sanitizeQuestionInput } from "~/utils/clozeText";
 
 interface Word {
   text: string;
@@ -23,16 +27,6 @@ interface InputOptions {
 const separator = " ";
 
 const inputValue = ref("");
-
-const QUESTION_INPUT_DISALLOWED_CHARACTERS = /[\p{Cc}\p{Script=Han}]|[^\S ]/gu;
-
-export function sanitizeQuestionInput(value: string) {
-  return value.replace(QUESTION_INPUT_DISALLOWED_CHARACTERS, "");
-}
-
-export function containsAllowedQuestionCharacter(value: string) {
-  return sanitizeQuestionInput(value).replaceAll(separator, "").length > 0;
-}
 
 export function fitInputToWordWidths(
   value: string,
@@ -76,20 +70,26 @@ export function useInput({
   updateActiveWord(getInputCursorPosition());
 
   function setInputValue(val: string) {
-    const targetWords = source().split(separator);
-    const sanitizedValue = sanitizeQuestionInput(val);
+    const targetWords = getClozeWords(source());
+    const sanitizedValue = normalizeClozeInput(val, targetWords);
     const fitInput = (value: string) => {
-      if (!getInputWordWidth || !getInputWordCapacity) return value;
+      if (!getInputWordWidth || !getInputWordCapacity)
+        return value.split(separator).slice(0, targetWords.length).join(separator);
 
       return fitInputToWordWidths(value, targetWords, getInputWordWidth, getInputWordCapacity);
     };
     const fittedValue = fitInput(sanitizedValue);
-    const cursorValue = fitInput(sanitizeQuestionInput(val.slice(0, getInputCursorPosition())));
+    const cursorValue = fitInput(
+      normalizeClozeInput(val.slice(0, getInputCursorPosition()), targetWords),
+    );
 
     inputValue.value = fittedValue;
     resetAllWordUserInput();
     inputSyncUserInputWords();
     updateActiveWord(fittedValue ? cursorValue.length : 0);
+    if (fittedValue !== val) {
+      void nextTick(() => setInputCursorPosition(cursorValue.length));
+    }
   }
 
   function clearInput() {
@@ -98,6 +98,7 @@ export function useInput({
       word.userInput = "";
       word.incorrect = false;
     });
+    inputSyncUserInputWords();
     updateActiveWord(0);
   }
 
@@ -118,9 +119,7 @@ export function useInput({
     watchEffect(() => {
       resetUserInputWords();
 
-      const english = source();
-      english
-        .split(separator)
+      getClozeWords(source())
         .map(createWord)
         .forEach((word, i) => {
           userInputWords[i] = word;
@@ -130,18 +129,11 @@ export function useInput({
     });
   }
 
-  function userInputWordsSyncInput() {
-    inputValue.value = userInputWords
-      .map(({ userInput }) => {
-        return userInput;
-      })
-      .join(separator);
-  }
-
   function inputSyncUserInputWords() {
     let position = 0;
-
-    inputValue.value.split(separator).forEach((input, index) => {
+    const inputs = inputValue.value.split(separator);
+    userInputWords.forEach((word, index) => {
+      const input = inputs[index] ?? "";
       userInputWords[index].userInput = input;
 
       userInputWords[index].start = position;
@@ -181,8 +173,8 @@ export function useInput({
 
   function markIncorrectWord() {
     userInputWords.forEach((word) => {
-      const formattedWord = formatInputText(word.userInput);
-      if (formattedWord !== formatInputText(word.text)) {
+      const formattedWord = normalizeClozeWord(word.userInput);
+      if (formattedWord !== normalizeClozeWord(word.text)) {
         word.incorrect = true;
       } else {
         word.incorrect = false;
@@ -192,12 +184,7 @@ export function useInput({
 
   function lastWordIsActive() {
     let len = userInputWords.length;
-    return userInputWords[len - 1].isActive;
-  }
-
-  // 排版引号与对应的直引号等价，但单引号和双引号仍分别比较。
-  function formatInputText(word: string) {
-    return word.toLocaleLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+    return userInputWords[len - 1]?.isActive ?? false;
   }
 
   function submitAnswer(correctCallback?: () => void, wrongCallback?: () => void) {

@@ -10,6 +10,7 @@ import {
   saveLocalExerciseProgress,
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
+import { checkClozeAnswer, tokenizeClozeText } from "~/utils/clozeText";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
 
@@ -69,9 +70,10 @@ export const useExerciseStore = defineStore("exercise", () => {
       : currentCourse.value?.statements[statementIndex.value];
   }
 
-  const words = computed(() => {
-    return currentStatement.value?.english.split(" ") || [];
-  });
+  const clozeTokens = computed(() => tokenizeClozeText(currentStatement.value?.english ?? ""));
+  const words = computed(() =>
+    clozeTokens.value.filter((token) => token.kind === "word").map((token) => token.text),
+  );
 
   const totalQuestionsCount = computed(() => {
     return currentCourse.value?.statements.length || 0;
@@ -145,7 +147,8 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   function checkCorrect(input: string) {
-    return input.toLocaleLowerCase() === currentStatement.value?.english.toLocaleLowerCase();
+    const statement = currentStatement.value;
+    return statement !== undefined && checkClozeAnswer(statement.english, input);
   }
 
   function isStatementPassed(statement: Statement) {
@@ -228,6 +231,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     isRecovering,
     isAnsweringBaseUnit,
     words,
+    clozeTokens,
     totalQuestionsCount,
     setup,
     doAgain,

@@ -130,6 +130,17 @@ describe("course", () => {
     expect(store.words.length).toBe(1);
   });
 
+  it("shares punctuation-free blanks and grading with the question input", () => {
+    const store = useExerciseStore();
+    store.currentStatement = { id: "punctuation", order: 1, english: "‘don’t’ be anti-social," };
+    expect(store.words).toEqual(["don’t", "be", "anti", "social"]);
+    expect(store.clozeTokens.map((token) => token.text).join("")).toBe("‘don’t’ be anti-social,");
+    expect(store.checkCorrect("don't be anti social")).toBe(true);
+    expect(store.checkCorrect("‘don’t’ be anti-social,")).toBe(true);
+    expect(store.checkCorrect("dont be anti social")).toBe(false);
+    expect(store.checkCorrect("don't be antisocial")).toBe(false);
+  });
+
   it("the count of first course question should be two", async () => {
     const store = useExerciseStore();
     await store.setup(coursePack.id, firstCourse.id);

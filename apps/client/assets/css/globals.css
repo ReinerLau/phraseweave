@@ -157,3 +157,19 @@ body {
   /* 行内放不下时单词整体换到下一行，而不是压缩块宽把文字挤成两行 */
   flex-shrink: 0;
 }
+
+/* 每组对应原文中无空白的连续内容；标点与字词之间不引入词块间距。 */
+.question-input-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.cloze-punctuation {
+  min-height: calc(1em + 2px);
+  line-height: 1;
+  white-space: pre-wrap;
+  color: inherit;
+}

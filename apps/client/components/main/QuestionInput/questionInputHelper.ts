@@ -2,6 +2,8 @@ import type { Ref } from "vue";
 
 import { onMounted, onUnmounted, ref } from "vue";
 
+import { normalizeClozeWord } from "~/utils/clozeText";
+
 const inputEl = ref<HTMLInputElement>();
 const focusing = ref(true);
 
@@ -94,7 +96,7 @@ export function createWordWidthMeasurer(
  * 按小写测量，保留"大小写作答都算数"的旧行为（判定比较本身也是小写归一的）。
  */
 export function getInputWordWidthEm(text: string, measureEm: (text: string) => number) {
-  return measureEm(text.toLocaleLowerCase());
+  return measureEm(normalizeClozeWord(text));
 }
 
 /**

@@ -1,10 +1,12 @@
 import { createTestingPinia } from "@pinia/testing";
-import { mount } from "@vue/test-utils";
+import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseStore } from "~/store/exercise";
 import QuestionInput from "../QuestionInput.vue";
+
+enableAutoUnmount(afterEach);
 
 describe("QuestionInput", () => {
   beforeEach(() => {
@@ -134,5 +136,50 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("5");
 
     await submitAnswer(input, "S$500");
+  });
+
+  it("keeps the original sentence punctuation visible before input, in tips, and after input", async () => {
+    const sentence =
+      "The new penalties will also be applied to other anti-social behaviour, such as putting feet on seats, littering, and eating or drinking on buses";
+    const { input, wrapper } = mountQuestionInput(sentence);
+    await wrapper.vm.$nextTick();
+    const punctuation = () => wrapper.findAll(".cloze-punctuation").map((part) => part.text());
+    expect(punctuation()).toEqual(["-", ",", ",", ","]);
+    expect(wrapper.findAll(".question-input-word")).toHaveLength(25);
+    expect(wrapper.findAll(".cloze-punctuation.border-b-2")).toHaveLength(0);
+    expect(
+      wrapper.findAll(".question-input-group")[9].findAll(".question-input-word"),
+    ).toHaveLength(2);
+
+    const { showAnswerTip, isAnswerTip } = useAnswerTip();
+    showAnswerTip();
+    await wrapper.vm.$nextTick();
+    expect(
+      wrapper
+        .findAll(".question-input-word")
+        .map((part) => part.text())
+        .slice(9, 12),
+    ).toEqual(["anti", "social", "behaviour"]);
+    await input.setValue(",.-");
+    expect(isAnswerTip()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("");
+
+    await input.setValue(sentence);
+    expect(isAnswerTip()).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe(
+      sentence.replace("-", " ").replaceAll(",", ""),
+    );
+    expect(punctuation()).toEqual(["-", ",", ",", ","]);
+    await input.trigger("keydown", { code: "Enter", key: "Enter" });
+    expect(useExerciseStore().passCurrentStatement).toHaveBeenCalledOnce();
+    expect(useExerciseStore().failCurrentStatement).not.toHaveBeenCalled();
+  });
+
+  it("keeps an apostrophe while a contraction is being typed", async () => {
+    const { input } = mountQuestionInput("don’t");
+    await input.setValue("don'");
+    expect((input.element as HTMLInputElement).value).toBe("don'");
+    await submitAnswer(input, "don't");
+    expect(useExerciseStore().passCurrentStatement).toHaveBeenCalledOnce();
   });
 });

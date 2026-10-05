@@ -47,4 +47,36 @@ describe("Answer", () => {
       "like",
     ]);
   });
+
+  it("shares the input layout and displays fixed punctuation around editable words", async () => {
+    const wrapper = mount(Answer, {
+      global: { plugins: [createTestingPinia({ createSpy: vi.fn })] },
+    });
+    useExerciseStore().currentStatement = {
+      id: "punctuation",
+      order: 1,
+      english: "“don’t” be anti-social, please...",
+    };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".question-input-word").map((word) => word.text())).toEqual([
+      "don’t",
+      "be",
+      "anti",
+      "social",
+      "please",
+    ]);
+    expect(wrapper.findAll(".cloze-punctuation").map((part) => part.text())).toEqual([
+      "“",
+      "”",
+      "-",
+      ",",
+      "...",
+    ]);
+    expect(wrapper.findAll(".question-input-group").map((group) => group.text())).toEqual([
+      "“don’t”",
+      "be",
+      "anti-social,",
+      "please...",
+    ]);
+  });
 });
