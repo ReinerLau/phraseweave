@@ -19,12 +19,6 @@
         </div>
         <div className="modal-action">
           <button
-            class="btn btn-primary"
-            @click="toShare"
-          >
-            生成打卡图
-          </button>
-          <button
             class="btn"
             @click="handleDoAgain"
           >
@@ -56,7 +50,6 @@ import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useConfetti } from "~/composables/main/confetti/useConfetti";
 import { useGameMode } from "~/composables/main/game";
-import { useShareModal } from "~/composables/main/shareImage/share";
 import { useSummary } from "~/composables/main/summary";
 import { useExerciseStore } from "~/store/exercise";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
@@ -69,7 +62,6 @@ const { goToNextCourse, completeCourse, haveNextCourse } = useCourse();
 const { handleDoAgain } = useDoAgain();
 const { showModal, hideSummary } = useSummary();
 const { confettiCanvasRef, playConfetti } = useConfetti();
-const { showShareModal } = useShareModal();
 const { updateActiveCourseMap } = useActiveCourseMap();
 
 watch(showModal, (val) => {
@@ -142,8 +134,4 @@ function useCourse() {
     haveNextCourse,
   };
 }
-
-const toShare = () => {
-  showShareModal();
-};
 </script>
