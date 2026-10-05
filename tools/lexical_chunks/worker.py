@@ -32,13 +32,12 @@ def _emit(value: Mapping[str, Any]) -> None:
 def _build_outputs(
     markdown: str,
     phraseweave: str,
-    mode: str,
     output_format: str,
     created_at: datetime | None = None,
 ) -> list[dict[str, str]]:
     timestamp = (created_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
     suffix = timestamp.strftime("%Y%m%dT%H%M%S%fZ")
-    stem = "text.review.learning-units" if mode == "review" else "text.learning-units"
+    stem = "text.review.learning-units"
     outputs = []
     if output_format in {"markdown", "both"}:
         outputs.append({"name": f"{stem}-{suffix}.md", "content": markdown})
@@ -49,14 +48,11 @@ def _build_outputs(
 
 def _generate(payload: Mapping[str, Any]) -> None:
     text = payload.get("text")
-    exercise_mode = payload.get("mode")
     output_format = payload.get("format")
     if not isinstance(text, str) or not text.strip():
         raise ValueError("Enter English text before generating.")
     if len(text) > 30000:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
-    if exercise_mode not in {"standard", "review"}:
-        raise ValueError("Choose standard or review mode.")
     if output_format not in {"markdown", "phraseweave", "both"}:
         raise ValueError("Choose an output format.")
 
@@ -73,16 +69,16 @@ def _generate(payload: Mapping[str, Any]) -> None:
     }
 
     markdown = (
-        render_markdown(plan, translations, traces, exercise_mode)
+        render_markdown(plan, translations, traces)
         if output_format in {"markdown", "both"}
         else ""
     )
     phraseweave = (
-        render_phraseweave(plan, translations, traces, exercise_mode)
+        render_phraseweave(plan, translations, traces)
         if output_format in {"phraseweave", "both"}
         else ""
     )
-    outputs = _build_outputs(markdown, phraseweave, exercise_mode, output_format)
+    outputs = _build_outputs(markdown, phraseweave, output_format)
 
     _emit({
         "ok": True,

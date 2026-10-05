@@ -50,7 +50,7 @@ export function getGeneratorStatus() {
   return localRequest<GeneratorStatus>("/api/status");
 }
 
-export function startGeneratorJob(payload: { text: string; mode: string; format: string }) {
+export function startGeneratorJob(payload: { text: string; format: string }) {
   return localRequest<{ id: string }>("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

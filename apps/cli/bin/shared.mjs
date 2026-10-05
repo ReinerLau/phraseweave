@@ -13,12 +13,12 @@ const START_TIMEOUT_MS = 5 * 60_000;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export function connectShared(socketPath = SOCKET_PATH) {
+export function connectShared(socketPath = SOCKET_PATH, timeoutMs = START_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(socketPath);
     let buffer = "";
     let settled = false;
-    const timer = setTimeout(() => fail(new Error("PhraseWeave 服务启动超时。")), START_TIMEOUT_MS);
+    const timer = setTimeout(() => fail(new Error("PhraseWeave 服务启动超时。")), timeoutMs);
     function fail(error) {
       if (settled) return;
       settled = true;
@@ -33,7 +33,14 @@ export function connectShared(socketPath = SOCKET_PATH) {
       if (end < 0 || settled) return;
       try {
         const ready = JSON.parse(buffer.slice(0, end));
-        if (ready.type !== "ready" || new URL(ready.url).hostname !== "127.0.0.1") {
+        const url = new URL(ready.url);
+        if (
+          ready.type !== "ready" ||
+          url.protocol !== "http:" ||
+          url.hostname !== "127.0.0.1" ||
+          url.username ||
+          url.password
+        ) {
           throw new Error("端口上的服务不是 PhraseWeave。");
         }
         settled = true;

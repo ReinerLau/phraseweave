@@ -149,7 +149,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             self.assertEqual([by_span[span] for span in spans], expected)
 
         translations = {"sentences": [{"sentence_chinese": "整句提示"}]}
-        rows = json.loads(render_phraseweave(plan, translations, traces, mode="review"))["statements"]
+        rows = json.loads(render_phraseweave(plan, translations, traces))["statements"]
         first_by_id = {}
         for index, row in enumerate(rows):
             first_by_id.setdefault(row["unit_id"], index)
@@ -251,7 +251,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         translations = {"sentences": [{"sentence_chinese": "鸟鸣很好。"}]}
         payload = json.loads(render_phraseweave(plan, translations, traces))
         self.assertEqual(payload["schema_version"], 4)
-        self.assertEqual(len(payload["statements"]), len(plan["sentences"][0]["units"]))
+        self.assertEqual(len(payload["statements"]), len(_exercise_steps(plan["sentences"][0], traces[0])))
         self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
         self.assertEqual(set(payload["statements"][0]), {"sentence_chinese", "english", "context_before", "context_after", "unit_id", "source_unit_ids"})
 
@@ -268,7 +268,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
     def test_review_replays_both_direct_sources_in_example_order(self):
         plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
         sentence = plan["sentences"][0]
-        steps = _exercise_steps(sentence, traces[0], "review")
+        steps = _exercise_steps(sentence, traces[0])
         rows = [(sentence["units"][index]["text"], is_review) for index, is_review in steps]
 
         for result, sources in (
@@ -294,11 +294,11 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         plan, traces = generate_plan("the USA grows.", self.nlp)
         sentence = plan["sentences"][0]
         translations = {"sentences": [{"sentence_chinese": "美国在增长。"}]}
-        steps = _exercise_steps(sentence, traces[0], "review")
+        steps = _exercise_steps(sentence, traces[0])
 
-        markdown = render_markdown(plan, translations, traces, mode="review")
+        markdown = render_markdown(plan, translations, traces)
         self.assertEqual(markdown.count("| 复习 |"), sum(is_review for _, is_review in steps))
-        payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
+        payload = json.loads(render_phraseweave(plan, translations, traces))
         self.assertEqual(payload["schema_version"], 4)
         source_row = next(row for row in payload["statements"] if row["english"] == "the USA")
         source_texts = [
@@ -321,14 +321,14 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertEqual(final_source_texts, ["the USA", "grows"])
         self.assertEqual(
             len(json.loads(render_phraseweave(plan, translations, traces))["statements"]),
-            len(sentence["units"]),
+            len(steps),
         )
 
     def test_phraseweave_sources_identify_original_units_across_review_repetitions(self):
         plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
         sentence = plan["sentences"][0]
         translations = {"sentences": [{"sentence_chinese": "整句提示"}]}
-        payload = json.loads(render_phraseweave(plan, translations, traces, mode="review"))
+        payload = json.loads(render_phraseweave(plan, translations, traces))
         rows = payload["statements"]
         target = next(row for row in rows if row["english"].endswith("USA say"))
         source_texts = [
@@ -345,7 +345,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
         sentence = plan["sentences"][0]
         self.assertIsNone(traces[0]["sources"][-1])
-        self.assertEqual(_exercise_steps(sentence, traces[0], "review")[-1], (len(sentence["units"]) - 1, False))
+        self.assertEqual(_exercise_steps(sentence, traces[0])[-1], (len(sentence["units"]) - 1, False))
 
 
 if __name__ == "__main__":

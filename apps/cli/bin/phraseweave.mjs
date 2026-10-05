@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { installExtension } from "./extension.mjs";
 import { disableRemote, loadRemoteConfig, saveRemoteConfig, startTunnel } from "./remote.mjs";
 import { GeneratorRuntime, snapshotRuntime } from "./runtime.mjs";
 import { startPageServer } from "./server.mjs";
@@ -25,7 +26,12 @@ function options(argv) {
     else if (arg === "--serve-daemon") parsed.serveDaemon = true;
     else if (arg === "--version") parsed.version = true;
     else if (arg === "--help") parsed.help = true;
-    else if (arg === "remote") {
+    else if (arg === "extension") {
+      if (argv[++index] !== "install" || index !== argv.length - 1) {
+        throw new Error("Usage: phraseweave extension install");
+      }
+      parsed.extensionInstall = true;
+    } else if (arg === "remote") {
       parsed.remote = argv[++index];
       parsed.remoteArgs = argv.slice(index + 1);
       break;
@@ -143,13 +149,19 @@ async function main() {
   if (flags.version) return process.stdout.write(`${metadata.version}\n`);
   if (flags.help) {
     return process.stdout.write(
-      "Usage: phraseweave [--port PORT] [--json-ready] [--version] | remote configure|status|disable\n",
+      "Usage: phraseweave [--port PORT] [--json-ready] [--version] | remote configure|status|disable | extension install\n",
     );
   }
   if (process.platform !== "darwin" || process.arch !== "arm64") {
     throw new Error("PhraseWeave currently supports Apple Silicon macOS only.");
   }
   if (flags.remote) return handleRemote(flags.remote, flags.remoteArgs);
+  if (flags.extensionInstall) {
+    await installExtension();
+    return process.stdout.write(
+      "Chrome 扩展宿主已安装。请加载或重新加载扩展，并运行 phraseweave 后导入文本。\n",
+    );
+  }
   if (flags.serveDaemon) return serveDaemon(flags.port ?? 3000);
   return runClient(flags);
 }
