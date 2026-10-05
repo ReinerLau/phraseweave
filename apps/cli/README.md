@@ -16,5 +16,11 @@ Exercises, exercise catalogs, and progress are stored in
 `~/Library/Application Support/PhraseWeave/phraseweave.sqlite3` and shared with the desktop app.
 On first use, existing local IndexedDB data is imported automatically.
 
+## Chrome selected-text import
+
+Run `phraseweave extension install` to register the Chrome native messaging host for your user, then load or reload the [browser extension](https://github.com/ReinerLau/phraseweave/tree/main/apps/browser-extension). No desktop app is required. Re-run the install command after moving the npm package or changing your Node executable.
+
+Keep `phraseweave` running in a terminal. Select English text in Chrome and choose **导入 PhraseWeave** from its context menu. The extension opens the running local Web UI and generates both formats automatically. Preview the Markdown, then click **保存并进入练习** to save and open the exercise. Nothing is saved before confirmation; refreshing an unsaved preview requires a new import.
+
 This package includes the `uv` executable from Astral Software Inc. Its MIT license is
 included in `third-party/uv/LICENSE-MIT`.

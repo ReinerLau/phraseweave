@@ -160,7 +160,7 @@
     </form>
 
     <section
-      v-if="!captureMode && outputFiles.length"
+      v-if="outputFiles.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -176,7 +176,7 @@
             :disabled="savingExercise"
             @click="saveAndOpenExercise"
           >
-            {{ savingExercise ? "正在保存…" : "保存并打开练习" }}
+            {{ savingExercise ? "正在保存…" : "保存并进入练习" }}
           </button>
           <button
             v-for="file in outputFiles"
@@ -192,7 +192,7 @@
     </section>
 
     <section
-      v-if="!captureMode && markdownContent !== null"
+      v-if="markdownContent !== null"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
       <div class="flex flex-wrap items-baseline justify-between gap-2">
@@ -499,7 +499,7 @@ async function runCapture() {
   jobError.value = "";
   captureStatus.value = "正在连接本地生成服务…";
   exerciseMode.value = "standard";
-  outputFormat.value = "phraseweave";
+  outputFormat.value = "both";
   englishText.value = captureText.value;
 
   try {
@@ -524,11 +524,10 @@ async function runCapture() {
     const outputs = await startJob({
       text: captureText.value,
       mode: "standard",
-      format: "phraseweave",
+      format: "both",
     });
     if (!outputs) throw new Error(jobError.value || "学习单元生成失败，请重试。");
-    captureStatus.value = "正在导入练习…";
-    await importGeneratedExercise(outputs, captureText.value);
+    captureStatus.value = "生成完成。请先预览下方结果，确认后点击“保存并进入练习”。";
   } catch (error) {
     captureError.value = describeError(error);
     captureStatus.value = "练习尚未创建。选中文本仍保留在此页面，可以重试。";
@@ -540,6 +539,7 @@ async function runCapture() {
 async function saveAndOpenExercise() {
   if (savingExercise.value) return;
   savingExercise.value = true;
+  jobError.value = "";
   try {
     await importGeneratedExercise(outputFiles.value, englishText.value);
   } catch (error) {

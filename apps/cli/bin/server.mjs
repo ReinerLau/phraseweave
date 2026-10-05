@@ -1,8 +1,9 @@
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
-import os from "node:os";
 import path from "node:path";
+
+import { DATA_DIR } from "./shared.mjs";
 
 const CAPTURE_ID = /^[a-f0-9]{32}$/;
 const JOB_ID = /^[a-f0-9]{32}$/;
@@ -45,10 +46,7 @@ async function readBody(request, maxBytes = MAX_BODY_BYTES) {
   return body;
 }
 
-export async function consumeCapture(
-  id,
-  directory = path.join(os.homedir(), "Library", "Application Support", "PhraseWeave", "captures"),
-) {
+export async function consumeCapture(id, directory = path.join(DATA_DIR, "captures")) {
   if (!CAPTURE_ID.test(id)) throw new Error("无效的选中文本请求。");
   const file = path.join(directory, `${id}.json`);
   const stat = await fs.stat(file);

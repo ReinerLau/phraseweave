@@ -1,31 +1,172 @@
-import { mountSuspended } from "@nuxt/test-utils/runtime";
-import { flushPromises } from "@vue/test-utils";
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment happy-dom
+import type { VueWrapper } from "@vue/test-utils";
+
+import { flushPromises, mount as mountComponent } from "@vue/test-utils";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Generator from "../generator.vue";
 
-describe("generator capture mode", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+const mocks = vi.hoisted(() => ({
+  route: { query: {} as Record<string, string> },
+  status: vi.fn(),
+  consume: vi.fn(),
+  start: vi.fn(),
+  job: vi.fn(),
+  release: vi.fn(),
+  save: vi.fn(),
+  navigate: vi.fn(),
+  updateActiveCourseMap: vi.fn(),
+}));
+vi.mock("#app", () => ({ useRoute: () => mocks.route, navigateTo: mocks.navigate }));
+vi.mock("~/services/generatorClient", () => ({
+  isLocalPackage: () => true,
+  getGeneratorStatus: mocks.status,
+  consumeCapture: mocks.consume,
+  startGeneratorJob: mocks.start,
+  getGeneratorJob: mocks.job,
+  releaseGeneratorJob: mocks.release,
+  retryGenerator: vi.fn(),
+}));
+vi.mock("~/services/localExerciseDb", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/services/localExerciseDb")>()),
+  saveLocalExercise: mocks.save,
+}));
+vi.mock("~/composables/courses/activeCourse", () => ({
+  useActiveCourseMap: () => ({ updateActiveCourseMap: mocks.updateActiveCourseMap }),
+}));
+
+const text = "The cat sleeps.";
+const outputs = [
+  {
+    name: "units.md",
+    content:
+      "# 学习单元\n\n中文提示：猫在睡觉。\n\n| 步骤 | 英文 |\n| --- | --- |\n| 1 | The cat |",
+  },
+  {
+    name: "units.json",
+    content: JSON.stringify({
+      schema_version: 4,
+      statements: [
+        {
+          english: "The cat",
+          context_before: "",
+          context_after: " sleeps.",
+          sentence_chinese: "猫在睡觉。",
+          unit_id: "0:0",
+          source_unit_ids: [],
+        },
+      ],
+    }),
+  },
+];
+const route = "/generator?capture=0123456789abcdef0123456789abcdef";
+let wrapper: VueWrapper | undefined;
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
+  mocks.consume.mockResolvedValue(text);
+  mocks.start.mockResolvedValue({ id: "job-1" });
+  mocks.job.mockResolvedValue({ id: "job-1", state: "complete", result: { outputs } });
+  mocks.release.mockResolvedValue(undefined);
+  mocks.save.mockResolvedValue(undefined);
+  mocks.navigate.mockResolvedValue(undefined);
+});
+afterEach(() => {
+  wrapper?.unmount();
+  wrapper = undefined;
+});
+
+async function mount(routeValue = route) {
+  mocks.route.query = routeValue.includes("capture=")
+    ? { capture: "0123456789abcdef0123456789abcdef" }
+    : {};
+  wrapper = mountComponent(Generator, { global: { stubs: { BackLink: true, NuxtLink: true } } });
+  await flushPromises();
+  return wrapper;
+}
+function button(label: string) {
+  return wrapper!.findAll("button").find((item) => item.text() === label)!;
+}
+
+describe("generator capture preview", () => {
+  it("generates both formats and previews without saving or navigating", async () => {
+    await mount();
+    expect(mocks.status).toHaveBeenCalled();
+    expect(mocks.start).toHaveBeenCalledWith({ text, mode: "standard", format: "both" });
+    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(wrapper!.text()).toContain("The cat");
+    expect(wrapper!.text()).toContain("下载 units.md");
+    expect(wrapper!.text()).toContain("下载 units.json");
+    expect(button("保存并进入练习")).toBeDefined();
+    expect(mocks.save).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
-  it("checks the local generator service when capture mode opens", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ runtimeReady: true, modelDownloaded: true }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const wrapper = await mountSuspended(Generator, {
-      route: "/generator?capture=0123456789abcdef0123456789abcdef",
-    });
-    await flushPromises();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8765/api/status",
-      expect.objectContaining({ targetAddressSpace: "loopback" }),
+  it("saves once on confirmation, disables the button, then opens the exercise", async () => {
+    await mount();
+    let finishSave!: () => void;
+    mocks.save.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
     );
-    expect(wrapper.text()).toContain("本地服务和翻译模型已就绪。");
-    wrapper.unmount();
+    await button("保存并进入练习").trigger("click");
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+    expect(button("正在保存…").attributes("disabled")).toBeDefined();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    finishSave();
+    await flushPromises();
+    const pack = mocks.save.mock.calls[0][0];
+    expect(mocks.navigate).toHaveBeenCalledWith(`/game/${pack.id}/${pack.courses[0].id}`);
+    expect(mocks.updateActiveCourseMap).toHaveBeenCalledWith(pack.id, pack.courses[0].id);
+  });
+
+  it("keeps preview after a save failure and retries without regenerating", async () => {
+    await mount();
+    mocks.save.mockRejectedValueOnce(new Error("保存失败"));
+    await button("保存并进入练习").trigger("click");
+    await flushPromises();
+    expect(wrapper!.text()).toContain("保存失败");
+    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    await button("保存并进入练习").trigger("click");
+    await flushPromises();
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.save).toHaveBeenCalledTimes(2);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed generation using the retained selection", async () => {
+    mocks.job.mockResolvedValueOnce({ id: "job-1", state: "failed", error: "模型失败" });
+    await mount();
+    expect(wrapper!.text()).toContain("模型失败");
+    expect(mocks.save).not.toHaveBeenCalled();
+    await button("重试").trigger("click");
+    await flushPromises();
+    expect(mocks.consume).toHaveBeenCalledTimes(1);
+    expect(mocks.start).toHaveBeenCalledTimes(2);
+    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("reports expired captures without generating", async () => {
+    mocks.consume.mockRejectedValue(new Error("选中文本已过期，请重新从浏览器导入。"));
+    await mount();
+    expect(wrapper!.text()).toContain("选中文本已过期");
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary generation manual and previews its results", async () => {
+    await mount("/generator");
+    expect(mocks.consume).not.toHaveBeenCalled();
+    expect(mocks.start).not.toHaveBeenCalled();
+    await wrapper!.find("textarea").setValue(text);
+    await wrapper!.find("form").trigger("submit");
+    await flushPromises();
+    expect(mocks.start).toHaveBeenCalledWith({ text, mode: "standard", format: "both" });
+    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(button("保存并进入练习")).toBeDefined();
+    expect(mocks.save).not.toHaveBeenCalled();
   });
 });
