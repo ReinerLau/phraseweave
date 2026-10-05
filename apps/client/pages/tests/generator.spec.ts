@@ -59,11 +59,23 @@ const outputs = [
     }),
   },
 ];
-const route = "/generator?capture=0123456789abcdef0123456789abcdef";
+const legacyRoute = "/generator?capture=0123456789abcdef0123456789abcdef";
+const fragmentRoute = (text: string) =>
+  `/generator#text=${Buffer.from(text).toString("base64url")}`;
+const route = fragmentRoute(text);
 let wrapper: VueWrapper | undefined;
+
+function setUrl(url: string) {
+  const browser = window as unknown as { happyDOM: { setURL: (url: string) => void } };
+  browser.happyDOM.setURL(new URL(url, window.location.href).href);
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // This happy-dom version does not implement History.replaceState.
+  vi.spyOn(window.history, "replaceState").mockImplementation((_state, _title, url) => {
+    if (url != null) setUrl(String(url));
+  });
   mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
   mocks.consume.mockResolvedValue(text);
   mocks.start.mockResolvedValue({ id: "job-1" });
@@ -75,9 +87,12 @@ beforeEach(() => {
 afterEach(() => {
   wrapper?.unmount();
   wrapper = undefined;
+  setUrl("/");
+  vi.restoreAllMocks();
 });
 
 async function mount(routeValue = route) {
+  setUrl(routeValue);
   mocks.route.query = routeValue.includes("capture=")
     ? { capture: "0123456789abcdef0123456789abcdef" }
     : {};
@@ -94,6 +109,8 @@ describe("generator capture preview", () => {
     await mount();
     expect(mocks.status).toHaveBeenCalled();
     expect(mocks.start).toHaveBeenCalledWith({ text, format: "both" });
+    expect(mocks.consume).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe("");
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(wrapper!.text()).toContain("The cat");
     expect(wrapper!.text()).toContain("下载 units.md");
@@ -144,7 +161,7 @@ describe("generator capture preview", () => {
     expect(mocks.save).not.toHaveBeenCalled();
     await button("重试").trigger("click");
     await flushPromises();
-    expect(mocks.consume).toHaveBeenCalledTimes(1);
+    expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).toHaveBeenCalledTimes(2);
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(mocks.navigate).not.toHaveBeenCalled();
@@ -152,9 +169,50 @@ describe("generator capture preview", () => {
 
   it("reports expired captures without generating", async () => {
     mocks.consume.mockRejectedValue(new Error("选中文本已过期，请重新从浏览器导入。"));
-    await mount();
+    await mount(legacyRoute);
     expect(wrapper!.text()).toContain("选中文本已过期");
     expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it("decodes fragment text exactly once and removes it before generation", async () => {
+    const selection = "English & 中文 + 100% = # ?\nsecond line";
+    await mount(fragmentRoute(selection));
+    expect(mocks.start).toHaveBeenCalledWith({ text: selection, format: "both" });
+    expect(window.location.hash).toBe("");
+    expect(mocks.consume).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty and oversized fragment selections without generating", async () => {
+    for (const selection of ["", "a".repeat(30001)]) {
+      await mount(fragmentRoute(selection));
+      expect(mocks.start).not.toHaveBeenCalled();
+      expect(window.location.hash).toBe("");
+      expect(wrapper!.find('[role="alert"]').exists()).toBe(true);
+      wrapper!.unmount();
+      wrapper = undefined;
+    }
+  });
+
+  it("reports malformed fragment encoding without generating", async () => {
+    for (const encoded of ["invalid%", "a", "_w"]) {
+      await mount(`/generator#text=${encoded}`);
+      expect(mocks.start).not.toHaveBeenCalled();
+      expect(window.location.hash).toBe("");
+      expect(wrapper!.text()).toContain("无效的选中文本");
+      wrapper!.unmount();
+      wrapper = undefined;
+    }
+  });
+
+  it("does not regenerate a selection when the cleaned page is refreshed", async () => {
+    await mount();
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    const cleaned = window.location.pathname + window.location.search;
+    wrapper!.unmount();
+    wrapper = undefined;
+    await mount(cleaned);
+    expect(wrapper!.find("textarea").exists()).toBe(true);
+    expect(mocks.start).toHaveBeenCalledTimes(1);
   });
 
   it("keeps ordinary generation manual and previews its results", async () => {

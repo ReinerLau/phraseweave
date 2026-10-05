@@ -285,7 +285,12 @@ type MarkdownBlock =
 const route = useRoute();
 const rawCaptureId = route.query.capture;
 const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
-const captureMode = Boolean(captureId);
+// Base64URL survives the router's fragment normalization without changing text delimiters.
+const selectedText =
+  typeof window === "undefined"
+    ? null
+    : new URLSearchParams(window.location.hash.slice(1)).get("text");
+const captureMode = selectedText !== null || Boolean(captureId);
 const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
 const serviceConnected = ref(false);
@@ -325,7 +330,26 @@ const canGenerate = computed(() => serviceReady.value && englishText.value.trim(
 
 onMounted(() => {
   serviceCheck = connectService();
-  if (captureMode) {
+  if (selectedText !== null) {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      window.location.pathname + window.location.search,
+    );
+    try {
+      if (!/^[A-Za-z0-9_-]*$/.test(selectedText) || selectedText.length > 160000) {
+        throw new Error("无效的选中文本，请从浏览器重新导入。");
+      }
+      const bytes = Uint8Array.from(
+        atob(selectedText.replaceAll("-", "+").replaceAll("_", "/")),
+        (character) => character.charCodeAt(0),
+      );
+      receiveCaptureText(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    } catch {
+      captureError.value = "无效的选中文本，请从浏览器重新导入。";
+      captureStatus.value = "无法读取选中文本。";
+    }
+  } else if (captureId) {
     if (!/^[a-f0-9-]{32,36}$/i.test(captureId)) {
       captureError.value = "无效的浏览器扩展请求，请从文章中重新选择文本。";
       captureStatus.value = "无法读取选中文本。";

@@ -1,14 +1,14 @@
 # PhraseWeave browser extension
 
-This Chrome extension adds the selected-text action **导入 PhraseWeave**. It opens the CLI's local Web UI in a new Chrome tab and automatically generates Markdown and PhraseWeave JSON using the single review sequence, which replays direct source units before their combination. Preview the generated learning units, then click **保存并进入练习** to save and start practicing. Nothing is saved to the exercise library before confirmation.
+This Chrome extension adds the selected-text action **导入 PhraseWeave**. It opens `http://127.0.0.1:3000/generator` in a new Chrome tab with the selected text in the URL fragment. The Web UI reads and clears the fragment, generates Markdown and PhraseWeave JSON using the single review sequence, and previews the result. Click **保存并进入练习** to save and start practicing.
 
 ## Setup
 
-1. Install the [npm CLI](../../docs/desktop.md), then run `phraseweave extension install`. This registers the native messaging host for the current Chrome user; no desktop app or administrator access is required.
-2. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked** with this directory. Reload the extension after updating it.
+1. Install the [npm CLI](../../docs/desktop.md) and download the extension ZIP from [GitHub Releases](https://github.com/ReinerLau/phraseweave/releases), then extract it to a permanent folder.
+2. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked** with the extracted directory. Reload the extension after updating it.
 3. Run `phraseweave` in a terminal and keep it running while using the extension.
 4. Select English text on a web page, then right-click and choose **导入 PhraseWeave**.
 
-The extension uses the running service's actual port and never starts the desktop app or a second service. If the service is stopped, the notification asks you to run `phraseweave`. If the host is missing, run `phraseweave extension install` and reload the extension. Re-run that command if you move the npm installation or change the Node executable.
+No desktop app, Native Messaging host, or CLI extension installation command is required. The extension only opens a tab; the Web UI calls the CLI's local HTTP APIs. If the service is stopped, Chrome cannot connect to the page: start `phraseweave`, then import again. If port 3000 is occupied, the CLI reports an error rather than switching ports.
 
-Selected text is passed through Native Messaging and a private, single-use local file; it is not placed in the URL. A capture expires after 10 minutes. Generated previews remain in the page until saved; refreshing the page requires a fresh import from the extension.
+The fragment can carry up to 30,000 characters, including Unicode and line breaks; it is not sent in the initial page request. The Web UI removes it on receipt. Nothing is saved to the exercise library before confirmation. Generated previews remain in the page until saved; refreshing the page requires a fresh import from the extension.

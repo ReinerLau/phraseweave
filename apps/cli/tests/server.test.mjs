@@ -98,16 +98,17 @@ test("accepts only the configured remote origin for API mutations", async () => 
   }
 });
 
-test("uses a free page port when the preferred port belongs to another program", async () => {
+test("refuses an occupied page port instead of switching ports", async () => {
   const occupied = http.createServer((_request, response) => response.end("other app"));
   await new Promise((resolve) => occupied.listen(0, "127.0.0.1", resolve));
   const preferred = occupied.address().port;
-  const fallback = await startPageServer({ clientRoot: root, runtime: {}, port: preferred });
   try {
-    assert.notEqual(new URL(fallback.url).port, String(preferred));
-    assert.match(await (await fetch(fallback.url)).text(), /PhraseWeave/);
+    await assert.rejects(
+      startPageServer({ clientRoot: root, runtime: {}, port: preferred }),
+      /已被占用/,
+    );
+    assert.equal(await (await fetch(`http://127.0.0.1:${preferred}/`)).text(), "other app");
   } finally {
-    await new Promise((resolve) => fallback.server.close(resolve));
     await new Promise((resolve) => occupied.close(resolve));
   }
 });

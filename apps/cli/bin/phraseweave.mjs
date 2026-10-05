@@ -3,11 +3,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { installExtension } from "./extension.mjs";
 import { disableRemote, loadRemoteConfig, saveRemoteConfig, startTunnel } from "./remote.mjs";
 import { GeneratorRuntime, snapshotRuntime } from "./runtime.mjs";
 import { startPageServer } from "./server.mjs";
-import { connectOrStart, DATA_DIR, startControlServer } from "./shared.mjs";
+import { connectOrStart, startControlServer, WEB_UI_PORT } from "./shared.mjs";
 
 const entry = fileURLToPath(import.meta.url);
 const packageRoot = path.resolve(path.dirname(entry), "..");
@@ -19,35 +18,21 @@ function options(argv) {
     const arg = argv[index];
     if (arg === "--port") {
       const value = Number(argv[++index]);
-      if (!Number.isInteger(value) || value < 0 || value > 65535) throw new Error("Invalid port.");
+      if (value !== WEB_UI_PORT)
+        throw new Error("Web UI 地址固定为 http://127.0.0.1:3000，不能更换端口。");
       parsed.port = value;
     } else if (arg === "--json-ready") parsed.jsonReady = true;
     else if (arg === "--launcher-client") parsed.launcherClient = true;
     else if (arg === "--serve-daemon") parsed.serveDaemon = true;
     else if (arg === "--version") parsed.version = true;
     else if (arg === "--help") parsed.help = true;
-    else if (arg === "extension") {
-      if (argv[++index] !== "install" || index !== argv.length - 1) {
-        throw new Error("Usage: phraseweave extension install");
-      }
-      parsed.extensionInstall = true;
-    } else if (arg === "remote") {
+    else if (arg === "remote") {
       parsed.remote = argv[++index];
       parsed.remoteArgs = argv.slice(index + 1);
       break;
     } else throw new Error(`Unknown argument: ${arg}`);
   }
   return parsed;
-}
-
-async function preferredPagePort() {
-  try {
-    const port = Number(await fs.readFile(path.join(DATA_DIR, "page-server-port"), "utf8"));
-    if (Number.isInteger(port) && port > 0 && port < 65536) return port;
-  } catch {
-    // New installations use port 3000.
-  }
-  return 3000;
 }
 
 async function handleRemote(command, args) {
@@ -116,7 +101,6 @@ async function serveDaemon(port) {
       remoteOrigin: remote?.origin,
     });
     server = started.server;
-    await fs.writeFile(path.join(DATA_DIR, "page-server-port"), `${new URL(started.url).port}\n`);
     tunnel = await startTunnel(remote, started.url);
     control.setReady({ type: "ready", url: started.url, version: metadata.version });
   } catch (error) {
@@ -128,7 +112,7 @@ async function serveDaemon(port) {
 async function runClient(flags) {
   const { socket, ready } = await connectOrStart({
     entry,
-    port: flags.port ?? (await preferredPagePort()),
+    port: WEB_UI_PORT,
   });
   if (flags.jsonReady) process.stdout.write(`${JSON.stringify(ready)}\n`);
   else process.stdout.write(`PhraseWeave: ${ready.url}\nPress Ctrl-C to stop.\n`);
@@ -149,20 +133,14 @@ async function main() {
   if (flags.version) return process.stdout.write(`${metadata.version}\n`);
   if (flags.help) {
     return process.stdout.write(
-      "Usage: phraseweave [--port PORT] [--json-ready] [--version] | remote configure|status|disable | extension install\n",
+      "Usage: phraseweave [--json-ready] [--version] | remote configure|status|disable\n",
     );
   }
   if (process.platform !== "darwin" || process.arch !== "arm64") {
     throw new Error("PhraseWeave currently supports Apple Silicon macOS only.");
   }
   if (flags.remote) return handleRemote(flags.remote, flags.remoteArgs);
-  if (flags.extensionInstall) {
-    await installExtension();
-    return process.stdout.write(
-      "Chrome 扩展宿主已安装。请加载或重新加载扩展，并运行 phraseweave 后导入文本。\n",
-    );
-  }
-  if (flags.serveDaemon) return serveDaemon(flags.port ?? 3000);
+  if (flags.serveDaemon) return serveDaemon(WEB_UI_PORT);
   return runClient(flags);
 }
 

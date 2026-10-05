@@ -2,7 +2,7 @@
 
 PhraseWeave 的本地页面和生成引擎由 GitHub Packages 上的 `@reinerlau/phraseweave` 提供。首版支持 Apple Silicon macOS。终端 CLI 与桌面启动器连接同一个本机服务、页面端口和生成引擎。练习、练习目录和学习进度保存在 `~/Library/Application Support/PhraseWeave/phraseweave.sqlite3`，电脑与手机共用。
 
-首次使用共享存储时，应用会把当前浏览器配置中的旧 IndexedDB 练习和进度导入本机数据库。本机页面端口会尽量沿用上次端口；若被其他程序占用，则选择空闲端口。GitHub Pages 浏览器数据不迁移。
+首次使用共享存储时，应用会把当前浏览器配置中的旧 IndexedDB 练习和进度导入本机数据库。本机 Web UI 地址固定为 `http://127.0.0.1:3000/`；若端口被其他程序占用，启动会报错，不再自动换端口。GitHub Pages 浏览器数据不迁移。
 
 ## 首次安装
 
@@ -21,7 +21,7 @@ npm install -g @reinerlau/phraseweave
 phraseweave
 ```
 
-打开终端输出的 `http://127.0.0.1:端口/` 地址。默认端口是 3000；若被占用，命令会输出实际使用的端口。服务只监听本机，按 Ctrl-C 关闭这个终端入口；最后一个本地入口关闭后，共享服务停止。首次启动自动准备 Python 3.13、锁定的依赖和约 4 GB 的 Hy-MT2 模型，页面会显示生成引擎的准备状态。
+打开固定地址 `http://127.0.0.1:3000/`。若 3000 端口被占用，先退出占用该端口的程序再启动；不支持改用其他端口。使用其他端口的旧实例必须先关闭所有 CLI 和桌面入口再升级。服务只监听本机，按 Ctrl-C 关闭这个终端入口；最后一个本地入口关闭后，共享服务停止。首次启动自动准备 Python 3.13、锁定的依赖和约 4 GB 的 Hy-MT2 模型，页面会显示生成引擎的准备状态。
 
 已安装新版桌面启动器的用户可直接点击图标。启动器会等待 npm 包更新完成，再打开窗口；离线或更新失败时使用已安装的版本。如果包尚未安装且无法访问 GitHub Packages，窗口会显示错误和登录指引。若已有服务运行，启动器直接使用该版本与页面；更新在服务完全停止后下次启动时生效。
 
@@ -50,11 +50,11 @@ pnpm desktop:make:mac
 
 ## Chrome 扩展
 
-安装 npm CLI 后执行 `phraseweave extension install`，在当前用户的 Chrome 配置目录注册 Native Messaging 宿主，无需安装桌面启动器或管理员权限。随后在 `chrome://extensions` 加载或重新加载扩展。迁移 npm 安装目录或更换 Node 可执行文件后，重新执行安装命令更新路径。
+安装 npm CLI，并从 GitHub Release 下载扩展 ZIP，解压到固定目录。在 `chrome://extensions` 开启开发者模式，加载已解压的扩展；更新扩展后重新加载即可。无需桌面应用或 Native Messaging 宿主，不再需要 `phraseweave extension install`。
 
-先在终端运行 `phraseweave` 并保持运行，再选择英文文本，右键点击「导入 PhraseWeave」。扩展读取正在运行的服务实际端口，在新的 Chrome 标签页打开 Web UI，自动生成 Markdown 和 PhraseWeave JSON，统一使用复习题序：组合学习单元前重放直接来源。先查看 Markdown 预览，确认后点击「保存并进入练习」才写入共享练习库并打开练习。预览只保留在页面中，刷新后需要重新导入。
+先在终端运行 `phraseweave` 并保持运行，再选择英文文本，右键点击「导入 PhraseWeave」。扩展在新的 Chrome 标签页打开固定地址 `http://127.0.0.1:3000/generator`，通过 URL 片段携带选中文本；页面读取后清除片段，再调用本机服务 API，自动生成 Markdown 和 PhraseWeave JSON，统一使用复习题序：组合学习单元前重放直接来源。先查看 Markdown 预览，确认后点击「保存并进入练习」才写入共享练习库并打开练习。预览只保留在页面中，刷新后需要重新导入。
 
-扩展不会启动桌面应用或自动启动服务；服务未运行时会提示先执行 `phraseweave`。旧桌面安装包注册的宿主不再用于新版扩展，不需要重新安装桌面启动器。
+扩展只打开浏览器标签页，不会自动启动服务。服务未运行时，Chrome 无法连接该页面；先运行 `phraseweave` 后重新导入即可。之前安装的宿主注册不影响新版扩展，新版不会使用它们，不需要重新安装桌面启动器。
 
 ## 手机访问整个应用
 
@@ -73,6 +73,6 @@ pnpm desktop:make:mac
      --aud-tag ACCESS_AUD_TAG
    ```
 
-4. 重新启动 `phraseweave` 或桌面启动器。CLI 会根据实际页面端口运行 `cloudflared`，无需固定本机端口。手机用浏览器打开固定地址并输入邮件验证码。可用 `phraseweave remote status` 查看已配置的地址，Tunnel 错误记录在 `~/Library/Application Support/PhraseWeave/cloudflared.log`。
+4. 重新启动 `phraseweave` 或桌面启动器。CLI 会让 `cloudflared` 转发到固定的本机 3000 端口。手机用浏览器打开固定地址并输入邮件验证码。可用 `phraseweave remote status` 查看已配置的地址，Tunnel 错误记录在 `~/Library/Application Support/PhraseWeave/cloudflared.log`。
 
 `phraseweave remote disable` 会删除远程配置，重启后生效。配置和 Tunnel 凭据只保存在本机，不提交到仓库。请确保域名的 Access 应用覆盖所有路径；CLI 会让 `cloudflared` 在转发前验证 Access JWT。当前正在运行的旧版 CLI 不支持共享控制 socket，升级后先关闭旧实例再启动新版本。

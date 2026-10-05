@@ -4,6 +4,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+export const WEB_UI_PORT = 3000;
+
 export const DATA_DIR =
   process.env.PHRASEWEAVE_DATA_DIR ||
   path.join(os.homedir(), "Library", "Application Support", "PhraseWeave");
@@ -54,26 +56,49 @@ export function connectShared(socketPath = SOCKET_PATH, timeoutMs = START_TIMEOU
   });
 }
 
-async function tryConnect() {
+async function tryConnect(port) {
   try {
-    return await connectShared();
+    const connection = await connectShared();
+    if (port !== 0 && new URL(connection.ready.url).port !== String(port)) {
+      connection.socket.destroy();
+      throw new Error(
+        "正在运行的 PhraseWeave 使用旧端口，请先关闭所有旧 CLI 和桌面入口，再重新启动。",
+      );
+    }
+    return connection;
   } catch (error) {
     if (["ENOENT", "ECONNREFUSED"].includes(error.code)) return undefined;
     throw error;
   }
 }
 
-export async function connectOrStart({ entry, port, env = process.env }) {
+export async function connectOrStart({ entry, port = WEB_UI_PORT, env = process.env }) {
   await fs.mkdir(DATA_DIR, { recursive: true, mode: 0o700 });
-  const existing = await tryConnect();
+  const existing = await tryConnect(port);
   if (existing) return existing;
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
       await fs.mkdir(START_LOCK);
       try {
-        const connected = await tryConnect();
+        const connected = await tryConnect(port);
         if (connected) return connected;
+        if (port !== 0) {
+          const probe = net.createServer();
+          try {
+            await new Promise((resolve, reject) => {
+              probe.once("error", reject);
+              probe.listen(port, "127.0.0.1", resolve);
+            });
+          } catch (error) {
+            if (error.code === "EADDRINUSE") {
+              throw new Error(`本机 Web UI 端口 ${port} 已被占用，请退出占用该端口的程序后重试。`);
+            }
+            throw error;
+          } finally {
+            if (probe.listening) await new Promise((resolve) => probe.close(resolve));
+          }
+        }
         const log = await fs.open(path.join(DATA_DIR, "service.log"), "a", 0o600);
         let startupError;
         try {
@@ -98,7 +123,7 @@ export async function connectOrStart({ entry, port, env = process.env }) {
               `PhraseWeave 服务启动失败：${startupError.message} 请查看 ${path.join(DATA_DIR, "service.log")}`,
             );
           }
-          const started = await tryConnect();
+          const started = await tryConnect(port);
           if (started) return started;
           await delay(100);
         }
@@ -108,7 +133,7 @@ export async function connectOrStart({ entry, port, env = process.env }) {
       }
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      const connected = await tryConnect();
+      const connected = await tryConnect(port);
       if (connected) return connected;
       const stat = await fs.stat(START_LOCK).catch(() => undefined);
       if (stat && Date.now() - stat.mtimeMs > START_TIMEOUT_MS) {
