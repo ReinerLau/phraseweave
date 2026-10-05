@@ -85,6 +85,12 @@ describe("getInputWordWidthEm", () => {
       getInputWordWidthEm("this", measureEm),
     );
   });
+
+  it("按同一种撇号测量容量，避免等价直撇号输入被弯撇号目标截断", () => {
+    const measureEm = (text: string) =>
+      [...text].reduce((width, character) => width + (character === "’" ? 0.5 : 1), 0);
+    expect(getInputWordWidthEm("don't", measureEm)).toBe(getInputWordWidthEm("don’t", measureEm));
+  });
 });
 
 describe("getWordBlockWidthEm", () => {

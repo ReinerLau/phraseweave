@@ -25,13 +25,15 @@
         ref="answerWordsEl"
         class="answer-words question-input-words relative inline-flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       >
-        <span
-          v-for="(word, index) in words"
-          :key="index"
-          class="question-input-word min-w-0 max-w-full rounded-[2px] leading-none text-[#20202099] dark:text-gray-300"
-          :style="{ width: `${wordWidth(word)}em` }"
-          >{{ word }}</span
-        >
+        <ClozeText :tokens="courseStore.clozeTokens">
+          <template #word="{ token }">
+            <span
+              class="question-input-word min-w-0 max-w-full rounded-[2px] leading-none text-[#20202099] dark:text-gray-300"
+              :style="{ width: `${wordWidth(token.text)}em` }"
+              >{{ token.text }}</span
+            >
+          </template>
+        </ClozeText>
         <span
           ref="probeEl"
           class="pointer-events-none absolute h-0 w-max whitespace-pre opacity-0"
@@ -52,6 +54,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
+import ClozeText from "~/components/main/QuestionInput/ClozeText.vue";
 import { useWordWidths } from "~/components/main/QuestionInput/questionInputHelper";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
@@ -65,9 +68,6 @@ const { goToNextQuestion: navigateToNextQuestion } = useExerciseNavigation();
 const questionStyle = computed(() => ({
   "--question-font-size": `${questionFontSize.value}px`,
 }));
-
-// 与输入区同源的词（english.split(" ")），保证答题后逐块对位
-const words = computed(() => courseStore.words);
 
 const answerWordsEl = ref<HTMLElement>();
 const { probeEl, wordWidth } = useWordWidths(answerWordsEl);

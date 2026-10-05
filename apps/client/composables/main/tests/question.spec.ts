@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { nextTick, ref } from "vue";
 
 import {
   containsAllowedQuestionCharacter,
@@ -10,6 +11,109 @@ import {
 describe("question", () => {
   const characterWidth = (word: string) => word.length;
   const targetCapacity = (word: string) => word.length;
+
+  it("does not require a comma in a word answer", () => {
+    const { userInputWords, setInputValue, submitAnswer } = useInput({
+      source: () => "seats,",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+    });
+    setInputValue("seats");
+    const correctCallback = vi.fn();
+    submitAnswer(correctCallback);
+    expect(correctCallback).toHaveBeenCalledOnce();
+    expect(userInputWords.map((word) => word.text)).toEqual(["seats"]);
+  });
+
+  it("uses separate blanks on either side of a hyphen", () => {
+    const { userInputWords, setInputValue, submitAnswer } = useInput({
+      source: () => "anti-social",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+      getInputWordWidth: characterWidth,
+      getInputWordCapacity: targetCapacity,
+    });
+    setInputValue("anti social");
+    const correctCallback = vi.fn();
+    submitAnswer(correctCallback);
+    expect(correctCallback).toHaveBeenCalledOnce();
+    expect(userInputWords.map((word) => word.text)).toEqual(["anti", "social"]);
+  });
+
+  it("switches across the displayed hyphen with a space and back with backspace", () => {
+    const getCursor = vi.fn();
+    const { userInputWords, setInputValue, handleKeyboardInput } = useInput({
+      source: () => "anti-social,",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: getCursor,
+    });
+    getCursor.mockReturnValue(5);
+    setInputValue("anti ");
+    expect(userInputWords[1].isActive).toBe(true);
+    const preventDefault = vi.fn();
+    handleKeyboardInput({ code: "Backspace", preventDefault } as unknown as KeyboardEvent);
+    expect(preventDefault).not.toHaveBeenCalled();
+    getCursor.mockReturnValue(4);
+    setInputValue("anti");
+    expect(userInputWords[0].isActive).toBe(true);
+
+    getCursor.mockReturnValue(11);
+    setInputValue("anti social");
+    const rightCallback = vi.fn();
+    handleKeyboardInput(
+      { code: "Space", preventDefault, stopPropagation: vi.fn() } as unknown as KeyboardEvent,
+      { useSpaceSubmitAnswer: { enable: true, rightCallback } },
+    );
+    expect(rightCallback).toHaveBeenCalledOnce();
+  });
+
+  it("pastes source punctuation and restores the cursor in the normalized input", async () => {
+    const setCursor = vi.fn();
+    const value = "(anti-social), seats.";
+    const { inputValue, userInputWords, setInputValue, submitAnswer } = useInput({
+      source: () => value,
+      setInputCursorPosition: setCursor,
+      getInputCursorPosition: () => value.length,
+      getInputWordWidth: characterWidth,
+      getInputWordCapacity: targetCapacity,
+    });
+    setInputValue(value);
+    await nextTick();
+    expect(inputValue.value).toBe("anti social seats");
+    expect(setCursor).toHaveBeenLastCalledWith("anti social seats".length);
+    expect(userInputWords[2].isActive).toBe(true);
+    const correct = vi.fn();
+    submitAnswer(correct);
+    expect(correct).toHaveBeenCalledOnce();
+  });
+
+  it("marks only the misspelled side and refreshes blanks on recovery", async () => {
+    const source = ref("anti-social");
+    const { userInputWords, inputValue, setInputValue, submitAnswer } = useInput({
+      source: () => source.value,
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+    });
+    setInputValue("anti sociel");
+    submitAnswer();
+    expect(userInputWords.map((word) => word.incorrect)).toEqual([false, true]);
+    source.value = "seats,";
+    await nextTick();
+    expect(userInputWords.map((word) => word.text)).toEqual(["seats"]);
+    expect(inputValue.value).toBe("");
+    expect(userInputWords[0].incorrect).toBe(false);
+  });
+
+  it("safely handles punctuation-only source text", () => {
+    const { userInputWords, setInputValue, handleKeyboardInput } = useInput({
+      source: () => "...",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+    });
+    expect(userInputWords).toHaveLength(0);
+    expect(() => setInputValue("...")).not.toThrow();
+    expect(() => handleKeyboardInput({ code: "Space" } as KeyboardEvent)).not.toThrow();
+  });
 
   it("fits each input word to its target word capacity", () => {
     expect(fitInputToWordWidths("iiiii eate", ["iii", "eat"], characterWidth, targetCapacity)).toBe(
@@ -142,8 +246,8 @@ describe("question", () => {
 
     setInputValue("S中$500\t costs €20，𠀀");
 
-    expect(inputValue.value).toBe("S$500 costs €20，");
-    expect(userInputWords.map((word) => word.userInput)).toEqual(["S$500", "costs", "€20，"]);
+    expect(inputValue.value).toBe("S$500 costs €20");
+    expect(userInputWords.map((word) => word.userInput)).toEqual(["S$500", "costs", "€20"]);
 
     const correctCallback = vi.fn();
     submitAnswer(correctCallback);
@@ -170,7 +274,7 @@ describe("question", () => {
     expect(wrongCallback).toHaveBeenCalledOnce();
   });
 
-  it("matches straight and curly quotes without mixing single and double quotes", () => {
+  it("ignores surrounding quotes while matching straight and curly internal apostrophes", () => {
     const { setInputValue, submitAnswer } = useInput({
       source: () => "He said “don’t”",
       setInputCursorPosition: () => {},
@@ -183,6 +287,10 @@ describe("question", () => {
     expect(correctCallback).toHaveBeenCalledOnce();
 
     setInputValue("He said 'don't'");
+    submitAnswer(correctCallback);
+    expect(correctCallback).toHaveBeenCalledTimes(2);
+
+    setInputValue("He said dont");
     const wrongCallback = vi.fn();
     submitAnswer(undefined, wrongCallback);
     expect(wrongCallback).toHaveBeenCalledOnce();

@@ -179,7 +179,7 @@ function assertAnswerStateMatches(before: PracticeState) {
     const root = $root[0];
     const prompt = root.querySelector<HTMLElement>('[data-testid="answer-prompt"]')!;
     const blocks = Array.from(
-      root.querySelectorAll<HTMLElement>(".answer-words > span:not([aria-hidden])"),
+      root.querySelectorAll<HTMLElement>(".answer-words .question-input-word"),
     );
     expect(blocks.length, "answer view renders word blocks").to.be.greaterThan(0);
     expect(blocks.length, "answer has one block per input block").to.equal(before.blocks.length);
