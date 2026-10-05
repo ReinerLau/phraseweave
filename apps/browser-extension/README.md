@@ -1,6 +1,6 @@
 # PhraseWeave browser extension
 
-This Chrome extension adds the selected-text action **导入 PhraseWeave**. It opens the CLI's local Web UI in a new Chrome tab and automatically generates Markdown and PhraseWeave JSON. Preview the generated learning units, then click **保存并进入练习** to save and start practicing. Nothing is saved to the exercise library before confirmation.
+This Chrome extension adds the selected-text action **导入 PhraseWeave**. It opens the CLI's local Web UI in a new Chrome tab and automatically generates Markdown and PhraseWeave JSON using the single review sequence, which replays direct source units before their combination. Preview the generated learning units, then click **保存并进入练习** to save and start practicing. Nothing is saved to the exercise library before confirmation.
 
 ## Setup
 

@@ -52,7 +52,7 @@ pnpm desktop:make:mac
 
 安装 npm CLI 后执行 `phraseweave extension install`，在当前用户的 Chrome 配置目录注册 Native Messaging 宿主，无需安装桌面启动器或管理员权限。随后在 `chrome://extensions` 加载或重新加载扩展。迁移 npm 安装目录或更换 Node 可执行文件后，重新执行安装命令更新路径。
 
-先在终端运行 `phraseweave` 并保持运行，再选择英文文本，右键点击「导入 PhraseWeave」。扩展读取正在运行的服务实际端口，在新的 Chrome 标签页打开 Web UI，自动生成 Markdown 和 PhraseWeave JSON。先查看 Markdown 预览，确认后点击「保存并进入练习」才写入共享练习库并打开练习。预览只保留在页面中，刷新后需要重新导入。
+先在终端运行 `phraseweave` 并保持运行，再选择英文文本，右键点击「导入 PhraseWeave」。扩展读取正在运行的服务实际端口，在新的 Chrome 标签页打开 Web UI，自动生成 Markdown 和 PhraseWeave JSON，统一使用复习题序：组合学习单元前重放直接来源。先查看 Markdown 预览，确认后点击「保存并进入练习」才写入共享练习库并打开练习。预览只保留在页面中，刷新后需要重新导入。
 
 扩展不会启动桌面应用或自动启动服务；服务未运行时会提示先执行 `phraseweave`。旧桌面安装包注册的宿主不再用于新版扩展，不需要重新安装桌面启动器。
 

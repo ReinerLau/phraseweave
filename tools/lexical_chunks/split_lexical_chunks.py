@@ -355,10 +355,7 @@ def _render_dependency_tree(tokens: Sequence[Mapping[str, Any]]) -> str:
 def _exercise_steps(
     sentence: Mapping[str, Any],
     trace: Mapping[str, Any] | None,
-    mode: str,
 ) -> list[tuple[int, bool]]:
-    if mode == "standard":
-        return [(index, False) for index in range(len(sentence["units"]))]
     if trace is None:
         raise ConfigurationError("review mode requires a regenerated derivation trace")
 
@@ -391,7 +388,6 @@ def render_markdown(
     plan: Mapping[str, Any],
     translations: Mapping[str, Any],
     traces: Sequence[Mapping[str, Any]] | None = None,
-    mode: str = "standard",
 ) -> str:
     lines = ["# 渐进学习单元", ""]
     for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True), start=1):
@@ -416,7 +412,7 @@ def render_markdown(
         ]
         sentence_trace = traces[sentence_index - 1] if traces is not None else None
         for step, (unit_index, is_review) in enumerate(
-            _exercise_steps(sentence, sentence_trace, mode), start=1
+            _exercise_steps(sentence, sentence_trace), start=1
         ):
             unit = sentence["units"][unit_index]
             explanation = "复习" if is_review else explanations[unit_index]
@@ -430,7 +426,6 @@ def render_phraseweave(
     plan: Mapping[str, Any],
     translations: Mapping[str, Any],
     traces: Sequence[Mapping[str, Any]] | None = None,
-    mode: str = "standard",
 ) -> str:
     if traces is None:
         raise ConfigurationError("PhraseWeave export requires a regenerated derivation trace")
@@ -442,7 +437,7 @@ def render_phraseweave(
             (unit["span"]["start"], unit["span"]["end"]): index
             for index, unit in enumerate(sentence["units"])
         }
-        for unit_index, _ in _exercise_steps(sentence, sentence_trace, mode):
+        for unit_index, _ in _exercise_steps(sentence, sentence_trace):
             unit = sentence["units"][unit_index]
             span = unit["span"]
             source_spans = sentence_trace["sources"][unit_index]

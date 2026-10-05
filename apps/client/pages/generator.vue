@@ -115,17 +115,7 @@
         <span class="mt-1 text-right text-xs opacity-60">{{ englishText.length }} / 30,000</span>
       </label>
 
-      <div class="grid gap-4 sm:grid-cols-2">
-        <label class="form-control">
-          <span class="label-text mb-2 font-semibold">练习模式</span>
-          <select
-            v-model="exerciseMode"
-            class="select select-bordered"
-          >
-            <option value="standard">常规</option>
-            <option value="review">复习</option>
-          </select>
-        </label>
+      <div>
         <label class="form-control">
           <span class="label-text mb-2 font-semibold">导出格式</span>
           <select
@@ -285,7 +275,6 @@ import {
 } from "~/services/generatorClient";
 import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExerciseDb";
 
-type ExerciseMode = "standard" | "review";
 type OutputFormat = "markdown" | "phraseweave" | "both";
 type OutputFile = GeneratorOutput;
 type MarkdownBlock =
@@ -297,7 +286,6 @@ const route = useRoute();
 const rawCaptureId = route.query.capture;
 const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
 const captureMode = Boolean(captureId);
-const exerciseMode = ref<ExerciseMode>("standard");
 const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
 const serviceConnected = ref(false);
@@ -429,7 +417,6 @@ async function refreshService() {
 
 async function startJob(payload: {
   text: string;
-  mode: ExerciseMode;
   format: OutputFormat;
 }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
@@ -450,7 +437,6 @@ async function generate() {
   if (!canGenerate.value) return;
   await startJob({
     text: englishText.value,
-    mode: exerciseMode.value,
     format: outputFormat.value,
   });
 }
@@ -498,7 +484,6 @@ async function runCapture() {
   captureError.value = "";
   jobError.value = "";
   captureStatus.value = "正在连接本地生成服务…";
-  exerciseMode.value = "standard";
   outputFormat.value = "both";
   englishText.value = captureText.value;
 
@@ -523,7 +508,6 @@ async function runCapture() {
     captureStatus.value = "正在生成学习单元…";
     const outputs = await startJob({
       text: captureText.value,
-      mode: "standard",
       format: "both",
     });
     if (!outputs) throw new Error(jobError.value || "学习单元生成失败，请重试。");

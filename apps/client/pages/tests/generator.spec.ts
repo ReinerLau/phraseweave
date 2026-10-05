@@ -93,7 +93,7 @@ describe("generator capture preview", () => {
   it("generates both formats and previews without saving or navigating", async () => {
     await mount();
     expect(mocks.status).toHaveBeenCalled();
-    expect(mocks.start).toHaveBeenCalledWith({ text, mode: "standard", format: "both" });
+    expect(mocks.start).toHaveBeenCalledWith({ text, format: "both" });
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(wrapper!.text()).toContain("The cat");
     expect(wrapper!.text()).toContain("下载 units.md");
@@ -161,10 +161,12 @@ describe("generator capture preview", () => {
     await mount("/generator");
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
+    expect(wrapper!.text()).not.toContain("练习模式");
+    expect(wrapper!.findAll("select")).toHaveLength(1);
     await wrapper!.find("textarea").setValue(text);
     await wrapper!.find("form").trigger("submit");
     await flushPromises();
-    expect(mocks.start).toHaveBeenCalledWith({ text, mode: "standard", format: "both" });
+    expect(mocks.start).toHaveBeenCalledWith({ text, format: "both" });
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
