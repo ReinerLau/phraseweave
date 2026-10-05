@@ -1,5 +1,5 @@
 const MENU_ID = "phraseweave-practice-web";
-const NATIVE_HOST = "com.phraseweave.webcapture";
+const GENERATOR_URL = "http://127.0.0.1:3000/generator";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -11,34 +11,31 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+function notifyError(message) {
+  chrome.notifications.create({
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("icon.png"),
+    title: "PhraseWeave 导入失败",
+    message,
+  });
+}
+
 chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId !== MENU_ID) return;
-  void chrome.runtime
-    .sendNativeMessage(NATIVE_HOST, { type: "capture", text: info.selectionText || "" })
-    .then(async (result) => {
-      if (!result?.ok) throw new Error(result?.error || "PhraseWeave 未能接收选中文本");
-      const url = new URL(result.url);
-      if (
-        url.protocol !== "http:" ||
-        url.hostname !== "127.0.0.1" ||
-        url.username ||
-        url.password ||
-        url.pathname !== "/generator" ||
-        !/^[a-f0-9]{32}$/.test(url.searchParams.get("capture") || "") ||
-        [...url.searchParams.keys()].some((key) => key !== "capture") ||
-        url.hash
-      )
-        throw new Error("本机服务返回了无效的 Web UI 地址。");
-      await chrome.tabs.create({ url: url.toString(), active: true });
-    })
-    .catch((error) =>
-      chrome.notifications.create({
-        type: "basic",
-        iconUrl: chrome.runtime.getURL("icon.png"),
-        title: "PhraseWeave 导入失败",
-        message: /native messaging host|host not found|not registered/i.test(error?.message || "")
-          ? "请先执行 phraseweave extension install，重新加载扩展后再试。"
-          : error?.message || "请先执行 phraseweave extension install，并运行 phraseweave 后重试。",
-      }),
-    );
+  const text = info.selectionText || "";
+  if (!text.trim() || text.length > 30000) {
+    notifyError("请选择 1 至 30,000 个字符后重试。");
+    return;
+  }
+  const url = new URL(GENERATOR_URL);
+  const encodedText = btoa(
+    Array.from(new TextEncoder().encode(text), (byte) => String.fromCharCode(byte)).join(""),
+  )
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+  url.hash = new URLSearchParams({ text: encodedText }).toString();
+  void chrome.tabs
+    .create({ url: url.toString(), active: true })
+    .catch((error) => notifyError(error?.message || "无法打开 PhraseWeave Web UI，请重试。"));
 });

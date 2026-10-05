@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 
-import { DATA_DIR } from "./shared.mjs";
+import { DATA_DIR, WEB_UI_PORT } from "./shared.mjs";
 
 const CAPTURE_ID = /^[a-f0-9]{32}$/;
 const JOB_ID = /^[a-f0-9]{32}$/;
@@ -101,7 +101,7 @@ async function staticFile(root, pathname, response) {
   json(response, 404, { error: "Not found." });
 }
 
-export async function startPageServer({ clientRoot, runtime, port = 3000, remoteOrigin }) {
+export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT, remoteOrigin }) {
   const server = http.createServer((request, response) => {
     void (async () => {
       const address = server.address();
@@ -207,11 +207,10 @@ export async function startPageServer({ clientRoot, runtime, port = 3000, remote
       server.listen(port, "127.0.0.1", resolve);
     });
   } catch (error) {
-    if (error.code !== "EADDRINUSE" || port === 0) throw error;
-    await new Promise((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
-    });
+    if (error.code === "EADDRINUSE") {
+      throw new Error(`本机 Web UI 端口 ${port} 已被占用，请退出占用该端口的程序后重试。`);
+    }
+    throw error;
   }
   const actualPort = server.address().port;
   return { server, url: `http://127.0.0.1:${actualPort}/` };

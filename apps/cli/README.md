@@ -10,17 +10,17 @@ npm install -g @reinerlau/phraseweave
 phraseweave
 ```
 
-Open the local URL printed by the command. The first start downloads Python dependencies
+Open the fixed local URL `http://127.0.0.1:3000/` printed by the command. If port 3000 is occupied, startup fails with an error; the CLI never switches to another port. The first start downloads Python dependencies
 and the translation model. The server listens only on `127.0.0.1`; press Ctrl-C to stop it.
 Exercises, exercise catalogs, and progress are stored in
 `~/Library/Application Support/PhraseWeave/phraseweave.sqlite3` and shared with the desktop app.
-On first use, existing local IndexedDB data is imported automatically.
+On first use, existing local IndexedDB data is imported automatically. Close all old CLI and desktop instances before upgrading if their service uses another port.
 
 ## Chrome selected-text import
 
-Run `phraseweave extension install` to register the Chrome native messaging host for your user, then load or reload the [browser extension](https://github.com/ReinerLau/phraseweave/tree/main/apps/browser-extension). No desktop app is required. Re-run the install command after moving the npm package or changing your Node executable.
+Download the extension ZIP from [GitHub Releases](https://github.com/ReinerLau/phraseweave/releases), extract it, then load or reload the [browser extension](https://github.com/ReinerLau/phraseweave/tree/main/apps/browser-extension) in Chrome. No desktop app or Native Messaging host is required; `phraseweave extension install` is no longer needed.
 
-Keep `phraseweave` running in a terminal. Select English text in Chrome and choose **导入 PhraseWeave** from its context menu. The extension opens the running local Web UI and generates both formats automatically using the single review sequence, replaying direct source units before their combination. Preview the Markdown, then click **保存并进入练习** to save and open the exercise. Nothing is saved before confirmation; refreshing an unsaved preview requires a new import.
+Keep `phraseweave` running in a terminal. Select English text in Chrome and choose **导入 PhraseWeave** from its context menu. The extension sends selected text in a URL fragment to the fixed local Web UI. The page clears the fragment on receipt and generates both formats automatically using the single review sequence, replaying direct source units before their combination. Preview the Markdown, then click **保存并进入练习** to save and open the exercise. Nothing is saved before confirmation; refreshing an unsaved preview requires a new import.
 
 This package includes the `uv` executable from Astral Software Inc. Its MIT license is
 included in `third-party/uv/LICENSE-MIT`.

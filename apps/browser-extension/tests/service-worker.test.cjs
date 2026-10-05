@@ -4,11 +4,8 @@ const { join } = require("node:path");
 const { runInNewContext } = require("node:vm");
 const { test } = require("node:test");
 
-const URL_VALUE = "http://127.0.0.1:43219/generator?capture=0123456789abcdef0123456789abcdef";
-
-async function click({ result = { ok: true, url: URL_VALUE }, error } = {}) {
+async function click({ text = "The cat sleeps.", error } = {}) {
   let onClicked;
-  let received;
   let tab;
   let notification;
   let complete;
@@ -19,10 +16,8 @@ async function click({ result = { ok: true, url: URL_VALUE }, error } = {}) {
     runtime: {
       onInstalled: { addListener() {} },
       getURL: (value) => value,
-      async sendNativeMessage(host, message) {
-        received = { host, message };
-        if (error) throw new Error(error);
-        return result;
+      sendNativeMessage() {
+        throw new Error("Native Messaging must not be used");
       },
     },
     contextMenus: {
@@ -34,6 +29,7 @@ async function click({ result = { ok: true, url: URL_VALUE }, error } = {}) {
     },
     tabs: {
       async create(value) {
+        if (error) throw new Error(error);
         tab = value;
         complete();
       },
@@ -45,49 +41,53 @@ async function click({ result = { ok: true, url: URL_VALUE }, error } = {}) {
       },
     },
   };
-  runInNewContext(readFileSync(join(__dirname, "../service-worker.js"), "utf8"), { chrome, URL });
-  onClicked({ menuItemId: "phraseweave-practice-web", selectionText: "The cat sleeps." });
+  runInNewContext(readFileSync(join(__dirname, "../service-worker.js"), "utf8"), {
+    chrome,
+    URL,
+    URLSearchParams,
+    TextEncoder,
+    btoa,
+  });
+  onClicked({ menuItemId: "phraseweave-practice-web", selectionText: text });
   await done;
-  return { received, tab, notification };
+  return { tab, notification };
 }
 
-test("selection opens the returned local Web UI in an active tab", async () => {
-  const { received, tab, notification } = await click();
-  assert.equal(received.host, "com.phraseweave.webcapture");
-  assert.equal(received.message.type, "capture");
-  assert.equal(received.message.text, "The cat sleeps.");
-  assert.equal(tab.url, URL_VALUE);
-  assert.equal(tab.active, true);
-  assert.equal(notification, undefined);
-});
-
-test("missing registration explains CLI installation", async () => {
-  const { tab, notification } = await click({
-    error: "Specified native messaging host not found.",
-  });
-  assert.equal(tab, undefined);
-  assert.match(notification.message, /phraseweave extension install/);
-});
-
-test("service failure preserves the host's actionable instruction", async () => {
-  const error = "请先在终端运行并保持 phraseweave，再重试导入。";
-  const { tab, notification } = await click({ result: { ok: false, error } });
-  assert.equal(tab, undefined);
-  assert.equal(notification.message, error);
-});
-
-test("untrusted host URLs cannot open a browser tab", async () => {
-  for (const url of [
-    URL_VALUE.replace("http:", "https:"),
-    URL_VALUE.replace("127.0.0.1", "example.com"),
-    URL_VALUE.replace("127.0.0.1", "user@127.0.0.1"),
-    URL_VALUE + "&text=selected",
-    URL_VALUE + "#text",
-    URL_VALUE.replace("/generator", "/game"),
-    URL_VALUE.replace(/capture=.*/, "capture=invalid"),
+test("selection opens the fixed Web UI using a fragment and no native host", async () => {
+  for (const text of [
+    "The cat sleeps.",
+    "English & 中文 + 100% = # ?\nsecond line",
+    "猫".repeat(30000),
   ]) {
-    const { tab, notification } = await click({ result: { ok: true, url } });
-    assert.equal(tab, undefined);
-    assert.match(notification.message, /无效/);
+    const { tab, notification } = await click({ text });
+    const url = new URL(tab.url);
+    assert.equal(url.origin, "http://127.0.0.1:3000");
+    assert.equal(url.pathname, "/generator");
+    assert.equal(url.search, "");
+    const encodedText = new URLSearchParams(url.hash.slice(1)).get("text");
+    assert.match(encodedText, /^[A-Za-z0-9_-]+$/);
+    assert.equal(Buffer.from(encodedText, "base64url").toString("utf8"), text);
+    assert.equal(tab.active, true);
+    assert.equal(notification, undefined);
   }
+});
+
+test("invalid selections produce a notification without opening a tab", async () => {
+  for (const text of ["", "  ", "a".repeat(30001)]) {
+    const { tab, notification } = await click({ text });
+    assert.equal(tab, undefined);
+    assert.match(notification.message, /30,000/);
+  }
+});
+
+test("tab creation failures are shown as a notification", async () => {
+  const { tab, notification } = await click({ error: "Unable to create tab" });
+  assert.equal(tab, undefined);
+  assert.equal(notification.message, "Unable to create tab");
+});
+
+test("manifest does not request native messaging or local HTTP access", () => {
+  const manifest = JSON.parse(readFileSync(join(__dirname, "../manifest.json"), "utf8"));
+  assert.equal(manifest.permissions.includes("nativeMessaging"), false);
+  assert.equal(manifest.host_permissions, undefined);
 });
