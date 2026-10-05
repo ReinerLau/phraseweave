@@ -4,6 +4,13 @@
   "version": "1.0.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtQh0/gp7anAYsqMdBEcA4uvm5fXn67nS/bOs1yMe9Qp6Ld74aetpFnvn+JrBS4BXcQsAKgHtSq9xHxmSNXZ8puUzZH/Yz+/gHxGgB11lTcurXs2qCkKGiHw9W5jOKmpI7YCPb+AQSFsuLMpTGzzhEGsHWwlccn1Rh+22fokWqbi43ZYeWzWQRuvdtW0rzpqn89MVJhnLltETqtxca1kncS7mXGaibddaoGGkBItELCwohsga50rHe4uNAqHRA6AQHibbcnAIUXPfhYmWAWaZVcozwzJP79/vXgDtnkuhSMfl0vy6nocCtirF2s2jxrQDA4mAYvsnIR2/+5L9Q14+GwIDAQAB",
   "description": "Generate and practice learning units from text selected in a web page.",
+  "icons": {
+    "128": "icon.png"
+  },
+  "action": {
+    "default_icon": "icon.png",
+    "default_title": "PhraseWeave：选中文字后右键导入"
+  },
   "permissions": ["contextMenus", "notifications"],
   "background": {
     "service_worker": "service-worker.js"
