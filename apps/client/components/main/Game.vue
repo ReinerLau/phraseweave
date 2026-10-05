@@ -8,7 +8,6 @@
   </div>
 
   <MainSummary />
-  <MainShare />
   <MainAuthRequired />
 </template>
 
