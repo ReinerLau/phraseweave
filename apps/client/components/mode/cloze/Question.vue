@@ -27,6 +27,7 @@
         }}</span>
       </div>
       <button
+        v-if="!courseStore.canDecomposeCurrentUnit"
         class="btn btn-square btn-ghost mt-3 h-11 min-h-11 w-11 min-w-11 p-0 text-2xl text-gray-500 hover:text-fuchsia-500 dark:text-gray-300"
         type="button"
         data-testid="show-answer-button"
