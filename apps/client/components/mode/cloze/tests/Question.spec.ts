@@ -3,6 +3,7 @@ import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Course } from "~/store/exercise";
+import Tool from "~/components/main/Tool.vue";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
 import { useShowAnswer } from "~/composables/main/showAnswer";
@@ -70,11 +71,26 @@ describe("answer availability", () => {
   });
 
   async function setup() {
-    const store = useExerciseStore();
+    const pinia = getActivePinia()!;
+    const store = useExerciseStore(pinia);
     await store.setup("pack", "course");
-    const wrapper = mount(Question, {
-      global: { plugins: [getActivePinia()!], stubs: { MainQuestionInput: true } },
-    });
+    const wrapper = mount(
+      { components: { Question, Tool }, template: "<div><Tool/><Question/></div>" },
+      {
+        global: {
+          plugins: [pinia],
+          stubs: {
+            MainQuestionInput: true,
+            MainContents: true,
+            MainMessageBox: true,
+            LearningModeSwitch: true,
+            PracticeViewSwitch: true,
+            NuxtLink: true,
+            IconsExpand: true,
+          },
+        },
+      },
+    );
     return { store, wrapper };
   }
 
@@ -86,6 +102,27 @@ describe("answer availability", () => {
     course.statements[4].sourceUnitIds = [];
     await store.setup("pack", "course");
     expect(store.canDecomposeCurrentUnit).toBe(false);
+  });
+
+  it("moves the fulltext leaf hint to the toolbar and hides it in answer and summary states", async () => {
+    course.practiceView = "fulltext";
+    course.learningMode = "progressive";
+    course.statementIndex = 0;
+    const { store, wrapper } = await setup();
+    expect(wrapper.findComponent(Question).find("button").exists()).toBe(false);
+    expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
+    useGameMode().showAnswer();
+    await flushPromises();
+    expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+    useGameMode().showQuestion();
+    useSummary().showSummary();
+    await flushPromises();
+    expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+    useSummary().hideSummary();
+    store.switchPracticeView("single");
+    await flushPromises();
+    expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+    expect(wrapper.findComponent(Question).find("button").exists()).toBe(true);
   });
 
   async function correct(store: ReturnType<typeof useExerciseStore>) {

@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Contents from "~/components/main/Contents/Contents.vue";
 import { useGameMode } from "~/composables/main/game";
 import { useExerciseStore } from "~/store/exercise";
+import { measureChineseMasks } from "../chineseMaskLayout";
 import FulltextMode from "../FulltextMode.vue";
+
+vi.mock("../chineseMaskLayout", () => ({ measureChineseMasks: vi.fn() }));
 
 vi.mock("~/services/localExerciseDb", () => ({
   saveLocalExerciseProgress: vi.fn().mockResolvedValue(undefined),
@@ -14,7 +17,25 @@ vi.mock("~/services/localExerciseDb", () => ({
 enableAutoUnmount(afterEach);
 
 describe("FulltextMode", () => {
-  beforeEach(() => useGameMode().showQuestion());
+  beforeEach(() => {
+    useGameMode().showQuestion();
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queueMicrotask(() => callback(0));
+      return 1;
+    });
+    vi.mocked(measureChineseMasks).mockImplementation((_container, sentences) =>
+      Object.fromEntries(
+        sentences.map((sentence) => [
+          sentence.id,
+          {
+            height: 29.25,
+            lines: [{ left: 0, top: 5, width: 90, height: 20 }],
+          },
+        ]),
+      ),
+    );
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -52,7 +73,9 @@ describe("FulltextMode", () => {
     const wrapper = mount(FulltextMode, {
       global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
     });
-    expect(wrapper.text()).toContain("第 1 / 3 句");
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("第 1 / 3 句");
+    expect(wrapper.get('[data-testid="fulltext-current"]').attributes("style")).toBeUndefined();
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
     const pending = wrapper.findAll('[data-testid="fulltext-pending-sentence"]');
     expect(pending).toHaveLength(2);
@@ -106,6 +129,7 @@ describe("FulltextMode", () => {
     const wrapper = mount(FulltextMode, {
       global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
     });
+    await flushPromises();
     expect(
       wrapper
         .findAll('[data-testid="fulltext-sentence"]')
@@ -147,11 +171,57 @@ describe("FulltextMode", () => {
     useGameMode().showAnswer();
     await flushPromises();
     expect(scroll.scrollTop).toBe(420);
-    expect(wrapper.get('[data-testid="fulltext-current"]').attributes("style")).toContain("300px");
+    expect(wrapper.get('[data-testid="fulltext-current"]').attributes("style")).toBeUndefined();
     store.passCurrentStatement();
     store.advanceAfterCorrect();
     await flushPromises();
     expect(scroll.scrollTop).toBe(904);
+  });
+
+  it("renders each measured line and remeasures width changes without pulling back the reader", async () => {
+    let resize: ResizeObserverCallback = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resize = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const { pinia } = setup();
+    vi.mocked(measureChineseMasks).mockReturnValue({
+      "row-1": {
+        height: 58.5,
+        lines: [
+          { left: 0, top: 5, width: 580, height: 20 },
+          { left: 0, top: 34.25, width: 144, height: 20 },
+        ],
+      },
+      "row-2": { height: 29.25, lines: [{ left: 0, top: 5, width: 90, height: 20 }] },
+    });
+    const wrapper = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    const row = wrapper.get('[data-sentence-id="row-1"]');
+    const bars = row.findAll('[data-testid="fulltext-pending-bar"]');
+    expect(bars).toHaveLength(2);
+    expect(bars[0].attributes("style")).toContain("width: 580px");
+    expect(bars[1].attributes("style")).toContain("width: 144px");
+    expect(row.text()).not.toContain("第二句");
+    const scroll = wrapper.element as HTMLElement;
+    scroll.scrollTop = 400;
+    Object.defineProperty(scroll, "clientWidth", { value: 320 });
+    const calls = vi.mocked(measureChineseMasks).mock.calls.length;
+    resize([], {} as ResizeObserver);
+    await flushPromises();
+    expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+    expect(scroll.scrollTop).toBe(400);
+    resize([], {} as ResizeObserver);
+    await flushPromises();
+    expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
   });
 
   it("shows completed text at the end and restores all pending bars on restart", async () => {
@@ -171,5 +241,32 @@ describe("FulltextMode", () => {
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
     expect(wrapper.findAll('[data-testid="fulltext-pending-bar"]')).toHaveLength(2);
     expect(wrapper.findAll('[data-testid="fulltext-history-sentence"]')).toHaveLength(0);
+  });
+
+  it("remeasures loaded fonts without relocating the reader and removes its font listener", async () => {
+    const original = Object.getOwnPropertyDescriptor(document, "fonts");
+    const fonts = Object.assign(new EventTarget(), { ready: Promise.resolve() });
+    Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
+    try {
+      const { pinia } = setup();
+      const wrapper = mount(FulltextMode, {
+        global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+      });
+      await flushPromises();
+      const scroll = wrapper.element as HTMLElement;
+      scroll.scrollTop = 400;
+      const calls = vi.mocked(measureChineseMasks).mock.calls.length;
+      fonts.dispatchEvent(new Event("loadingdone"));
+      await flushPromises();
+      expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+      expect(scroll.scrollTop).toBe(400);
+      wrapper.unmount();
+      fonts.dispatchEvent(new Event("loadingdone"));
+      await flushPromises();
+      expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+    } finally {
+      if (original) Object.defineProperty(document, "fonts", original);
+      else Reflect.deleteProperty(document, "fonts");
+    }
   });
 });
