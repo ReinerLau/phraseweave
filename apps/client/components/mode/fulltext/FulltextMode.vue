@@ -8,72 +8,79 @@
     tabindex="0"
   >
     <ol
-      v-if="courseStore.precedingSentences.length"
       class="space-y-5 pb-6 text-lg leading-relaxed"
-      aria-label="前文"
+      aria-label="全文句序"
     >
       <li
-        v-for="sentence in courseStore.precedingSentences"
+        v-for="(sentence, index) in courseStore.sentences"
         :key="sentence.id"
         class="min-w-0 break-words"
-        data-testid="fulltext-history-sentence"
+        data-testid="fulltext-sentence"
+        :data-sentence-id="sentence.id"
+        :aria-current="index === courseStore.currentSentenceIndex ? 'step' : undefined"
       >
-        <p class="text-gray-600 dark:text-gray-400">{{ sentence.chinese }}</p>
-        <p class="whitespace-pre-wrap text-gray-900 dark:text-gray-100">{{ sentence.english }}</p>
+        <div
+          v-if="index < courseStore.currentSentenceIndex"
+          data-testid="fulltext-history-sentence"
+        >
+          <p class="text-gray-600 dark:text-gray-400">{{ sentence.chinese }}</p>
+          <p class="whitespace-pre-wrap text-gray-900 dark:text-gray-100">{{ sentence.english }}</p>
+        </div>
+        <section
+          v-else-if="index === courseStore.currentSentenceIndex"
+          class="flex min-h-0 w-full min-w-0 flex-col"
+          :style="courseStore.fulltextCompleted ? undefined : { height: `${currentHeight}px` }"
+          data-testid="fulltext-current"
+          aria-label="当前句"
+        >
+          <p class="mb-3 shrink-0 text-sm text-gray-500 dark:text-gray-400">
+            第 {{ index + 1 }} / {{ courseStore.sentences.length }} 句
+          </p>
+          <div v-if="courseStore.fulltextCompleted">
+            <p class="text-gray-600 dark:text-gray-400">{{ sentence.chinese }}</p>
+            <p class="whitespace-pre-wrap break-words dark:text-gray-100">{{ sentence.english }}</p>
+          </div>
+          <div
+            v-else
+            class="min-h-0 min-w-0 flex-1"
+          >
+            <ModeClozeMode />
+          </div>
+        </section>
+        <div
+          v-else
+          class="py-2"
+          data-testid="fulltext-pending-sentence"
+        >
+          <span class="sr-only">第 {{ index + 1 }} 句，待练习</span>
+          <div
+            class="h-5 w-full max-w-sm rounded bg-slate-300 dark:bg-slate-600"
+            data-testid="fulltext-pending-bar"
+            aria-hidden="true"
+          ></div>
+        </div>
       </li>
     </ol>
-    <section
-      ref="currentEl"
-      class="flex min-h-0 w-full min-w-0 flex-col"
-      :style="{ height: `${currentHeight}px` }"
-      data-testid="fulltext-current"
-      aria-label="当前句"
-    >
-      <p class="mb-3 shrink-0 text-sm text-gray-500 dark:text-gray-400">
-        第 {{ courseStore.currentSentenceIndex + 1 }} / {{ courseStore.sentences.length }} 句
-      </p>
-      <div
-        v-if="courseStore.fulltextCompleted"
-        class="text-lg leading-relaxed"
-      >
-        <p class="text-gray-600 dark:text-gray-400">{{ currentSentence?.chinese }}</p>
-        <p class="whitespace-pre-wrap break-words dark:text-gray-100">
-          {{ currentSentence?.english }}
-        </p>
-      </div>
-      <div
-        v-else
-        class="min-h-0 min-w-0 flex-1"
-      >
-        <ModeClozeMode />
-      </div>
-    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { useGameMode } from "~/composables/main/game";
 import { useExerciseStore } from "~/store/exercise";
 
 const courseStore = useExerciseStore();
-const { gameMode } = useGameMode();
 const scrollEl = ref<HTMLElement>();
-const currentEl = ref<HTMLElement>();
 const viewportHeight = ref(300);
-const historyPeek = computed(() =>
-  courseStore.precedingSentences.length ? Math.min(144, viewportHeight.value * 0.28) : 0,
-);
-const currentHeight = computed(() => Math.max(160, viewportHeight.value - historyPeek.value - 8));
-const currentSentence = computed(() => courseStore.sentences[courseStore.currentSentenceIndex]);
+const currentHeight = computed(() => Math.max(180, Math.min(320, viewportHeight.value * 0.5)));
 let resizeObserver: ResizeObserver | undefined;
 
 async function revealCurrentSentence() {
   await nextTick();
   const scroll = scrollEl.value;
-  const current = currentEl.value;
-  if (scroll && current) scroll.scrollTop = Math.max(0, current.offsetTop - historyPeek.value);
+  const current = scroll?.querySelector<HTMLElement>('[data-testid="fulltext-current"]');
+  const contextSpace = Math.min(96, viewportHeight.value * 0.18);
+  if (scroll && current) scroll.scrollTop = Math.max(0, current.offsetTop - contextSpace);
 }
 
 watch(
@@ -82,7 +89,6 @@ watch(
     courseStore.statementIndex,
     courseStore.learningMode,
     courseStore.fulltextCompleted,
-    gameMode.value,
   ],
   revealCurrentSentence,
 );
@@ -92,7 +98,6 @@ onMounted(() => {
   if (!scroll) return;
   resizeObserver = new ResizeObserver(() => {
     viewportHeight.value = scroll.clientHeight;
-    void revealCurrentSentence();
   });
   resizeObserver.observe(scroll);
   viewportHeight.value = scroll.clientHeight;
