@@ -38,6 +38,22 @@ export const useExerciseCatalogStore = defineStore("exercise-catalog", () => {
     }
   }
 
+  async function removeExercises(coursePackIds: string[]) {
+    const deletedIds: string[] = [];
+    const failedIds: string[] = [];
+
+    for (const id of new Set(coursePackIds)) {
+      try {
+        await removeExercise(id);
+        deletedIds.push(id);
+      } catch {
+        failedIds.push(id);
+      }
+    }
+
+    return { deletedIds, failedIds };
+  }
+
   async function updateExerciseCompleteCount(_coursePackId: string) {
     // Progress is stored with the local course pack; no remote history is needed.
   }
@@ -46,6 +62,7 @@ export const useExerciseCatalogStore = defineStore("exercise-catalog", () => {
     setupExercise,
     setupExercises,
     removeExercise,
+    removeExercises,
     updateExerciseCompleteCount,
     currentExercise,
     exercises,
