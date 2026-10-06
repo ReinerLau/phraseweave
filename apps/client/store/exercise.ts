@@ -257,6 +257,10 @@ export const useExerciseStore = defineStore("exercise", () => {
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
       : 0;
     currentCourse.value = course;
+    if (canUseSentenceFirst.value && course.learningMode === undefined) {
+      course.learningMode = "sentence-first";
+      course.sentenceFirstStartIndex = undefined;
+    }
     if (!canUseSentenceFirst.value || course.learningMode !== "sentence-first") {
       course.learningMode = "progressive";
       course.sentenceFirstStartIndex = undefined;

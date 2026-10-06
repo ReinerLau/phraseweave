@@ -58,6 +58,7 @@ describe("learning direction", () => {
       order: 1,
       completionCount: 0,
       statementIndex: 0,
+      learningMode: "progressive",
       statements: [...sentenceRows(0), ...sentenceRows(1)],
     };
     vi.mocked(getLocalExercise).mockImplementation(async () => ({
@@ -76,7 +77,72 @@ describe("learning direction", () => {
     return store;
   }
 
-  it("keeps all progressive occurrences and groups identical sentences separately", async () => {
+  it("defaults to whole sentences and reviews failed sources before retrying", async () => {
+    course.learningMode = undefined;
+    const store = await setup();
+    expect(store.learningMode).toBe("sentence-first");
+    expect(store.currentStatement?.unitId).toBe("0:4");
+    expect(store.statementIndex).toBe(8);
+    expect(store.baseStatements.map((s) => s.id)).toEqual(["row-0-8", "row-1-8"]);
+    expect(store.currentCourse?.sentenceFirstStartIndex).toBeUndefined();
+
+    store.failCurrentStatement();
+    expect(store.currentStatement?.unitId).toBe("0:2");
+    expect(store.statementIndex).toBe(8);
+    for (const id of ["0:3", "0:4", "1:4"]) {
+      expect(store.advanceAfterCorrect()).toBe(false);
+      expect(store.currentStatement?.unitId).toBe(id);
+    }
+    expect(store.isRecovering).toBe(false);
+    expect(store.advanceAfterCorrect()).toBe(true);
+  });
+
+  it.each([3, 8, 12, 17])(
+    "aligns an unsaved direction at index %i to its whole sentence",
+    async (index) => {
+      course.learningMode = undefined;
+      course.statementIndex = index;
+      course.sentenceFirstStartIndex = 3;
+      const store = await setup();
+      expect(store.learningMode).toBe("sentence-first");
+      expect(store.statementIndex).toBe(index <= 8 ? 8 : 17);
+      expect(store.totalQuestionsCount).toBe(2);
+      expect(store.currentCourse?.sentenceFirstStartIndex).toBeUndefined();
+      expect(course.statements).toHaveLength(18);
+    },
+  );
+
+  it("persists a manual progressive selection and restores it on reload", async () => {
+    course.learningMode = undefined;
+    let store = await setup();
+    expect(store.switchLearningMode("progressive")).toBe(true);
+    store.toSpecificStatement(3);
+    await flushPromises();
+    expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith("pack", "course", 3, {
+      learningMode: "progressive",
+      sentenceFirstStartIndex: null,
+    });
+
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.learningMode).toBe("progressive");
+    expect(store.statementIndex).toBe(3);
+    expect(store.currentStatement?.id).toBe("row-0-3");
+    expect(store.totalQuestionsCount).toBe(18);
+  });
+
+  it("keeps an unsaved direction progressive when sentence groups are incomplete", async () => {
+    course.learningMode = undefined;
+    course.statements[0].contextAfter = undefined;
+    course.statementIndex = 3;
+    const store = await setup();
+    expect(store.canUseSentenceFirst).toBe(false);
+    expect(store.learningMode).toBe("progressive");
+    expect(store.statementIndex).toBe(3);
+    expect(store.totalQuestionsCount).toBe(18);
+  });
+
+  it("keeps saved progressive occurrences and groups identical sentences separately", async () => {
     const store = await setup();
     expect(store.learningMode).toBe("progressive");
     expect(store.baseStatements).toEqual(course.statements);
