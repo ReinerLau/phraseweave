@@ -1,6 +1,9 @@
+export type TranslationProvider = "local" | "index-translate";
+
 export interface GeneratorStatus {
   runtimeReady: boolean;
   modelDownloaded: boolean;
+  translationProviders?: TranslationProvider[];
   initialization?: {
     state: "starting" | "downloading" | "ready" | "error";
     message: string;
@@ -50,7 +53,11 @@ export function getGeneratorStatus() {
   return localRequest<GeneratorStatus>("/api/status");
 }
 
-export function startGeneratorJob(payload: { text: string; format: string }) {
+export function startGeneratorJob(payload: {
+  text: string;
+  format: string;
+  translationProvider?: TranslationProvider;
+}) {
   return localRequest<{ id: string }>("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

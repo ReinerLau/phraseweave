@@ -1,8 +1,11 @@
-"""Local translation engine setup and inference."""
+"""Local model setup and sentence translation through local or public inference."""
 
 from __future__ import annotations
 
+import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +13,10 @@ MODEL_ID = "tencent/Hy-MT2-1.8B"
 MODEL_REVISION = "9a341cd1b679d3efd23b46e847b01745a71ed792"
 MAX_INPUT_TOKENS = 512
 MAX_OUTPUT_TOKENS = 512
+TRANSLATION_PROVIDERS = ("local", "index-translate")
+INDEX_TRANSLATE_URL = "https://index-translate.bilibili.com/v1/chat/completions"
+INDEX_TRANSLATE_MODEL = "Index-Translate-35B-A3B"
+INDEX_TRANSLATE_TIMEOUT = 30
 CACHE_DIR = Path.home() / ".cache" / "phraseweave" / "lexical-chunks"
 SOURCE_MODEL_DIR = CACHE_DIR / "hy-mt2-1.8b" / MODEL_REVISION
 MODEL_FILES = (
@@ -46,7 +53,7 @@ def install_model(progress: Any = None) -> None:
     )
 
     if not model_status()["model_downloaded"]:
-        raise RuntimeError("The Hy-MT2 model download is incomplete. Restart the service to retry.")
+        raise RuntimeError("The Hy-MT2 model download is incomplete. Generate again to retry.")
 
 
 def _load_tokenizer() -> Any:
@@ -70,10 +77,80 @@ def _prepare_sentences(sentences: list[str], tokenizer: Any) -> list[list[int]]:
     return input_ids
 
 
-def translate_sentences(sentences: list[str]) -> list[str]:
+def translate_sentences(
+    sentences: list[str], provider: str = "local", progress: Any = None,
+) -> list[str]:
+    if provider not in TRANSLATION_PROVIDERS:
+        raise ValueError("Choose a supported translation provider.")
+    if provider == "index-translate":
+        return _translate_index(sentences, progress)
+    install_model(progress)
     tokenizer = _load_tokenizer()
     _prepare_sentences(sentences, tokenizer)
     return _translate_transformers(sentences, tokenizer)
+
+
+def _translate_index(sentences: list[str], progress: Any = None) -> list[str]:
+    translations = []
+    for index, sentence in enumerate(sentences, start=1):
+        if progress:
+            progress(f"Index-Translate：正在翻译第 {index}/{len(sentences)} 句…")
+        payload = {
+            "model": INDEX_TRANSLATE_MODEL,
+            "messages": [{
+                "role": "user",
+                "content": (
+                    "请将以下英语文本翻译为中文，直接输出翻译结果，不要进行任何解释。\n\n"
+                    f"{sentence}"
+                ),
+            }],
+            "temperature": 0,
+            "max_tokens": MAX_OUTPUT_TOKENS,
+            "stream": False,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        request = urllib.request.Request(
+            INDEX_TRANSLATE_URL,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Index-Translate-Client/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=INDEX_TRANSLATE_TIMEOUT) as response:
+                result = json.load(response)
+            if not isinstance(result, dict):
+                raise ValueError("响应不是 JSON 对象")
+            choices = result.get("choices")
+            if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                raise ValueError("响应缺少译文")
+            choice = choices[0]
+            if choice.get("finish_reason") != "stop":
+                raise ValueError("译文未完整生成，请缩短原句后重试")
+            message = choice.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("返回了空译文或无效译文")
+            if "<think>" in content or "</think>" in content:
+                raise ValueError("响应包含推理内容，无法作为译文使用")
+            translations.append(content.strip())
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(
+                f"Index-Translate 第 {index} 句翻译失败（HTTP {error.code}），请重试或切换本地翻译。"
+            ) from error
+        except TimeoutError as error:
+            raise RuntimeError(
+                f"Index-Translate 第 {index} 句请求超时（30 秒），请重试或切换本地翻译。"
+            ) from error
+        except (urllib.error.URLError, OSError) as error:
+            raise RuntimeError(
+                f"Index-Translate 第 {index} 句无法连接公网服务，请检查网络或切换本地翻译。"
+            ) from error
+        except (ValueError, UnicodeError) as error:
+            raise RuntimeError(f"Index-Translate 第 {index} 句翻译失败：{error}") from error
+    return translations
 
 
 def _translate_transformers(sentences: list[str], tokenizer: Any) -> list[str]:

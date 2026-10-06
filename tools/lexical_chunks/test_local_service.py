@@ -1,4 +1,5 @@
 import json
+import sys
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -83,12 +84,41 @@ class CompletedJobEndpointTests(TestCase):
         with JOBS_LOCK:
             self.assertNotIn(job_id, JOBS)
 
+    def test_status_advertises_both_translation_providers(self):
+        connection = HTTPConnection("127.0.0.1", self.port)
+        try:
+            connection.request("GET", "/api/status")
+            response = connection.getresponse()
+            body = json.loads(response.read())
+        finally:
+            connection.close()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["translationProviders"], ["local", "index-translate"])
+        self.assertIsInstance(body["modelDownloaded"], bool)
+
+    def test_unknown_provider_is_rejected_without_starting_a_job(self):
+        connection = HTTPConnection("127.0.0.1", self.port)
+        try:
+            with patch("local_service.INITIALIZATION", {"state": "ready"}), patch("local_service._generate") as worker:
+                connection.request(
+                    "POST", "/api/generate",
+                    body=json.dumps({"text": "Text.", "format": "both", "translationProvider": "unknown"}),
+                    headers={"Origin": "http://localhost:3000", "Content-Type": "application/json"},
+                )
+                response = connection.getresponse()
+                body = json.loads(response.read())
+                worker.assert_not_called()
+        finally:
+            connection.close()
+        self.assertEqual(response.status, 400)
+        self.assertIn("supported translation provider", body["error"])
+
 
 class RuntimeStartupTests(TestCase):
     @patch("local_service._run_worker")
     @patch("local_service.subprocess.run")
     @patch("local_service.shutil.which", return_value="/usr/local/bin/uv")
-    def test_dependencies_are_synced_before_model_install(self, _which, run, worker):
+    def test_startup_syncs_dependencies_without_downloading_model(self, _which, run, worker):
         run.return_value.returncode = 0
         events = []
         run.side_effect = lambda *args, **kwargs: events.append("dependencies") or SimpleNamespace(
@@ -98,10 +128,9 @@ class RuntimeStartupTests(TestCase):
 
         local_service._initialize_runtime()
 
-        self.assertEqual(events, ["dependencies", "model"])
+        self.assertEqual(events, ["dependencies"])
         self.assertIn("--locked", run.call_args.args[0])
-        worker.assert_called_once()
-        self.assertEqual(worker.call_args.args[0], {"action": "install-model"})
+        worker.assert_not_called()
 
     @patch("local_service.subprocess.run")
     @patch("local_service.shutil.which", return_value=None)
@@ -141,7 +170,7 @@ class ModelInstallTests(TestCase):
 
             download.assert_not_called()
 
-    def test_missing_model_files_are_downloaded_on_startup(self):
+    def test_missing_model_files_are_downloaded_on_demand(self):
         with TemporaryDirectory() as temp_dir:
             cache_dir = Path(temp_dir)
             model_dir = cache_dir / "model"
@@ -162,7 +191,7 @@ class ModelInstallTests(TestCase):
 
             download.assert_called_once()
 
-    def test_incomplete_model_download_fails_startup(self):
+    def test_incomplete_model_download_can_be_retried(self):
         with TemporaryDirectory() as temp_dir:
             cache_dir = Path(temp_dir)
             model_dir = cache_dir / "model"
@@ -174,6 +203,57 @@ class ModelInstallTests(TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "download is incomplete"):
                     model_runtime.install_model()
+                with patch("huggingface_hub.snapshot_download") as retry:
+                    retry.side_effect = lambda **kwargs: [
+                        (Path(kwargs["local_dir"]) / name).touch()
+                        for name in model_runtime.MODEL_FILES
+                    ]
+                    model_dir.mkdir(parents=True)
+                    model_runtime.install_model()
+                self.assertTrue(model_runtime.model_status()["model_downloaded"])
+
+
+class WorkerProgressTests(TestCase):
+    def test_progress_is_delivered_before_the_worker_finishes(self):
+        with TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            script = directory / "worker.py"
+            done = directory / "done"
+            script.write_text(
+                "import json, sys, time\n"
+                "json.loads(sys.stdin.read())\n"
+                "print(json.dumps({'progress': 'Downloading model'}), flush=True)\n"
+                "time.sleep(0.2)\n"
+                "from pathlib import Path\n"
+                f"Path({str(done)!r}).touch()\n"
+                "print(json.dumps({'ok': True, 'outputs': []}), flush=True)\n"
+            )
+            messages = []
+
+            def progress(message):
+                self.assertFalse(done.exists())
+                messages.append(message)
+
+            with patch("local_service.PYTHON", Path(sys.executable)), patch("local_service.WORKER", script):
+                result = local_service._run_worker({"action": "generate"}, progress)
+            self.assertTrue(result["ok"])
+            self.assertEqual(messages, ["Downloading model"])
+
+    def test_generation_publishes_worker_progress_to_the_job(self):
+        job_id = "downloadprogress"
+        JOBS[job_id] = {"state": "running"}
+
+        def worker(_payload, on_progress):
+            on_progress("Downloading model")
+            self.assertEqual(JOBS[job_id]["message"], "Downloading model")
+            return {"ok": True, "outputs": []}
+
+        try:
+            with patch("local_service._run_worker", side_effect=worker):
+                local_service._generate(job_id, {"text": "Text.", "format": "both"})
+            self.assertEqual(JOBS[job_id]["state"], "complete")
+        finally:
+            JOBS.pop(job_id, None)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from unittest import TestCase
 from unittest import main as unittest_main
 from unittest.mock import patch
 
-from worker import _build_outputs, _generate
+from worker import _build_outputs, _generate, main
 
 
 class InMemoryOutputTests(TestCase):
@@ -75,7 +75,7 @@ class ReviewGenerationTests(TestCase):
                 self.subTest(legacy_mode=mode),
                 patch("worker.load_syntax_model"),
                 patch("worker.generate_plan", return_value=({"sentences": [sentence]}, [trace])),
-                patch("worker.translate_sentences", return_value=["猫"]),
+                patch("worker.translate_sentences", return_value=["猫"]) as translate,
                 patch("worker.model_status", return_value={"model_downloaded": True}),
                 patch("worker._emit") as emit,
             ):
@@ -83,6 +83,7 @@ class ReviewGenerationTests(TestCase):
                 if mode is not None:
                     payload["mode"] = mode
                 _generate(payload)
+                self.assertEqual(translate.call_args.args[1], "local")
                 outputs = emit.call_args.args[0]["outputs"]
                 markdown, phraseweave = outputs
                 self.assertEqual(markdown["content"].count("| 复习 |"), 2)
@@ -91,6 +92,31 @@ class ReviewGenerationTests(TestCase):
                 self.assertEqual(rows[0]["unit_id"], rows[2]["unit_id"])
                 self.assertEqual(rows[-1]["source_unit_ids"], ["0:0", "0:1"])
                 self.assertTrue(all(output["name"].startswith("text.review.learning-units-") for output in outputs))
+
+    def test_invalid_provider_is_rejected_before_syntax_analysis(self):
+        with patch("worker.load_syntax_model") as syntax:
+            with self.assertRaisesRegex(ValueError, "supported translation provider"):
+                _generate({"text": "Text.", "format": "both", "translationProvider": "unknown"})
+        syntax.assert_not_called()
+
+    def test_public_failure_does_not_emit_partial_exports(self):
+        with (
+            patch("worker._read_request", return_value={
+                "action": "generate", "text": "Text.", "format": "both",
+                "translationProvider": "index-translate",
+            }),
+            patch("worker.load_syntax_model"),
+            patch("worker.generate_plan", return_value=({"sentences": [{"sentence": "Text."}]}, [])),
+            patch("worker.translate_sentences", side_effect=RuntimeError("第 1 句翻译失败")) as translate,
+            patch("worker.render_markdown") as markdown,
+            patch("worker.render_phraseweave") as phraseweave,
+            patch("worker._emit") as emit,
+        ):
+            self.assertEqual(main(), 1)
+        self.assertEqual(translate.call_args.args[1], "index-translate")
+        markdown.assert_not_called()
+        phraseweave.assert_not_called()
+        emit.assert_called_once_with({"ok": False, "error": "第 1 句翻译失败"})
 
 
 if __name__ == "__main__":
