@@ -9,9 +9,10 @@ import { cancelShortcut, registerShortcut } from "~/utils/keyboardShortcuts";
 export function useExerciseNavigation() {
   const courseStore = useExerciseStore();
   const { showQuestion, isAnswer } = useGameMode();
-  const { showSummary } = useSummary();
+  const { showSummary, showModal } = useSummary();
 
   function goToNextQuestion() {
+    if (showModal.value || (courseStore.isFulltext && !isAnswer())) return;
     if (isAnswer() ? courseStore.advanceAfterCorrect() : courseStore.isAllDone()) {
       courseStore.cancelRecovery();
       showSummary();
@@ -23,6 +24,7 @@ export function useExerciseNavigation() {
   }
 
   function goToPreviousQuestion() {
+    if (showModal.value || courseStore.isFulltext) return;
     courseStore.toPreviousStatement();
     showQuestion();
   }

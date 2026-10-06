@@ -121,6 +121,7 @@ describe("learning direction", () => {
     expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith("pack", "course", 3, {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
+      practiceView: "single",
     });
 
     setActivePinia(createPinia());
@@ -262,6 +263,7 @@ describe("learning direction", () => {
     expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith("pack", "course", 3, {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: 3,
+      practiceView: "single",
     });
     setActivePinia(createPinia());
     store = await setup();
@@ -282,6 +284,7 @@ describe("learning direction", () => {
     expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith("pack", "course", 8, {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: null,
+      practiceView: "single",
     });
   });
 

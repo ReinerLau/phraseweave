@@ -204,13 +204,16 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
         previous = current_courses.get(course.get("id"))
         if not previous:
             continue
-        if previous.get("learningMode") in ("progressive", "sentence-first"):
+        if (
+            previous.get("learningMode") in ("progressive", "sentence-first")
+            or previous.get("practiceView") in ("single", "fulltext")
+        ):
             # Full-pack writes (e.g. completion) must not restore a stale mode or cursor.
             course["statementIndex"] = previous.get("statementIndex", 0)
-            course["learningMode"] = previous["learningMode"]
-            course.pop("sentenceFirstStartIndex", None)
-            if "sentenceFirstStartIndex" in previous:
-                course["sentenceFirstStartIndex"] = previous["sentenceFirstStartIndex"]
+            for key in ("learningMode", "sentenceFirstStartIndex", "practiceView"):
+                course.pop(key, None)
+                if key in previous:
+                    course[key] = previous[key]
         else:
             course["statementIndex"] = max(
                 int(course.get("statementIndex", 0) or 0),
@@ -489,6 +492,13 @@ class Handler(BaseHTTPRequestHandler):
                             course.pop("sentenceFirstStartIndex", None)
                             if mode == "sentence-first" and start is not None:
                                 course["sentenceFirstStartIndex"] = start
+                        if "practiceView" in payload:
+                            view = payload["practiceView"]
+                            if view not in ("single", "fulltext"):
+                                raise ValueError("Practice view is invalid.")
+                            if index >= len(course.get("statements", [])):
+                                raise ValueError("Statement index is invalid.")
+                            course["practiceView"] = view
                     else:
                         unit_key = payload.get("unitKey")
                         if not isinstance(unit_key, str) or not unit_key:

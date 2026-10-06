@@ -3,6 +3,8 @@ import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAnswerTip } from "~/composables/main/answerTip";
+import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
+import { useGameMode } from "~/composables/main/game";
 import { useExerciseStore } from "~/store/exercise";
 import QuestionInput from "../QuestionInput.vue";
 
@@ -159,6 +161,28 @@ describe("QuestionInput", () => {
     await submitAnswer(input, "S$500");
   });
 
+  it("cancels a pending error when the practice view changes on the same unit", async () => {
+    const { input, wrapper } = mountQuestionInput();
+    const store = useExerciseStore();
+    store.currentCourse = {
+      id: "course",
+      title: "文章",
+      order: 1,
+      coursePackId: "pack",
+      completionCount: 0,
+      statementIndex: 0,
+      statements: [store.currentStatement!],
+    };
+    await wrapper.vm.$nextTick();
+    await submitAnswer(input, "I like");
+    store.currentCourse.practiceView = "fulltext";
+    await wrapper.vm.$nextTick();
+    expect(vi.getTimerCount()).toBe(0);
+    expect((input.element as HTMLInputElement).value).toBe("");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+  });
+
   it("keeps the original sentence punctuation visible before input, in tips, and after input", async () => {
     const sentence =
       "The new penalties will also be applied to other anti-social behaviour, such as putting feet on seats, littering, and eating or drinking on buses";
@@ -203,4 +227,53 @@ describe("QuestionInput", () => {
     await submitAnswer(input, "don't");
     expect(useExerciseStore().passCurrentStatement).toHaveBeenCalledOnce();
   });
+
+  it.each([false, true])(
+    "advances fulltext only on a correct submission (auto-next: %s)",
+    async (autoNext) => {
+      localStorage.setItem("autoNextQuestion", String(autoNext));
+      useGameMode().showQuestion();
+      const pinia = createTestingPinia({ createSpy: vi.fn, stubActions: false });
+      const store = useExerciseStore(pinia);
+      store.currentCourse = {
+        id: "course",
+        title: "文章",
+        order: 1,
+        coursePackId: "pack",
+        completionCount: 0,
+        statementIndex: 0,
+        practiceView: "fulltext",
+        statements: ["I eat", "Birds sing"].map((english, index) => ({
+          id: String(index),
+          order: index + 1,
+          english,
+          unitId: String(index),
+          sourceUnitIds: [],
+          contextBefore: "",
+          contextAfter: ".",
+          sentenceChinese: index ? "鸟在歌唱。" : "我吃饭。",
+        })),
+      };
+      store.statementIndex = 0;
+      store.currentStatement = store.currentCourse.statements[0];
+      const wrapper = mount(QuestionInput, { global: { plugins: [pinia] } });
+      const input = wrapper.get('input[type="text"]');
+      useAnswerTip().showAnswerTip();
+      await wrapper.vm.$nextTick();
+      await input.trigger("keydown", { code: "Enter", key: "Enter" });
+      expect(store.passCurrentStatement).not.toHaveBeenCalled();
+      expect(store.statementIndex).toBe(0);
+      await submitAnswer(input, "I eat");
+      expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+      if (!autoNext) {
+        expect(store.statementIndex).toBe(0);
+        expect(store.precedingSentences).toHaveLength(0);
+        expect(useGameMode().isAnswer()).toBe(true);
+        useExerciseNavigation().goToNextQuestion();
+      }
+      expect(store.statementIndex).toBe(1);
+      expect(store.precedingSentences).toHaveLength(1);
+      localStorage.removeItem("autoNextQuestion");
+    },
+  );
 });

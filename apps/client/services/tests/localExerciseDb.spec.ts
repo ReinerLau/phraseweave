@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeExerciseImport } from "~/services/localExerciseDb";
+import { mergeLocalExerciseProgress, normalizeExerciseImport } from "~/services/localExerciseDb";
 
 const firstUnit = {
   english: "Birdsong",
@@ -113,14 +113,41 @@ describe("normalizeExerciseImport", () => {
   it("preserves learning mode, cursor and starting occurrence in array backups", () => {
     const [pack] = normalizeExerciseImport({ schema_version: 4, statements: [firstUnit] });
     pack.courses[0].learningMode = "sentence-first";
+    pack.courses[0].practiceView = "fulltext";
     pack.courses[0].sentenceFirstStartIndex = 0;
     pack.courses[0].statementIndex = 0;
     const [restored] = normalizeExerciseImport(JSON.parse(JSON.stringify([pack])));
     expect(restored.courses[0]).toMatchObject({
       learningMode: "sentence-first",
+      practiceView: "fulltext",
       sentenceFirstStartIndex: 0,
       statementIndex: 0,
     });
+  });
+
+  it("preserves the latest view and lower cursor when a stale completion snapshot is saved", () => {
+    const [pack] = normalizeExerciseImport({
+      schema_version: 4,
+      statements: [firstUnit, firstUnit],
+    });
+    const stale = JSON.parse(JSON.stringify(pack));
+    stale.courses[0].statementIndex = 1;
+    stale.courses[0].completionCount = 1;
+    stale.courses[0].practiceView = "single";
+    pack.courses[0].statementIndex = 0;
+    pack.courses[0].learningMode = "progressive";
+    pack.courses[0].practiceView = "fulltext";
+    pack.courses[0].passedUnitIds = ["unit:old"];
+    stale.courses[0].passedUnitIds = ["unit:new"];
+    const merged = mergeLocalExerciseProgress(pack, stale);
+    expect(merged.courses[0]).toMatchObject({
+      statementIndex: 0,
+      practiceView: "fulltext",
+      learningMode: "progressive",
+      completionCount: 1,
+      passedUnitIds: ["unit:old", "unit:new"],
+    });
+    expect(pack.courses[0].completionCount).toBe(0);
   });
 
   it("rejects links to absent or later units", () => {
