@@ -1,7 +1,10 @@
 <template>
   <div
     class="card h-full w-full cursor-pointer bg-base-100 shadow-xl"
-    :class="{ 'ring-2 ring-primary': selectionMode && selected, 'cursor-wait': disabled }"
+    :class="{
+      'ring-2 ring-inset ring-primary': selectionMode && selected,
+      'cursor-wait': disabled,
+    }"
     @click="handleGoToExercise"
   >
     <div class="card-body">
