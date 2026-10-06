@@ -1,6 +1,7 @@
 <template>
   <div
     class="answer-content h-full min-h-0 w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden text-left"
+    :class="{ 'fulltext-flow': courseStore.isFulltext }"
     :style="questionStyle"
     data-testid="answer-content"
   >
@@ -65,9 +66,13 @@ const courseStore = useExerciseStore();
 const { questionFontSize } = useQuestionFontSize();
 const { goToNextQuestion: navigateToNextQuestion } = useExerciseNavigation();
 
-const questionStyle = computed(() => ({
-  "--question-font-size": `${questionFontSize.value}px`,
-}));
+const questionStyle = computed(() =>
+  courseStore.isFulltext
+    ? undefined
+    : {
+        "--question-font-size": `${questionFontSize.value}px`,
+      },
+);
 
 const answerWordsEl = ref<HTMLElement>();
 const { probeEl, wordWidth } = useWordWidths(answerWordsEl);
@@ -122,5 +127,24 @@ function goToNextQuestion() {
 .answer-words {
   width: fit-content;
   vertical-align: bottom;
+}
+
+.answer-content.fulltext-flow {
+  height: auto;
+  overflow: visible;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.fulltext-flow .answer-prompt,
+.fulltext-flow .answer-sentence {
+  margin: 0;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fulltext-flow .mb-2 {
+  margin-bottom: 0;
 }
 </style>

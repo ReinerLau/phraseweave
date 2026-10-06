@@ -2,6 +2,7 @@
   <div
     ref="questionRootEl"
     class="question-content h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden text-left"
+    :class="{ 'fulltext-flow': courseStore.isFulltext }"
     :style="questionStyle"
   >
     <div class="question-content-flow">
@@ -26,23 +27,10 @@
           courseStore.currentStatement?.contextAfter
         }}</span>
       </div>
-      <button
-        v-if="!courseStore.canDecomposeCurrentUnit"
-        class="btn btn-square btn-ghost mt-3 h-11 min-h-11 w-11 min-w-11 p-0 text-2xl text-gray-500 hover:text-fuchsia-500 dark:text-gray-300"
-        type="button"
-        data-testid="show-answer-button"
-        :aria-label="answerTipText"
-        :title="answerTipText"
-        @mousedown.prevent
-        @click="toggleGameMode"
-      >
-        <span
-          class="h-6 w-6"
-          :class="isAnswerTip() ? 'i-ph-eye-slash' : 'i-ph-eye'"
-          aria-hidden="true"
-        ></span>
-        <span class="sr-only">{{ answerTipText }}</span>
-      </button>
+      <AnswerHintButton
+        v-if="!courseStore.isFulltext && !courseStore.canDecomposeCurrentUnit"
+        class="mt-3"
+      />
     </div>
   </div>
 </template>
@@ -50,21 +38,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import { useAnswerTip } from "~/composables/main/answerTip";
+import AnswerHintButton from "~/components/main/AnswerHintButton.vue";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
-import { useShowAnswer } from "~/composables/main/showAnswer";
 import { useExerciseStore } from "~/store/exercise";
 import { findLargestFittingFontSize, QUESTION_FONT_MAX_SIZE_PX } from "./questionLayoutHelper";
 
 const courseStore = useExerciseStore();
-const { isAnswerTip } = useAnswerTip();
-const { toggleGameMode } = useShowAnswer();
-const answerTipText = computed(() => (isAnswerTip() ? "隐藏答案" : "显示答案"));
 const questionRootEl = ref<HTMLElement>();
 const { questionFontSize } = useQuestionFontSize();
-const questionStyle = computed(() => ({
-  "--question-font-size": `${questionFontSize.value}px`,
-}));
+const questionStyle = computed(() =>
+  courseStore.isFulltext
+    ? undefined
+    : {
+        "--question-font-size": `${questionFontSize.value}px`,
+      },
+);
 let resizeObserver: ResizeObserver | undefined;
 let fitFrame: number | undefined;
 
@@ -100,6 +88,7 @@ function setQuestionFontSize(size: number) {
 }
 
 function fitQuestionFontSize() {
+  if (courseStore.isFulltext) return;
   const root = questionRootEl.value;
   if (!root || root.clientHeight <= 0 || root.clientWidth <= 0) return;
 
@@ -114,6 +103,7 @@ function fitQuestionFontSize() {
 }
 
 function scheduleQuestionFontSize() {
+  if (courseStore.isFulltext) return;
   if (fitFrame !== undefined) {
     window.cancelAnimationFrame(fitFrame);
   }
@@ -125,6 +115,7 @@ function scheduleQuestionFontSize() {
 }
 
 onMounted(() => {
+  if (courseStore.isFulltext) return;
   const root = questionRootEl.value;
   if (!root) return;
 
@@ -168,5 +159,25 @@ onUnmounted(() => {
 
 .cloze-context {
   white-space: pre-wrap;
+}
+
+.question-content.fulltext-flow {
+  height: auto;
+  overflow: visible;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
+}
+
+.fulltext-flow .question-prompt,
+.fulltext-flow .question-sentence {
+  margin: 0;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fulltext-flow .mb-2 {
+  margin-bottom: 0;
 }
 </style>

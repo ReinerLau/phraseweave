@@ -1,14 +1,14 @@
 <template>
   <div
     ref="scrollEl"
-    class="relative h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+    class="fulltext-body relative h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain"
     data-testid="fulltext-scroll"
     role="region"
     aria-label="全文内容"
     tabindex="0"
   >
     <ol
-      class="space-y-5 pb-6 text-lg leading-relaxed"
+      class="pb-6"
       aria-label="全文句序"
     >
       <li
@@ -28,33 +28,33 @@
         </div>
         <section
           v-else-if="index === courseStore.currentSentenceIndex"
-          class="flex min-h-0 w-full min-w-0 flex-col"
-          :style="courseStore.fulltextCompleted ? undefined : { height: `${currentHeight}px` }"
+          class="min-w-0"
           data-testid="fulltext-current"
           aria-label="当前句"
         >
-          <p class="mb-3 shrink-0 text-sm text-gray-500 dark:text-gray-400">
-            第 {{ index + 1 }} / {{ courseStore.sentences.length }} 句
-          </p>
           <div v-if="courseStore.fulltextCompleted">
             <p class="text-gray-600 dark:text-gray-400">{{ sentence.chinese }}</p>
             <p class="whitespace-pre-wrap break-words dark:text-gray-100">{{ sentence.english }}</p>
           </div>
-          <div
-            v-else
-            class="min-h-0 min-w-0 flex-1"
-          >
-            <ModeClozeMode />
-          </div>
+          <ModeClozeMode v-else />
         </section>
         <div
           v-else
-          class="py-2"
+          class="relative select-none"
+          :style="{ height: `${maskLayouts[sentence.id]?.height ?? 29.25}px` }"
           data-testid="fulltext-pending-sentence"
         >
-          <span class="sr-only">第 {{ index + 1 }} 句，待练习</span>
+          <span class="sr-only">待练句</span>
           <div
-            class="h-5 w-full max-w-sm rounded bg-slate-300 dark:bg-slate-600"
+            v-for="(line, lineIndex) in maskLayouts[sentence.id]?.lines ?? []"
+            :key="lineIndex"
+            class="pointer-events-none absolute rounded-sm bg-slate-300 dark:bg-slate-600"
+            :style="{
+              left: `${line.left}px`,
+              top: `${line.top}px`,
+              width: `${line.width}px`,
+              height: `${line.height}px`,
+            }"
             data-testid="fulltext-pending-bar"
             aria-hidden="true"
           ></div>
@@ -65,21 +65,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
+import type { ChineseMaskLayout } from "./chineseMaskLayout";
 import { useExerciseStore } from "~/store/exercise";
+import { measureChineseMasks } from "./chineseMaskLayout";
 
 const courseStore = useExerciseStore();
 const scrollEl = ref<HTMLElement>();
-const viewportHeight = ref(300);
-const currentHeight = computed(() => Math.max(180, Math.min(320, viewportHeight.value * 0.5)));
+const maskLayouts = ref<Record<string, ChineseMaskLayout>>({});
 let resizeObserver: ResizeObserver | undefined;
+let measureFrame: number | undefined;
+let measuredWidth = -1;
+let disposed = false;
+
+function measureMasks() {
+  const scroll = scrollEl.value;
+  if (!scroll || scroll.clientWidth <= 0) return;
+  measuredWidth = scroll.clientWidth;
+  maskLayouts.value = measureChineseMasks(scroll, courseStore.sentences);
+}
+
+function scheduleMaskMeasurement() {
+  if (disposed || measureFrame !== undefined) return;
+  measureFrame = window.requestAnimationFrame(() => {
+    measureFrame = undefined;
+    if (disposed) return;
+    measureMasks();
+  });
+}
+
+watch(() => courseStore.sentences, scheduleMaskMeasurement);
 
 async function revealCurrentSentence() {
   await nextTick();
   const scroll = scrollEl.value;
   const current = scroll?.querySelector<HTMLElement>('[data-testid="fulltext-current"]');
-  const contextSpace = Math.min(96, viewportHeight.value * 0.18);
+  const contextSpace = Math.min(96, (scroll?.clientHeight ?? 300) * 0.18);
   if (scroll && current) scroll.scrollTop = Math.max(0, current.offsetTop - contextSpace);
 }
 
@@ -97,12 +119,57 @@ onMounted(() => {
   const scroll = scrollEl.value;
   if (!scroll) return;
   resizeObserver = new ResizeObserver(() => {
-    viewportHeight.value = scroll.clientHeight;
+    if (scroll.clientWidth !== measuredWidth) scheduleMaskMeasurement();
   });
   resizeObserver.observe(scroll);
-  viewportHeight.value = scroll.clientHeight;
+  scheduleMaskMeasurement();
+  document.fonts?.addEventListener("loadingdone", scheduleMaskMeasurement);
+  void document.fonts?.ready.then(scheduleMaskMeasurement);
   void revealCurrentSentence();
 });
 
-onUnmounted(() => resizeObserver?.disconnect());
+onUnmounted(() => {
+  disposed = true;
+  resizeObserver?.disconnect();
+  if (measureFrame !== undefined) window.cancelAnimationFrame(measureFrame);
+  document.fonts?.removeEventListener("loadingdone", scheduleMaskMeasurement);
+});
 </script>
+
+<style scoped>
+.fulltext-body {
+  font-size: 18px;
+  line-height: 1.625;
+}
+
+.fulltext-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fulltext-body :deep(.question-input-words) {
+  row-gap: 0;
+}
+
+.fulltext-body :deep(.question-input-word),
+.fulltext-body :deep(.cloze-punctuation) {
+  min-height: 1.625em;
+  line-height: 1.625;
+}
+
+/* Draw the underline inside the line box so it cannot change text line height. */
+.fulltext-body :deep(.question-content .question-input-word) {
+  position: relative;
+  border-bottom-width: 0;
+}
+
+.fulltext-body :deep(.question-content .question-input-word)::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-bottom: 2px solid;
+  border-bottom-color: inherit;
+  pointer-events: none;
+}
+</style>

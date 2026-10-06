@@ -17,7 +17,14 @@
     </div>
 
     <!-- 右侧 -->
-    <div class="flex w-full min-w-0 justify-end sm:ml-2 sm:w-auto sm:max-w-[30%]">
+    <div
+      class="flex w-full min-w-0 items-center justify-end gap-2 sm:ml-2 sm:w-auto sm:max-w-[30%]"
+      :class="{ 'min-h-11': courseStore.isFulltext }"
+    >
+      <AnswerHintButton
+        v-if="showFulltextAnswerHint"
+        class="shrink-0"
+      />
       <div
         class="clickable-item tooltip-item min-w-0 truncate text-right"
         data-tip="练习卡片列表"
@@ -45,13 +52,26 @@ import { useQuestionInput } from "~/components/main/QuestionInput/questionInputH
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useGameMode } from "~/composables/main/game";
 import { clearQuestionInput } from "~/composables/main/question";
+import { useSummary } from "~/composables/main/summary";
 import { useExerciseStore } from "~/store/exercise";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
+import AnswerHintButton from "./AnswerHintButton.vue";
 import { useContent } from "./Contents/useContents";
 import LearningModeSwitch from "./LearningModeSwitch.vue";
 import PracticeViewSwitch from "./PracticeViewSwitch.vue";
 
 const courseStore = useExerciseStore();
+const { isQuestion } = useGameMode();
+const { showModal } = useSummary();
+const showFulltextAnswerHint = computed(
+  () =>
+    courseStore.isFulltext &&
+    courseStore.currentStatement &&
+    !courseStore.canDecomposeCurrentUnit &&
+    isQuestion() &&
+    !showModal.value &&
+    !courseStore.fulltextCompleted,
+);
 const exerciseCatalogStore = useExerciseCatalogStore();
 const { focusInput } = useQuestionInput();
 const { toggleContents } = useContent();
