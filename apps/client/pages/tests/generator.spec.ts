@@ -72,11 +72,17 @@ function setUrl(url: string) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  window.localStorage.clear();
   // This happy-dom version does not implement History.replaceState.
   vi.spyOn(window.history, "replaceState").mockImplementation((_state, _title, url) => {
     if (url != null) setUrl(String(url));
   });
-  mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
+  mocks.status.mockResolvedValue({
+    runtimeReady: true,
+    modelDownloaded: false,
+    translationProviders: ["local", "index-translate"],
+    initialization: { state: "ready", message: "Ready" },
+  });
   mocks.consume.mockResolvedValue(text);
   mocks.start.mockResolvedValue({ id: "job-1" });
   mocks.job.mockResolvedValue({ id: "job-1", state: "complete", result: { outputs } });
@@ -104,11 +110,28 @@ function button(label: string) {
   return wrapper!.findAll("button").find((item) => item.text() === label)!;
 }
 
+async function submit() {
+  await wrapper!.find("form").trigger("submit");
+  await flushPromises();
+}
+
+async function mountAndGenerate() {
+  await mount();
+  await submit();
+}
+
 describe("generator capture preview", () => {
-  it("generates both formats and previews without saving or navigating", async () => {
+  it("prefills the editable form and generates only after submission", async () => {
     await mount();
     expect(mocks.status).toHaveBeenCalled();
-    expect(mocks.start).toHaveBeenCalledWith({ text, format: "both" });
+    expect(mocks.start).not.toHaveBeenCalled();
+    expect(wrapper!.find("textarea").element.value).toBe(text);
+    await submit();
+    expect(mocks.start).toHaveBeenCalledWith({
+      text,
+      format: "both",
+      translationProvider: "local",
+    });
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("");
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
@@ -121,7 +144,7 @@ describe("generator capture preview", () => {
   });
 
   it("saves once on confirmation, disables the button, then opens the exercise", async () => {
-    await mount();
+    await mountAndGenerate();
     let finishSave!: () => void;
     mocks.save.mockReturnValue(
       new Promise<void>((resolve) => {
@@ -140,7 +163,7 @@ describe("generator capture preview", () => {
   });
 
   it("keeps preview after a save failure and retries without regenerating", async () => {
-    await mount();
+    await mountAndGenerate();
     mocks.save.mockRejectedValueOnce(new Error("保存失败"));
     await button("保存并进入练习").trigger("click");
     await flushPromises();
@@ -156,13 +179,19 @@ describe("generator capture preview", () => {
 
   it("retries a failed generation using the retained selection", async () => {
     mocks.job.mockResolvedValueOnce({ id: "job-1", state: "failed", error: "模型失败" });
-    await mount();
+    await mountAndGenerate();
     expect(wrapper!.text()).toContain("模型失败");
     expect(mocks.save).not.toHaveBeenCalled();
-    await button("重试").trigger("click");
-    await flushPromises();
+    expect(wrapper!.find("textarea").element.value).toBe(text);
+    await wrapper!.findAll("select")[0].setValue("index-translate");
+    await submit();
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).toHaveBeenCalledTimes(2);
+    expect(mocks.start).toHaveBeenLastCalledWith({
+      text,
+      format: "both",
+      translationProvider: "index-translate",
+    });
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
@@ -175,9 +204,10 @@ describe("generator capture preview", () => {
   });
 
   it("decodes fragment text exactly once and removes it before generation", async () => {
-    const selection = "English & 中文 + 100% = # ?\nsecond line";
+    const selection = "  English & 中文 + 100% = # ?\nsecond line  ";
     await mount(fragmentRoute(selection));
-    expect(mocks.start).toHaveBeenCalledWith({ text: selection, format: "both" });
+    expect(wrapper!.find("textarea").element.value).toBe(selection);
+    expect(mocks.start).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("");
     expect(mocks.consume).not.toHaveBeenCalled();
   });
@@ -206,13 +236,14 @@ describe("generator capture preview", () => {
 
   it("does not regenerate a selection when the cleaned page is refreshed", async () => {
     await mount();
-    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.start).not.toHaveBeenCalled();
     const cleaned = window.location.pathname + window.location.search;
     wrapper!.unmount();
     wrapper = undefined;
     await mount(cleaned);
     expect(wrapper!.find("textarea").exists()).toBe(true);
-    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(wrapper!.find("textarea").element.value).toBe("");
+    expect(mocks.start).not.toHaveBeenCalled();
   });
 
   it("keeps ordinary generation manual and previews its results", async () => {
@@ -220,13 +251,107 @@ describe("generator capture preview", () => {
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
     expect(wrapper!.text()).not.toContain("练习模式");
-    expect(wrapper!.findAll("select")).toHaveLength(1);
+    expect(wrapper!.findAll("select")).toHaveLength(2);
     await wrapper!.find("textarea").setValue(text);
     await wrapper!.find("form").trigger("submit");
     await flushPromises();
-    expect(mocks.start).toHaveBeenCalledWith({ text, format: "both" });
+    expect(mocks.start).toHaveBeenCalledWith({
+      text,
+      format: "both",
+      translationProvider: "local",
+    });
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("submits edited selection with the chosen provider and export format", async () => {
+    await mount();
+    await wrapper!.find("textarea").setValue("The dog runs.");
+    const selects = wrapper!.findAll("select");
+    await selects[0].setValue("index-translate");
+    await selects[1].setValue("markdown");
+    expect(wrapper!.text()).toContain("英文原句会发送至 Bilibili");
+    await submit();
+    expect(mocks.start).toHaveBeenCalledWith({
+      text: "The dog runs.",
+      format: "markdown",
+      translationProvider: "index-translate",
+    });
+  });
+
+  it("remembers the translation selection for the next page visit", async () => {
+    await mount();
+    await wrapper!.findAll("select")[0].setValue("index-translate");
+    expect(window.localStorage.getItem("phraseweave.translationProvider")).toBe("index-translate");
+    wrapper!.unmount();
+    await mount();
+    expect(wrapper!.findAll("select")[0].element.value).toBe("index-translate");
+    expect(mocks.start).not.toHaveBeenCalled();
+    await submit();
+    expect(mocks.start.mock.calls[0][0].translationProvider).toBe("index-translate");
+  });
+
+  it("supports legacy services with only local translation", async () => {
+    window.localStorage.setItem("phraseweave.translationProvider", "index-translate");
+    mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
+    await mount();
+    const select = wrapper!.findAll("select")[0];
+    expect(select.element.value).toBe("local");
+    expect(select.findAll("option")).toHaveLength(1);
+    await submit();
+    expect(mocks.start.mock.calls[0][0].translationProvider).toBe("local");
+  });
+
+  it("prefills legacy captures without generating and removes the consumed URL", async () => {
+    await mount(legacyRoute);
+    expect(mocks.consume).toHaveBeenCalledTimes(1);
+    expect(wrapper!.find("textarea").element.value).toBe(text);
+    expect(window.location.search).toBe("");
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it("keeps invalid imports editable for a manual generation", async () => {
+    await mount("/generator#text=invalid%");
+    expect(mocks.start).not.toHaveBeenCalled();
+    await wrapper!.find("textarea").setValue(text);
+    await submit();
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(wrapper!.text()).not.toContain("无效的选中文本");
+  });
+
+  it("does not generate when initialization becomes ready", async () => {
+    mocks.status.mockResolvedValueOnce({
+      runtimeReady: false,
+      modelDownloaded: false,
+      initialization: { state: "starting", message: "Starting" },
+    });
+    await mount();
+    expect(button("生成学习单元").attributes("disabled")).toBeDefined();
+    await wrapper!.find('button[aria-label="刷新本地服务连接"]').trigger("click");
+    await flushPromises();
+    expect(button("生成学习单元").attributes("disabled")).toBeUndefined();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it("prevents duplicate submissions and provider changes while submitting", async () => {
+    let accept!: (value: { id: string }) => void;
+    mocks.start.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          accept = resolve;
+        }),
+    );
+    await mount();
+    await submit();
+    await submit();
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(button("生成学习单元").attributes("disabled")).toBeDefined();
+    expect(
+      wrapper!.findAll("select").every((select) => select.attributes("disabled") !== undefined),
+    ).toBe(true);
+    accept({ id: "job-1" });
+    await flushPromises();
+    expect(button("生成学习单元").attributes("disabled")).toBeUndefined();
   });
 });

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR
+from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR, TRANSLATION_PROVIDERS
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -55,31 +55,37 @@ def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, A
         if getattr(sys, "frozen", False)
         else [str(PYTHON), str(WORKER)]
     )
-    result = subprocess.run(
+    parsed: dict[str, Any] | None = None
+    last_output = ""
+    with subprocess.Popen(
         command,
-        input=json.dumps(payload, ensure_ascii=False),
-        text=True,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        text=True,
         cwd=PROJECT_DIR,
         env=UV_ENV,
-        check=False,
-    )
-    parsed: dict[str, Any] | None = None
-    for line in result.stdout.splitlines():
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            if on_progress:
-                on_progress(line[-500:])
-            continue
-        if "progress" in record:
-            if on_progress:
-                on_progress(record["progress"])
-        else:
-            parsed = record
-    if result.returncode != 0 or not parsed or not parsed.get("ok"):
-        message = parsed.get("error") if parsed else result.stdout[-1200:]
+    ) as process:
+        process.stdin.write(json.dumps(payload, ensure_ascii=False))
+        process.stdin.close()
+        for line in process.stdout:
+            last_output = (last_output + line)[-1200:]
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                if on_progress:
+                    on_progress(line.strip()[-500:])
+                continue
+            if not isinstance(record, dict):
+                continue
+            if "progress" in record:
+                if on_progress:
+                    on_progress(record["progress"])
+            else:
+                parsed = record
+        returncode = process.wait()
+    if returncode != 0 or not parsed or not parsed.get("ok"):
+        message = parsed.get("error") if parsed else last_output
         raise RuntimeError(message or "Local worker failed.")
     return parsed
 
@@ -87,7 +93,10 @@ def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, A
 def _generate(job_id: str, payload: dict[str, Any]) -> None:
     global ACTIVE_JOB
     try:
-        result = _run_worker({"action": "generate", **payload})
+        result = _run_worker(
+            {**payload, "action": "generate"},
+            lambda message: _update_job(job_id, message=str(message)),
+        )
         _finish_job(job_id, result)
     except Exception as error:
         _finish_job(job_id, error=str(error))
@@ -313,6 +322,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({
                 "runtimeReady": getattr(sys, "frozen", False) or PYTHON.is_file(),
                 "modelDownloaded": all((SOURCE_MODEL_DIR / name).is_file() for name in MODEL_FILES),
+                "translationProviders": list(TRANSLATION_PROVIDERS),
                 "activeJob": ACTIVE_JOB,
                 "initialization": INITIALIZATION,
             })
@@ -381,6 +391,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = self._body()
+            if payload.get("translationProvider", "local") not in TRANSLATION_PROVIDERS:
+                raise ValueError("Choose a supported translation provider.")
         except (ValueError, json.JSONDecodeError) as error:
             self._json({"error": str(error)}, 400)
             return
@@ -481,12 +493,6 @@ def _initialize_runtime() -> None:
         if result.returncode != 0:
             raise RuntimeError("uv could not install the locked Python dependencies.")
 
-    print("Checking the Hy-MT2 translation model…", flush=True)
-    _run_worker(
-        {"action": "install-model"},
-        lambda message: _set_initialization("downloading", str(message)),
-    )
-
 
 def _set_initialization(state: str, message: str, error: str = "") -> None:
     global INITIALIZATION
@@ -499,7 +505,7 @@ def _set_initialization(state: str, message: str, error: str = "") -> None:
 
 def _initialize_in_background() -> None:
     try:
-        _set_initialization("downloading", "Checking the translation model…")
+        _set_initialization("downloading", "Preparing the local Python environment…")
         _initialize_runtime()
         _set_initialization("ready", "Local generator is ready")
     except Exception as error:

@@ -5,7 +5,11 @@
         <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
         <h1 class="mt-1 text-3xl font-bold">渐进学习单元生成器</h1>
         <p class="mt-2 max-w-2xl text-sm opacity-75">
-          使用本机模型生成整句中文提示。英文原句和学习单元只在本机处理。
+          {{
+            translationProvider === "index-translate"
+              ? "使用 Index-Translate 生成整句中文提示。英文原句会发送至 Bilibili，学习单元在本机生成。"
+              : "使用本机模型生成整句中文提示。英文原句和学习单元只在本机处理。"
+          }}
         </p>
       </div>
       <CommonBackLink
@@ -46,14 +50,20 @@
           class="badge"
           :class="runtimeReady ? 'badge-success' : 'badge-ghost'"
         >
-          Transformers {{ runtimeReady ? "已就绪" : "未就绪" }}
+          生成引擎 {{ runtimeReady ? "已就绪" : "未就绪" }}
         </span>
         <span
+          v-if="translationProvider === 'local'"
           class="badge"
           :class="modelDownloaded ? 'badge-success' : 'badge-ghost'"
         >
           Hy-MT2 模型 {{ modelDownloaded ? "已下载" : "未下载" }}
         </span>
+        <span
+          v-else
+          class="badge badge-outline"
+          >Index-Translate 公网翻译</span
+        >
       </div>
       <div
         v-if="activeJob"
@@ -74,7 +84,7 @@
     </section>
 
     <section
-      v-if="captureMode"
+      v-if="captureStatus || captureError"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
       aria-live="polite"
     >
@@ -87,19 +97,9 @@
       >
         {{ captureError }}
       </p>
-      <button
-        v-if="captureText && captureError && captureText.length <= 30000"
-        class="btn btn-primary mt-4"
-        type="button"
-        :disabled="captureRunning"
-        @click="runCapture"
-      >
-        {{ captureRunning ? "正在处理…" : "重试" }}
-      </button>
     </section>
 
     <form
-      v-if="!captureMode"
       class="flex flex-col gap-5 rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
       @submit.prevent="generate"
     >
@@ -110,9 +110,28 @@
           class="textarea textarea-bordered min-h-56 w-full text-base"
           placeholder="Paste English text here…"
           maxlength="30000"
+          :disabled="generationBusy || savingExercise"
           required
         ></textarea>
         <span class="mt-1 text-right text-xs opacity-60">{{ englishText.length }} / 30,000</span>
+      </label>
+
+      <label class="form-control">
+        <span class="label-text mb-2 font-semibold">翻译方式</span>
+        <select
+          v-model="translationProvider"
+          class="select select-bordered"
+          :disabled="generationBusy || savingExercise"
+          @change="rememberTranslationProvider"
+        >
+          <option value="local">Hy-MT2 本地翻译</option>
+          <option
+            v-if="translationProviders.includes('index-translate')"
+            value="index-translate"
+          >
+            Index-Translate 公网翻译
+          </option>
+        </select>
       </label>
 
       <div>
@@ -121,6 +140,7 @@
           <select
             v-model="outputFormat"
             class="select select-bordered"
+            :disabled="generationBusy || savingExercise"
           >
             <option value="markdown">Markdown</option>
             <option value="phraseweave">PhraseWeave JSON</option>
@@ -133,7 +153,7 @@
         <button
           class="btn btn-primary"
           type="submit"
-          :disabled="!canGenerate || Boolean(activeJob)"
+          :disabled="!canGenerate"
         >
           生成学习单元
         </button>
@@ -141,8 +161,12 @@
           <template v-if="!serviceConnected"
             >请先启动本地服务；连接失败后点击上方刷新按钮。</template
           >
-          <template v-else-if="!runtimeReady || !modelDownloaded"
-            >请等待本地服务完成依赖和 Hy-MT2 模型初始化。</template
+          <template v-else-if="!serviceReady">请等待本地服务完成初始化。</template>
+          <template v-else-if="translationProvider === 'index-translate'"
+            >需要联网；英文原句会发送至 Bilibili。</template
+          >
+          <template v-else-if="!modelDownloaded"
+            >首次本地生成会下载 Hy-MT2 模型，并显示准备进度。</template
           >
           <template v-else>模型运行在 Mac 上；可保存练习或下载生成文件。</template>
         </p>
@@ -262,7 +286,11 @@
 import { navigateTo, useRoute } from "#app";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-import type { GeneratorJob, GeneratorOutput } from "~/services/generatorClient";
+import type {
+  GeneratorJob,
+  GeneratorOutput,
+  TranslationProvider,
+} from "~/services/generatorClient";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import {
   consumeCapture,
@@ -290,7 +318,10 @@ const selectedText =
   typeof window === "undefined"
     ? null
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
-const captureMode = selectedText !== null || Boolean(captureId);
+const TRANSLATION_PREFERENCE_KEY = "phraseweave.translationProvider";
+const translationProvider = ref<TranslationProvider>("local");
+const translationProviders = ref<TranslationProvider[]>(["local"]);
+const supportsProviderSelection = ref(false);
 const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
 const serviceConnected = ref(false);
@@ -301,35 +332,48 @@ const initializationState = ref("starting");
 const initializationError = ref("");
 const serviceMessage = ref("正在连接本地服务…");
 const activeJob = ref<GeneratorJob | null>(null);
+const submitting = ref(false);
+const generationBusy = computed(() => submitting.value || Boolean(activeJob.value));
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
+const generatedText = ref("");
 const savingExercise = ref(false);
 const markdownFileName = ref("");
 const markdownContent = ref<string | null>(null);
 const markdownBlocks = computed(() => parseMarkdown(markdownContent.value || ""));
-const captureText = ref("");
-const captureStatus = ref("正在接收选中文本…");
+const captureStatus = ref("");
 const captureError = ref("");
-const captureRunning = ref(false);
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 
 const { updateActiveCourseMap } = useActiveCourseMap();
-let serviceCheck: Promise<void> | undefined;
 
 const serviceReady = computed(
   () =>
     serviceConnected.value &&
     runtimeReady.value &&
-    modelDownloaded.value &&
+    (supportsProviderSelection.value || modelDownloaded.value) &&
     initializationState.value === "ready" &&
     !initializationError.value,
 );
-const canGenerate = computed(() => serviceReady.value && englishText.value.trim().length > 0);
+const canGenerate = computed(
+  () =>
+    serviceReady.value &&
+    englishText.value.trim().length > 0 &&
+    !generationBusy.value &&
+    !savingExercise.value,
+);
 
 onMounted(() => {
-  serviceCheck = connectService();
+  try {
+    if (window.localStorage.getItem(TRANSLATION_PREFERENCE_KEY) === "index-translate") {
+      translationProvider.value = "index-translate";
+    }
+  } catch {
+    // The generator still works when browser storage is unavailable.
+  }
+  void connectService();
   if (selectedText !== null) {
     window.history.replaceState(
       window.history.state,
@@ -350,6 +394,9 @@ onMounted(() => {
       captureStatus.value = "无法读取选中文本。";
     }
   } else if (captureId) {
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("capture");
+    window.history.replaceState(window.history.state, "", cleanUrl.pathname + cleanUrl.search);
     if (!/^[a-f0-9-]{32,36}$/i.test(captureId)) {
       captureError.value = "无效的浏览器扩展请求，请从文章中重新选择文本。";
       captureStatus.value = "无法读取选中文本。";
@@ -365,18 +412,26 @@ onMounted(() => {
 });
 
 function receiveCaptureText(text: string) {
-  captureText.value = text.trim();
-  if (!captureText.value) {
+  if (!text.trim()) {
     captureError.value = "没有收到选中文本，请重新选择后再试。";
     captureStatus.value = "无法创建练习。";
     return;
   }
-  if (captureText.value.length > 30000) {
+  if (text.length > 30000) {
     captureError.value = "选中文本超过 30,000 个字符，请缩短选择后再试。";
-    captureStatus.value = `已接收 ${captureText.value.length.toLocaleString()} 个字符。`;
+    captureStatus.value = `已接收 ${text.length.toLocaleString()} 个字符。`;
     return;
   }
-  void runCapture();
+  englishText.value = text;
+  captureStatus.value = "选中文本已填入下方，可编辑文本并选择翻译方式，再点击“生成学习单元”。";
+}
+
+function rememberTranslationProvider() {
+  try {
+    window.localStorage.setItem(TRANSLATION_PREFERENCE_KEY, translationProvider.value);
+  } catch {
+    // A storage restriction should not prevent changing the translation provider.
+  }
 }
 
 async function connectService() {
@@ -386,18 +441,23 @@ async function connectService() {
     serviceConnected.value = true;
     runtimeReady.value = status.runtimeReady;
     modelDownloaded.value = status.modelDownloaded;
+    supportsProviderSelection.value = Array.isArray(status.translationProviders);
+    translationProviders.value = status.translationProviders || ["local"];
+    if (!translationProviders.value.includes(translationProvider.value)) {
+      translationProvider.value = "local";
+    }
     initializationState.value = status.initialization?.state || "ready";
     initializationError.value = status.initialization?.error || "";
     if (status.initialization?.state === "error") {
-      serviceMessage.value = status.initialization.error || "本地模型初始化失败。";
+      serviceMessage.value = status.initialization.error || "本地生成引擎初始化失败。";
     } else if (status.initialization?.state === "downloading") {
       serviceMessage.value = status.initialization.message;
-    } else if (!status.runtimeReady || !status.modelDownloaded) {
+    } else if (!serviceReady.value) {
       serviceMessage.value = isLocalPackage()
         ? "本地服务尚未完成初始化，请稍候。"
         : "本地服务尚未完成初始化，请查看启动服务的终端。";
     } else {
-      serviceMessage.value = "本地服务和翻译模型已就绪。";
+      serviceMessage.value = "本地生成引擎已就绪，请选择翻译方式后生成。";
     }
   } catch {
     serviceConnected.value = false;
@@ -442,11 +502,13 @@ async function refreshService() {
 async function startJob(payload: {
   text: string;
   format: OutputFormat;
+  translationProvider: TranslationProvider;
 }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   outputFiles.value = [];
   markdownFileName.value = "";
   markdownContent.value = null;
+  generatedText.value = payload.text;
   try {
     const body = await startGeneratorJob(payload);
     activeJob.value = { id: body.id, state: "running", message: "正在启动…" };
@@ -459,10 +521,17 @@ async function startJob(payload: {
 
 async function generate() {
   if (!canGenerate.value) return;
-  await startJob({
-    text: englishText.value,
-    format: outputFormat.value,
-  });
+  submitting.value = true;
+  captureError.value = "";
+  try {
+    await startJob({
+      text: englishText.value,
+      format: outputFormat.value,
+      translationProvider: translationProvider.value,
+    });
+  } finally {
+    submitting.value = false;
+  }
 }
 
 async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
@@ -502,54 +571,12 @@ async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
   }
 }
 
-async function runCapture() {
-  if (!captureText.value || captureRunning.value) return;
-  captureRunning.value = true;
-  captureError.value = "";
-  jobError.value = "";
-  captureStatus.value = "正在连接本地生成服务…";
-  outputFormat.value = "both";
-  englishText.value = captureText.value;
-
-  try {
-    const pendingServiceCheck = serviceCheck;
-    serviceCheck = undefined;
-    if (pendingServiceCheck) await pendingServiceCheck;
-    else await connectService();
-    if (isLocalPackage()) {
-      while (!disposed && !serviceReady.value) {
-        captureStatus.value = serviceMessage.value;
-        if (initializationError.value) {
-          throw new Error(serviceMessage.value);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        await connectService();
-      }
-    }
-    if (!canGenerate.value) {
-      throw new Error(serviceMessage.value || "本地生成服务尚未就绪。请启动服务后重试。");
-    }
-    captureStatus.value = "正在生成学习单元…";
-    const outputs = await startJob({
-      text: captureText.value,
-      format: "both",
-    });
-    if (!outputs) throw new Error(jobError.value || "学习单元生成失败，请重试。");
-    captureStatus.value = "生成完成。请先预览下方结果，确认后点击“保存并进入练习”。";
-  } catch (error) {
-    captureError.value = describeError(error);
-    captureStatus.value = "练习尚未创建。选中文本仍保留在此页面，可以重试。";
-  } finally {
-    captureRunning.value = false;
-  }
-}
-
 async function saveAndOpenExercise() {
   if (savingExercise.value) return;
   savingExercise.value = true;
   jobError.value = "";
   try {
-    await importGeneratedExercise(outputFiles.value, englishText.value);
+    await importGeneratedExercise(outputFiles.value, generatedText.value);
   } catch (error) {
     jobError.value = describeError(error);
   } finally {

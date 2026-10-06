@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from model_runtime import install_model, model_status, translate_sentences
+from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
 from split_lexical_chunks import (
     ConfigurationError,
     generate_plan,
@@ -55,11 +55,14 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
     if output_format not in {"markdown", "phraseweave", "both"}:
         raise ValueError("Choose an output format.")
+    provider = payload.get("translationProvider", "local")
+    if provider not in TRANSLATION_PROVIDERS:
+        raise ValueError("Choose a supported translation provider.")
 
     nlp = load_syntax_model()
     plan, traces = generate_plan(text, nlp)
     sentences = [item["sentence"] for item in plan["sentences"]]
-    chinese = translate_sentences(sentences)
+    chinese = translate_sentences(sentences, provider, lambda message: _emit({"progress": message}))
     if len(chinese) != len(sentences) or any(not line for line in chinese):
         raise RuntimeError("The translation engine did not return one prompt for each sentence.")
     translations = {
