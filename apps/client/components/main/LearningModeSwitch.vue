@@ -8,19 +8,19 @@
       @change="changeMode"
       @keydown.stop
     >
-      <option value="progressive">从简单到复杂</option>
+      <option value="progressive">渐进组合</option>
       <option
         value="sentence-first"
         :disabled="!courseStore.canUseSentenceFirst"
       >
-        从复杂回退到简单
+        整句优先
       </option>
     </select>
     <span
       v-if="!courseStore.canUseSentenceFirst"
       class="max-w-56 text-xs opacity-70"
     >
-      该练习无法识别原句分组，请重新生成以使用复杂模式。
+      该练习无法识别原句分组，请重新生成以使用整句优先。
     </span>
   </div>
 </template>
