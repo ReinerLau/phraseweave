@@ -11,7 +11,7 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
-ALGORITHM_VERSION = 6
+ALGORITHM_VERSION = 7
 PHRASEWEAVE_SCHEMA_VERSION = 4
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
 
@@ -45,11 +45,14 @@ def _exact_keys(value: Any, keys: set[str], location: str) -> None:
         raise ConfigurationError(f"{location} must contain exactly: {', '.join(sorted(keys))}")
 
 
-def _remove_double_quotes(text: str) -> str:
+def _syntax_text(text: str) -> tuple[str, list[int]]:
+    """Ignore double quotes for parsing while retaining original character offsets."""
     clean: list[str] = []
+    offsets: list[int] = []
     for index, char in enumerate(text):
         if char not in DOUBLE_QUOTES:
             clean.append(char)
+            offsets.append(index)
             continue
         next_index = index + 1
         while next_index < len(text) and text[next_index] in DOUBLE_QUOTES:
@@ -61,14 +64,19 @@ def _remove_double_quotes(text: str) -> str:
             and text[next_index].isalnum()
         ):
             clean.append(" ")
-    return "".join(clean)
+            offsets.append(index)
+    clean_text = "".join(clean)
+    start = len(clean_text) - len(clean_text.lstrip())
+    clean_text = clean_text.strip()
+    return clean_text, offsets[start:start + len(clean_text)]
 
 
-def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    sentence = sentence_span.text.strip()
-    sentence_start = sentence_span.start_char + (
-        len(sentence_span.text) - len(sentence_span.text.lstrip())
-    )
+def _build_sentence(
+    sentence_span: Any,
+    sentence: str,
+    sentence_start: int,
+    offsets: Sequence[int],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     tokens = [token for token in sentence_span if not token.is_space and not token.is_punct]
     if not tokens:
         raise ConfigurationError(f"sentence has no word tokens: {sentence!r}")
@@ -82,23 +90,23 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
     completed: dict[int, tuple[int, int] | None] = {}
 
     def phrase_text(bounds: tuple[int, int]) -> str:
-        first, last = (sentence_span.doc[index] for index in bounds)
-        return sentence[first.idx - sentence_start : last.idx + len(last.text) - sentence_start]
+        start, end = source_span(bounds)
+        return sentence[start:end]
 
     def source_span(bounds: tuple[int, int]) -> tuple[int, int]:
         first, last = (sentence_span.doc[index] for index in bounds)
-        return first.idx - sentence_start, last.idx + len(last.text) - sentence_start
+        return (
+            offsets[first.idx] - sentence_start,
+            offsets[last.idx + len(last.text) - 1] + 1 - sentence_start,
+        )
 
     def record(
         bounds: tuple[int, int],
         kind: str,
         explanation: str,
         operands: tuple[tuple[int, int], tuple[int, int]] | None = None,
-        source_spans: tuple[tuple[int, int], tuple[int, int]] | None = None,
     ) -> None:
-        first, last = (sentence_span.doc[index] for index in bounds)
-        start = first.idx - sentence_start
-        end = last.idx + len(last.text) - sentence_start
+        start, end = source_span(bounds)
         if (start, end) in seen_spans:
             return
         seen_spans.add((start, end))
@@ -108,9 +116,7 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             "kind": kind,
         })
         explanations.append(explanation)
-        if source_spans is not None:
-            sources.append(source_spans)
-        elif operands is not None:
+        if operands is not None:
             sources.append(tuple(source_span(operand) for operand in operands))
         else:
             sources.append(None)
@@ -199,9 +205,7 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
         visit(token)
 
     full_bounds = (tokens[0].i, tokens[-1].i)
-    first, last = tokens[0], tokens[-1]
-    full_start = first.idx - sentence_start
-    full_end = last.idx + len(last.text) - sentence_start
+    full_start, full_end = source_span(full_bounds)
     sentence_sources = None
     for index in range(len(units) - 1, -1, -1):
         if units[index]["span"] == {"start": full_start, "end": full_end}:
@@ -210,7 +214,13 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
             del explanations[index]
             seen_spans.remove((full_start, full_end))
             break
-    record(full_bounds, "sentence", "整句", source_spans=sentence_sources)
+    units.append({
+        "text": sentence,
+        "span": {"start": 0, "end": len(sentence)},
+        "kind": "sentence",
+    })
+    explanations.append("整句")
+    sources.append(sentence_sources)
 
     trace = {
         "tree_tokens": [
@@ -232,16 +242,48 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
 
 
 def generate_plan(text: str, nlp: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    clean_text = _remove_double_quotes(text).strip()
+    original = text.strip()
+    clean_text, offsets = _syntax_text(original)
     if not clean_text:
         raise ConfigurationError("No English text was provided on stdin.")
+    opening_quotes: set[int] = set()
+    closing_quotes: set[int] = set()
+    inside_straight_quotes = False
+    for index, char in enumerate(original):
+        if char == '"':
+            # A saved sentence may contain the closing quote of a multi-sentence quote.
+            closes_quote = inside_straight_quotes or index == len(original) - 1
+            (closing_quotes if closes_quote else opening_quotes).add(index)
+            inside_straight_quotes = not inside_straight_quotes
+        elif char == "“":
+            opening_quotes.add(index)
+        elif char == "”":
+            closing_quotes.add(index)
     document = nlp(clean_text)
     sentences: list[dict[str, Any]] = []
     traces: list[dict[str, Any]] = []
     for sentence_span in document.sents:
-        sentence = sentence_span.text.strip()
-        if sentence:
-            units, trace = _build_sentence(sentence_span)
+        parsed = sentence_span.text.strip()
+        if parsed:
+            clean_start = sentence_span.start_char + (
+                len(sentence_span.text) - len(sentence_span.text.lstrip())
+            )
+            clean_end = clean_start + len(parsed)
+            source_start = offsets[clean_start]
+            source_end = offsets[clean_end - 1] + 1
+            # Quotes removed at either boundary still belong to the original sentence.
+            while source_start > 0 and (
+                source_start - 1 in opening_quotes or original[source_start - 1].isspace()
+            ):
+                source_start -= 1
+            while source_end < len(original) and (
+                source_end in closing_quotes or original[source_end].isspace()
+            ):
+                source_end += 1
+            raw_sentence = original[source_start:source_end]
+            source_start += len(raw_sentence) - len(raw_sentence.lstrip())
+            sentence = raw_sentence.strip()
+            units, trace = _build_sentence(sentence_span, sentence, source_start, offsets)
             sentences.append({"sentence": sentence, "units": units})
             traces.append({"sentence": sentence, "units": units, **trace})
     if not sentences:
