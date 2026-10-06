@@ -55,6 +55,10 @@ say any kind of light at bedtime could be bad for your heart
 Researchers from Tulane University in the USA say any kind of light at bedtime could be bad for your heart""".splitlines()
 
 SECOND_SENTENCE = "The young teacher gave her students a difficult problem after class."
+PENALTIES_SENTENCE = (
+    "The new penalties will also be applied to other anti-social behaviour, "
+    "such as putting feet on seats, littering, and eating or drinking on buses"
+)
 SECOND_UNITS = """young
 teacher
 young teacher
@@ -161,14 +165,53 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             source_ids = [next(row["unit_id"] for row in rows if row["english"] == source) for source in sources]
             self.assertEqual(target["source_unit_ids"], source_ids)
 
-    def test_internal_punctuation_blocks_local_closure_but_sentence_keeps_comma(self):
+    def test_internal_punctuation_allows_local_closure_and_keeps_comma(self):
         plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
         texts = [unit["text"] for unit in plan["sentences"][0]["units"]]
         self.assertIn("He smiled", texts)
         self.assertIn("she laughed", texts)
         self.assertEqual(texts[-1], "He smiled, and she laughed")
-        self.assertNotIn("smiled, and", texts)
-        self.assertTrue(traces[0]["blocked"])
+        self.assertIn("smiled, and", texts)
+        self.assertIn("He smiled, and", texts)
+        self.assertFalse(traces[0]["blocked"])
+
+    def test_adjacency_ignores_hyphens_semicolons_and_whitespace_tokens(self):
+        for text, expected_sources in (
+            ("The anti-social behaviour stopped.", ["The anti-social behaviour", "stopped"]),
+            ("He said no; she left.", ["He said no", "she left"]),
+            ("He smiled,\n\nand she laughed.", ["He smiled,\n\nand", "she laughed"]),
+        ):
+            with self.subTest(text=text):
+                plan, traces = generate_plan(text, self.nlp)
+                self.assertEqual(len(plan["sentences"]), 1)
+                sentence, trace = plan["sentences"][0], traces[0]
+                self.assertIsNotNone(trace["sources"][-1])
+                self.assertEqual(
+                    [sentence["sentence"][slice(*span)] for span in trace["sources"][-1]],
+                    expected_sources,
+                )
+                for unit in sentence["units"]:
+                    self.assertEqual(
+                        unit["text"],
+                        sentence["sentence"][unit["span"]["start"]:unit["span"]["end"]],
+                    )
+
+    def test_word_gaps_still_block_unclosed_subtrees(self):
+        plan, traces = generate_plan("I bought a book yesterday that explains grammar.", self.nlp)
+        texts = [unit["text"] for unit in plan["sentences"][0]["units"]]
+        self.assertIn("a book", texts)
+        self.assertIn("that explains grammar", texts)
+        self.assertNotIn("a book yesterday that explains grammar", texts)
+        self.assertNotIn("I bought a book yesterday", texts)
+        self.assertIsNone(traces[0]["sources"][-1])
+        self.assertIn(
+            {"head": "book", "child": "explains", "reason": "与当前片段不相邻"},
+            traces[0]["blocked"],
+        )
+        self.assertIn(
+            {"head": "bought", "child": "book", "reason": "子短语未闭合"},
+            traces[0]["blocked"],
+        )
 
     def test_double_quotes_are_removed_before_parsing_and_from_answers(self):
         sentence = (
@@ -232,7 +275,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             _validate_plan(wrong_version, self.nlp)
 
         old_algorithm = deepcopy(plan)
-        old_algorithm["algorithm_version"] = 4
+        old_algorithm["algorithm_version"] = 5
         with self.assertRaisesRegex(ConfigurationError, "generator versions"):
             _validate_plan(old_algorithm, self.nlp)
 
@@ -341,11 +384,65 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             {f"0:{next(index for index, unit in enumerate(sentence['units']) if unit['text'] == 'the USA')}"},
         )
 
-    def test_review_does_not_invent_sources_across_punctuation(self):
+    def test_review_replays_actual_sources_across_punctuation(self):
         plan, traces = generate_plan("He smiled, and she laughed.", self.nlp)
         sentence = plan["sentences"][0]
-        self.assertIsNone(traces[0]["sources"][-1])
-        self.assertEqual(_exercise_steps(sentence, traces[0])[-1], (len(sentence["units"]) - 1, False))
+        self.assertEqual(
+            [sentence["sentence"][slice(*span)] for span in traces[0]["sources"][-1]],
+            ["He smiled, and", "she laughed"],
+        )
+        rows = [
+            (sentence["units"][index]["text"], is_review)
+            for index, is_review in _exercise_steps(sentence, traces[0])
+        ]
+        self.assertEqual(rows[-3:], [
+            ("she laughed", True),
+            ("He smiled, and", True),
+            ("He smiled, and she laughed", False),
+        ])
+
+    def test_penalties_sentence_exports_complete_sources_and_replays_them(self):
+        plan, traces = generate_plan(PENALTIES_SENTENCE, self.nlp)
+        sentence, trace = plan["sentences"][0], traces[0]
+        self.assertEqual(sentence["units"][-1]["text"], PENALTIES_SENTENCE)
+        self.assertEqual(sum(unit["kind"] == "sentence" for unit in sentence["units"]), 1)
+        self.assertFalse(trace["blocked"])
+        expected_sources = ["The new penalties", PENALTIES_SENTENCE.removeprefix("The new penalties ")]
+        self.assertEqual(
+            [sentence["sentence"][slice(*span)] for span in trace["sources"][-1]],
+            expected_sources,
+        )
+        parsed_tokens = list(self.nlp(PENALTIES_SENTENCE))
+        for unit, sources in zip(sentence["units"], trace["sources"], strict=True):
+            start, end = unit["span"]["start"], unit["span"]["end"]
+            self.assertEqual(unit["text"], sentence["sentence"][start:end])
+            if sources is None:
+                continue
+            # A combination may span punctuation, but its sources must cover every word.
+            target_tokens = {
+                token.i for token in parsed_tokens
+                if not token.is_punct and not token.is_space and start <= token.idx < end
+            }
+            source_tokens = {
+                token.i for token in parsed_tokens
+                if not token.is_punct and not token.is_space
+                and any(source_start <= token.idx < source_end for source_start, source_end in sources)
+            }
+            self.assertEqual(source_tokens, target_tokens)
+
+        payload = json.loads(render_phraseweave(plan, {"sentences": [{"sentence_chinese": "整句提示"}]}, traces))
+        rows = payload["statements"]
+        by_id = {row["unit_id"]: row for row in rows}
+        final = rows[-1]
+        self.assertEqual(payload["schema_version"], 4)
+        self.assertEqual(final["context_before"], "")
+        self.assertEqual(final["context_after"], "")
+        self.assertEqual([by_id[unit_id]["english"] for unit_id in final["source_unit_ids"]], expected_sources)
+        self.assertEqual([row["unit_id"] for row in rows[-3:-1]], final["source_unit_ids"])
+        first_by_id = {}
+        for index, row in enumerate(rows):
+            first_by_id.setdefault(row["unit_id"], index)
+            self.assertTrue(all(first_by_id[source_id] < index for source_id in row["source_unit_ids"]))
 
 
 if __name__ == "__main__":

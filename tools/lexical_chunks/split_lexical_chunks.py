@@ -11,7 +11,7 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
-ALGORITHM_VERSION = 5
+ALGORITHM_VERSION = 6
 PHRASEWEAVE_SCHEMA_VERSION = 4
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
 
@@ -73,6 +73,7 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
     if not tokens:
         raise ConfigurationError(f"sentence has no word tokens: {sentence!r}")
     token_by_id = {token.i: token for token in tokens}
+    token_position = {token.i: position for position, token in enumerate(tokens)}
     units: list[dict[str, Any]] = []
     explanations: list[str] = []
     sources: list[tuple[tuple[int, int], ...] | None] = []
@@ -114,6 +115,10 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
         else:
             sources.append(None)
 
+    def adjacent(left: tuple[int, int], right: tuple[int, int]) -> bool:
+        # Count only word tokens for adjacency; bounds still refer to the original text.
+        return token_position[left[1]] + 1 == token_position[right[0]]
+
     def visit(token: Any) -> None:
         if token.i in completed:
             return
@@ -136,11 +141,11 @@ def _build_sentence(sentence_span: Any) -> tuple[list[dict[str, Any]], dict[str,
         }
         while remaining:
             left = next(
-                ((index, bounds) for index, bounds in remaining.items() if bounds[1] == current[0] - 1),
+                ((index, bounds) for index, bounds in remaining.items() if adjacent(bounds, current)),
                 None,
             )
             right = next(
-                ((index, bounds) for index, bounds in remaining.items() if bounds[0] == current[1] + 1),
+                ((index, bounds) for index, bounds in remaining.items() if adjacent(current, bounds)),
                 None,
             )
             if left is None and right is None:
