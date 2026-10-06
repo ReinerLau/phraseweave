@@ -3,17 +3,18 @@
     class="relative flex min-w-0 max-w-full items-center justify-between border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
   >
     <!-- 左侧 -->
-    <div class="flex min-w-0 flex-1 items-center">
+    <div class="flex min-w-0 flex-1 items-center gap-2">
       <NuxtLink
         href="/course-pack"
         class="clickable-item shrink-0"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
+      <LearningModeSwitch />
     </div>
 
     <!-- 右侧 -->
-    <div class="flex min-w-0 max-w-[75%] items-center">
+    <div class="ml-2 flex min-w-0 max-w-[35%] items-center">
       <div
         class="clickable-item tooltip-item min-w-0 truncate text-right"
         data-tip="练习卡片列表"
@@ -44,6 +45,7 @@ import { clearQuestionInput } from "~/composables/main/question";
 import { useExerciseStore } from "~/store/exercise";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 import { useContent } from "./Contents/useContents";
+import LearningModeSwitch from "./LearningModeSwitch.vue";
 
 const courseStore = useExerciseStore();
 const exerciseCatalogStore = useExerciseCatalogStore();

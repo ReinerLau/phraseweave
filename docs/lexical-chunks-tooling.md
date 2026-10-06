@@ -10,4 +10,6 @@ Chrome 扩展直接携带选中文本打开固定的本机 Web UI，文本放在
 
 公网翻译使用官方 `https://index-translate.bilibili.com/v1/chat/completions` 和 `Index-Translate-35B-A3B`，无需 API Key，逐句请求，每句超时 30 秒。公网生成不下载或加载 Hy-MT2。请求失败或译文截断时显示失败句序号，原文保留，用户可以重试或切换翻译方式；不会自动回退。启动仍需准备本地 Python 和 spaCy 依赖。
 
-每个完整原句生成一条共用的中文提示。生成题序统一使用复习规则：组合学习单元前重放其直接来源，不再提供常规模式或模式选择。Markdown 与 PhraseWeave JSON 使用同一条题序。PhraseWeave JSON 使用 schema 4，包含稳定的 `unit_id`、直接来源 `source_unit_ids` 和原句上下文。
+每个完整原句生成一条共用的中文提示。生成题序统一使用复习规则：组合学习单元前重放其直接来源。Markdown 与 PhraseWeave JSON 使用同一条题序。PhraseWeave JSON 使用 schema 4，包含稳定的 `unit_id`、直接来源 `source_unit_ids` 和原句上下文。
+
+练习页面可选择“从简单到复杂”或“从复杂回退到简单”，无需重新生成。简单模式保留生成题序；复杂模式先练整句，答错才练组成单元，再重试原句。切换从当前单元重新开始；临时复习切回简单模式时定位到原基础题之前同一单元最后一次出现的位置。模式和位置随本地练习保存，完整备份包含这些状态。定位与兼容规则见 [ADR 0022](adr/0022-switchable-learning-direction.md)。

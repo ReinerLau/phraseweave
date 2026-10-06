@@ -143,7 +143,7 @@ watch(isAnswerTip, (isVisible) => {
 });
 
 watch(
-  () => courseStore.currentStatement?.id,
+  () => [courseStore.currentStatement?.id, courseStore.learningMode],
   () => {
     cancelErrorReset();
     clearInput();

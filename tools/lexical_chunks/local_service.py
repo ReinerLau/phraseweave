@@ -166,14 +166,16 @@ def _save_catalog_entry(database: sqlite3.Connection, item: Any) -> None:
     )
 
 
-def _save_course_pack(database: sqlite3.Connection, course_pack: dict[str, Any]) -> None:
+def _save_course_pack(
+    database: sqlite3.Connection, course_pack: dict[str, Any], *, merge_progress: bool = True,
+) -> None:
     exercise_id = course_pack.get("id")
     if not isinstance(exercise_id, str) or not exercise_id:
         raise ValueError("Course pack is invalid.")
     existing = database.execute(
         "SELECT data FROM course_packs WHERE id = ?", (exercise_id,)
     ).fetchone()
-    if existing:
+    if existing and merge_progress:
         course_pack = _merge_progress(json.loads(existing[0]), course_pack)
     database.execute(
         "INSERT INTO course_packs(id, data) VALUES(?, ?) "
@@ -202,10 +204,18 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
         previous = current_courses.get(course.get("id"))
         if not previous:
             continue
-        course["statementIndex"] = max(
-            int(course.get("statementIndex", 0) or 0),
-            int(previous.get("statementIndex", 0) or 0),
-        )
+        if previous.get("learningMode") in ("progressive", "sentence-first"):
+            # Full-pack writes (e.g. completion) must not restore a stale mode or cursor.
+            course["statementIndex"] = previous.get("statementIndex", 0)
+            course["learningMode"] = previous["learningMode"]
+            course.pop("sentenceFirstStartIndex", None)
+            if "sentenceFirstStartIndex" in previous:
+                course["sentenceFirstStartIndex"] = previous["sentenceFirstStartIndex"]
+        else:
+            course["statementIndex"] = max(
+                int(course.get("statementIndex", 0) or 0),
+                int(previous.get("statementIndex", 0) or 0),
+            )
         course["completionCount"] = max(
             int(course.get("completionCount", 0) or 0),
             int(previous.get("completionCount", 0) or 0),
@@ -436,6 +446,7 @@ class Handler(BaseHTTPRequestHandler):
             if not exercise_id or len(exercise_id) > 200:
                 raise ValueError("Exercise id is invalid.")
             with _database() as database:
+                database.execute("BEGIN IMMEDIATE")
                 if len(tail) == 1:
                     course_pack = payload.get("coursePack")
                     if not isinstance(course_pack, dict) or course_pack.get("id") != exercise_id:
@@ -462,13 +473,30 @@ class Handler(BaseHTTPRequestHandler):
                         if not isinstance(index, int) or isinstance(index, bool) or index < 0:
                             raise ValueError("Statement index is invalid.")
                         course["statementIndex"] = index
+                        if "learningMode" in payload:
+                            mode = payload["learningMode"]
+                            if mode not in ("progressive", "sentence-first"):
+                                raise ValueError("Learning mode is invalid.")
+                            start = payload.get("sentenceFirstStartIndex")
+                            if start is not None and (
+                                not isinstance(start, int) or isinstance(start, bool)
+                                or start < 0 or start >= len(course.get("statements", []))
+                            ):
+                                raise ValueError("Sentence-first start index is invalid.")
+                            if index >= len(course.get("statements", [])):
+                                raise ValueError("Statement index is invalid.")
+                            course["learningMode"] = mode
+                            course.pop("sentenceFirstStartIndex", None)
+                            if mode == "sentence-first" and start is not None:
+                                course["sentenceFirstStartIndex"] = start
                     else:
                         unit_key = payload.get("unitKey")
                         if not isinstance(unit_key, str) or not unit_key:
                             raise ValueError("Unit key is invalid.")
                         passed = course.get("passedUnitIds", [])
                         course["passedUnitIds"] = list(dict.fromkeys([*passed, unit_key]))
-                    _save_course_pack(database, course_pack)
+                    # This transaction already read the latest pack; an explicit cursor may move back.
+                    _save_course_pack(database, course_pack, merge_progress=False)
                 else:
                     self.send_error(404)
                     return

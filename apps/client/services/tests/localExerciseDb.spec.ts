@@ -110,6 +110,19 @@ describe("normalizeExerciseImport", () => {
     });
   });
 
+  it("preserves learning mode, cursor and starting occurrence in array backups", () => {
+    const [pack] = normalizeExerciseImport({ schema_version: 4, statements: [firstUnit] });
+    pack.courses[0].learningMode = "sentence-first";
+    pack.courses[0].sentenceFirstStartIndex = 0;
+    pack.courses[0].statementIndex = 0;
+    const [restored] = normalizeExerciseImport(JSON.parse(JSON.stringify([pack])));
+    expect(restored.courses[0]).toMatchObject({
+      learningMode: "sentence-first",
+      sentenceFirstStartIndex: 0,
+      statementIndex: 0,
+    });
+  });
+
   it("rejects links to absent or later units", () => {
     expect(() =>
       normalizeExerciseImport({
