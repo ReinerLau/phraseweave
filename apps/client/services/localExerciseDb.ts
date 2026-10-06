@@ -1,4 +1,5 @@
 import type { ExerciseResponse, ExercisesResponse } from "~/api/exercise";
+import type { LearningMode } from "~/utils/learningDirection";
 import { isLocalPackage } from "~/services/generatorClient";
 import { scopedStorageName } from "~/utils/storageScope";
 
@@ -217,6 +218,7 @@ export async function saveLocalExerciseProgress(
   coursePackId: string,
   courseId: string,
   statementIndex: number,
+  state?: { learningMode: LearningMode; sentenceFirstStartIndex: number | null },
 ) {
   if (typeof window === "undefined") return;
   if (!usesSharedStorage()) {
@@ -231,6 +233,10 @@ export async function saveLocalExerciseProgress(
       const course = coursePack?.courses.find((item) => item.id === courseId);
       if (!coursePack || !course) return;
       course.statementIndex = statementIndex;
+      if (state) {
+        course.learningMode = state.learningMode;
+        course.sentenceFirstStartIndex = state.sentenceFirstStartIndex ?? undefined;
+      }
       store.put(coursePack);
     };
     await transactionDone;
@@ -240,6 +246,7 @@ export async function saveLocalExerciseProgress(
   await localRequest(`/api/local-exercises/${encodeURIComponent(coursePackId)}/progress`, "PUT", {
     courseId,
     statementIndex,
+    ...state,
   });
 }
 

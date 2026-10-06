@@ -115,6 +115,27 @@ describe("QuestionInput", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("cancels an old error callback when the mode changes on the same unit", async () => {
+    const { input, wrapper } = mountQuestionInput();
+    await submitAnswer(input, "I like");
+    const store = useExerciseStore();
+    store.currentCourse = {
+      id: "course",
+      title: "练习",
+      order: 1,
+      coursePackId: "pack",
+      completionCount: 0,
+      statementIndex: 0,
+      statements: [store.currentStatement!],
+    };
+    store.currentCourse.learningMode = "sentence-first";
+    await wrapper.vm.$nextTick();
+    expect(vi.getTimerCount()).toBe(0);
+    expect((input.element as HTMLInputElement).value).toBe("");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+  });
+
   it("keeps the answer tip for Han input and hides it for symbols or digits", async () => {
     const { input, wrapper } = mountQuestionInput("S$500");
     const { showAnswerTip, isAnswerTip } = useAnswerTip();

@@ -20,6 +20,7 @@ function time(label: string) {
 }
 
 function timeEnd(label: string) {
+  if (!timestamps[label]) return;
   const start = timestamps[label].s;
   const end = Date.now();
   const time = (Date.now() - start) / 1000;
@@ -45,10 +46,15 @@ function reset() {
   timestamps = {};
 }
 
+function resetQuestion(label: string) {
+  delete timestamps[label];
+}
+
 export const courseTimer = {
   time,
   timeEnd,
   calculateTotalTime,
   totalRecordNumber,
   reset,
+  resetQuestion,
 };

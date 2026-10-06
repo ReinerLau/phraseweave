@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { useVirtualList } from "@vueuse/core";
-import { computed, onMounted } from "vue";
+import { computed, nextTick, onMounted, watch } from "vue";
 
 import { useGameMode } from "~/composables/main/game";
 import { useExerciseStore } from "~/store/exercise";
@@ -41,20 +41,28 @@ const { showQuestion } = useGameMode();
 const { hideContents, isShowContents, watchClickOutside } = useContent();
 
 const contentsList = computed(() => {
-  return coursesStore.currentCourse?.statements || [];
+  return coursesStore.baseStatements;
 });
 
-const { list, containerProps, wrapperProps, scrollTo } = useVirtualList(contentsList.value, {
+const { list, containerProps, wrapperProps, scrollTo } = useVirtualList(contentsList, {
   itemHeight: 60,
 });
 
 onMounted(async () => {
-  scrollTo(coursesStore.statementIndex);
+  scrollTo(Math.max(0, coursesStore.questionIndex));
   watchClickOutside(containerProps.ref.value as HTMLElement);
 });
 
+watch(
+  () => [coursesStore.questionIndex, coursesStore.learningMode],
+  async () => {
+    await nextTick();
+    scrollTo(Math.max(0, coursesStore.questionIndex));
+  },
+);
+
 function isActive(index: number) {
-  return coursesStore.statementIndex === index;
+  return coursesStore.questionIndex === index;
 }
 
 function getItemClassNames(index: number) {

@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 
 import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import type { RecoverySources } from "./reviewRecovery";
+import type { LearningMode } from "~/utils/learningDirection";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import {
   getLocalExercise,
@@ -11,6 +12,11 @@ import {
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
 import { checkClozeAnswer, tokenizeClozeText } from "~/utils/clozeText";
+import {
+  findRecoveryOccurrence,
+  groupExerciseSentences,
+  sentenceFirstIndices,
+} from "~/utils/learningDirection";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
 
@@ -39,8 +45,12 @@ export interface Course {
   statements: Statement[];
   coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
+  /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
   passedUnitIds?: string[];
+  learningMode?: LearningMode;
+  /** Extra chunk occurrence inserted before its whole sentence in sentence-first mode. */
+  sentenceFirstStartIndex?: number;
 }
 
 function unitPassKey(statement: Statement) {
@@ -60,7 +70,26 @@ export const useExerciseStore = defineStore("exercise", () => {
   const unitStatements = new Map<string, Statement>();
   let recovery: ReviewRecovery | undefined;
   let pendingPassedWrite = Promise.resolve();
+  let pendingProgressWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
+
+  const sentenceGroups = computed(() =>
+    groupExerciseSentences(currentCourse.value?.statements ?? []),
+  );
+  const canUseSentenceFirst = computed(() => sentenceGroups.value !== undefined);
+  const learningMode = computed(() => currentCourse.value?.learningMode ?? "progressive");
+  const questionIndices = computed(() => {
+    const course = currentCourse.value;
+    if (!course) return [];
+    if (learningMode.value === "sentence-first" && sentenceGroups.value) {
+      return sentenceFirstIndices(sentenceGroups.value, course.sentenceFirstStartIndex);
+    }
+    return course.statements.map((_, index) => index);
+  });
+  const baseStatements = computed(() =>
+    questionIndices.value.map((index) => currentCourse.value!.statements[index]),
+  );
+  const questionIndex = computed(() => questionIndices.value.indexOf(statementIndex.value));
 
   const { updateActiveCourseMap } = useActiveCourseMap();
 
@@ -76,41 +105,69 @@ export const useExerciseStore = defineStore("exercise", () => {
   );
 
   const totalQuestionsCount = computed(() => {
-    return currentCourse.value?.statements.length || 0;
+    return baseStatements.value.length;
   });
 
   function toSpecificStatement(index: number) {
-    setStatementIndex(index);
+    setQuestionIndex(index);
   }
 
   function toPreviousStatement() {
-    setStatementIndex(statementIndex.value - 1);
+    setQuestionIndex(questionIndex.value - 1);
   }
 
   function toNextStatement() {
-    setStatementIndex(statementIndex.value + 1);
+    setQuestionIndex(questionIndex.value + 1);
   }
 
   function resetStatementIndex() {
-    setStatementIndex(0);
+    setQuestionIndex(0);
   }
 
-  function setStatementIndex(index: number) {
-    cancelRecovery();
+  function setQuestionIndex(index: number) {
     const lastIndex = Math.max(0, totalQuestionsCount.value - 1);
     const nextIndex = Number.isFinite(index)
       ? Math.min(Math.max(0, Math.trunc(index)), lastIndex)
       : 0;
-    statementIndex.value = nextIndex;
+    setStatementIndex(questionIndices.value[nextIndex] ?? 0);
+  }
+
+  function setStatementIndex(index: number) {
+    cancelRecovery();
+    statementIndex.value = index;
     refreshCurrentStatement();
 
     const course = currentCourse.value;
     if (!course) return;
 
-    course.statementIndex = nextIndex;
-    void saveLocalExerciseProgress(course.coursePackId, course.id, nextIndex).catch((error) => {
-      console.error("保存练习进度失败", error);
-    });
+    course.statementIndex = index;
+    const state = {
+      learningMode: learningMode.value,
+      sentenceFirstStartIndex: course.sentenceFirstStartIndex ?? null,
+    };
+    pendingProgressWrite = pendingProgressWrite
+      .then(() => saveLocalExerciseProgress(course.coursePackId, course.id, index, state))
+      .catch((error) => console.error("保存练习进度失败", error));
+  }
+
+  function switchLearningMode(mode: LearningMode) {
+    const course = currentCourse.value;
+    if (
+      !course ||
+      mode === learningMode.value ||
+      (mode === "sentence-first" && !canUseSentenceFirst.value)
+    )
+      return false;
+    let index = statementIndex.value;
+    if (recoveryUnitId.value && !isAnsweringBaseUnit.value) {
+      const occurrence = findRecoveryOccurrence(course.statements, recoveryUnitId.value, index);
+      if (occurrence === undefined) return false;
+      index = occurrence;
+    }
+    course.learningMode = mode;
+    course.sentenceFirstStartIndex = mode === "sentence-first" ? index : undefined;
+    setStatementIndex(index);
+    return true;
   }
 
   function cancelRecovery() {
@@ -133,15 +190,16 @@ export const useExerciseStore = defineStore("exercise", () => {
     }
     refreshCurrentStatement();
     if (isAllDone()) return true;
-    setStatementIndex(statementIndex.value + 1);
+    setQuestionIndex(questionIndex.value + 1);
     return false;
   }
 
   function isAllDone() {
-    return statementIndex.value >= totalQuestionsCount.value - 1;
+    return questionIndex.value >= totalQuestionsCount.value - 1;
   }
 
   function doAgain() {
+    if (currentCourse.value) currentCourse.value.sentenceFirstStartIndex = undefined;
     resetStatementIndex();
     updateActiveCourseMap(currentCourse.value?.coursePackId!, currentCourse.value?.id!);
   }
@@ -175,6 +233,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     if (!course) return { nextCourse: undefined };
 
     await pendingPassedWrite;
+    await pendingProgressWrite;
 
     const coursePack = await getLocalExercise(course.coursePackId);
     if (!coursePack) return { nextCourse: undefined };
@@ -198,6 +257,23 @@ export const useExerciseStore = defineStore("exercise", () => {
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
       : 0;
     currentCourse.value = course;
+    if (!canUseSentenceFirst.value || course.learningMode !== "sentence-first") {
+      course.learningMode = "progressive";
+      course.sentenceFirstStartIndex = undefined;
+    } else {
+      const start = course.sentenceFirstStartIndex;
+      if (
+        start !== undefined &&
+        (!Number.isInteger(start) || start < 0 || start >= course.statements.length)
+      ) {
+        course.sentenceFirstStartIndex = undefined;
+      }
+      if (!questionIndices.value.includes(course.statementIndex)) {
+        course.statementIndex =
+          questionIndices.value.find((index) => index >= course.statementIndex) ??
+          questionIndices.value[0];
+      }
+    }
     unitStatements.clear();
     const firstUnitOrder = new Map<string, number>();
     const sourcesByUnitId = new Map<string, RecoverySources>();
@@ -228,6 +304,11 @@ export const useExerciseStore = defineStore("exercise", () => {
     statementIndex,
     currentCourse,
     currentStatement,
+    learningMode,
+    canUseSentenceFirst,
+    baseStatements,
+    questionIndex,
+    switchLearningMode,
     isRecovering,
     isAnsweringBaseUnit,
     words,
