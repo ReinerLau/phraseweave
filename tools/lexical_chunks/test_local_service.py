@@ -215,6 +215,44 @@ class ExerciseProgressEndpointTests(TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(self.stored_course()["statementIndex"], 2)
 
+    def test_fulltext_state_survives_stale_writes_backup_and_restart(self):
+        status, _ = self.request("PUT", "/api/local-exercises/pack/progress", {
+            "courseId": "course", "statementIndex": 3, "learningMode": "sentence-first",
+            "sentenceFirstStartIndex": 3, "practiceView": "fulltext",
+        })
+        self.assertEqual(status, 200)
+        self.pack["courses"][0]["practiceView"] = "single"
+        self.pack["courses"][0]["completionCount"] = 1
+        self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+        self.request("PUT", "/api/local-exercises/pack/passed-units", {
+            "courseId": "course", "unitKey": "unit:new",
+        })
+        status, body = self.request("GET", "/api/local-exercises")
+        self.assertEqual(status, 200)
+        saved = body["items"][0]["courses"][0]
+        self.assertEqual(saved["practiceView"], "fulltext")
+        self.assertEqual(saved["statementIndex"], 3)
+        self.assertEqual(saved["sentenceFirstStartIndex"], 3)
+        self.assertEqual(saved["completionCount"], 1)
+        self.assertEqual(saved["passedUnitIds"], ["unit:old", "unit:new"])
+        # Existing clients that omit the view must preserve it.
+        self.progress(0, "progressive")
+        self.assertEqual(self.stored_course()["practiceView"], "fulltext")
+        self.assertEqual(self.stored_course()["statementIndex"], 0)
+
+    def test_invalid_practice_view_is_atomic(self):
+        for view in ("unknown", None, True):
+            with self.subTest(view=view):
+                status, _ = self.request("PUT", "/api/local-exercises/pack/progress", {
+                    "courseId": "course", "statementIndex": 0,
+                    "learningMode": "progressive", "practiceView": view,
+                })
+                self.assertEqual(status, 400)
+                saved = self.stored_course()
+                self.assertEqual(saved["statementIndex"], 8)
+                self.assertNotIn("learningMode", saved)
+                self.assertNotIn("practiceView", saved)
+
 
 class RuntimeStartupTests(TestCase):
     @patch("local_service._run_worker")

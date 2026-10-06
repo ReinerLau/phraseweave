@@ -143,7 +143,7 @@ watch(isAnswerTip, (isVisible) => {
 });
 
 watch(
-  () => [courseStore.currentStatement?.id, courseStore.learningMode],
+  () => [courseStore.currentStatement?.id, courseStore.learningMode, courseStore.practiceView],
   () => {
     cancelErrorReset();
     clearInput();

@@ -1,20 +1,23 @@
 <template>
   <div
-    class="relative flex min-w-0 max-w-full items-center justify-between border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
+    class="relative flex min-w-0 max-w-full flex-wrap items-center justify-between gap-y-2 border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
   >
     <!-- 左侧 -->
-    <div class="flex min-w-0 flex-1 items-center gap-2">
+    <div class="flex w-full min-w-0 flex-none items-start gap-2 sm:w-auto sm:flex-1">
       <NuxtLink
         href="/course-pack"
         class="clickable-item shrink-0"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
-      <LearningModeSwitch />
+      <div class="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:max-w-md">
+        <LearningModeSwitch />
+        <PracticeViewSwitch />
+      </div>
     </div>
 
     <!-- 右侧 -->
-    <div class="ml-2 flex min-w-0 max-w-[35%] items-center">
+    <div class="flex w-full min-w-0 justify-end sm:ml-2 sm:w-auto sm:max-w-[30%]">
       <div
         class="clickable-item tooltip-item min-w-0 truncate text-right"
         data-tip="练习卡片列表"
@@ -46,6 +49,7 @@ import { useExerciseStore } from "~/store/exercise";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
 import { useContent } from "./Contents/useContents";
 import LearningModeSwitch from "./LearningModeSwitch.vue";
+import PracticeViewSwitch from "./PracticeViewSwitch.vue";
 
 const courseStore = useExerciseStore();
 const exerciseCatalogStore = useExerciseCatalogStore();

@@ -6,9 +6,10 @@ import { useExerciseNavigation } from "../exerciseNavigation";
 import { useGameMode } from "../game";
 
 const showSummary = vi.hoisted(() => vi.fn());
+const showModal = vi.hoisted(() => ({ value: false }));
 
 vi.mock("~/composables/main/summary", () => ({
-  useSummary: () => ({ showSummary }),
+  useSummary: () => ({ showSummary, showModal }),
 }));
 
 const course = {
@@ -28,6 +29,7 @@ describe("exercise navigation", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     showSummary.mockClear();
+    showModal.value = false;
     useGameMode().showQuestion();
 
     const exerciseStore = useExerciseStore();
@@ -56,6 +58,25 @@ describe("exercise navigation", () => {
     goToNextQuestion();
 
     expect(exerciseStore.statementIndex).toBe(1);
+    expect(showSummary).toHaveBeenCalledOnce();
+  });
+
+  it("blocks fulltext skipping, backward navigation and forged answer state at the last question", () => {
+    const store = useExerciseStore();
+    store.currentCourse = { ...course, practiceView: "fulltext" };
+    store.statementIndex = 1;
+    store.currentStatement = course.statements[1];
+    const { goToNextQuestion, goToPreviousQuestion } = useExerciseNavigation();
+    goToNextQuestion();
+    goToPreviousQuestion();
+    expect(store.statementIndex).toBe(1);
+    expect(showSummary).not.toHaveBeenCalled();
+    useGameMode().showAnswer();
+    goToNextQuestion();
+    expect(showSummary).not.toHaveBeenCalled();
+    store.passCurrentStatement();
+    useGameMode().showAnswer();
+    goToNextQuestion();
     expect(showSummary).toHaveBeenCalledOnce();
   });
 });

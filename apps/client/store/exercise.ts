@@ -38,6 +38,8 @@ export interface CourseIdentifier {
   courseId: Course["id"];
 }
 
+export type PracticeView = "single" | "fulltext";
+
 export interface Course {
   id: string;
   title: string;
@@ -49,6 +51,7 @@ export interface Course {
   statementIndex: number;
   passedUnitIds?: string[];
   learningMode?: LearningMode;
+  practiceView?: PracticeView;
   /** Extra chunk occurrence inserted before its whole sentence in sentence-first mode. */
   sentenceFirstStartIndex?: number;
 }
@@ -61,6 +64,8 @@ export const useExerciseStore = defineStore("exercise", () => {
   const currentCourse = ref<Course>();
   const currentStatement = ref<Statement>();
   const recoveryUnitId = ref<string>();
+  const currentAnswerAccepted = ref(false);
+  const fulltextCompleted = ref(false);
   const isRecovering = computed(() => recoveryUnitId.value !== undefined);
   const isAnsweringBaseUnit = computed(
     () =>
@@ -77,6 +82,28 @@ export const useExerciseStore = defineStore("exercise", () => {
     groupExerciseSentences(currentCourse.value?.statements ?? []),
   );
   const canUseSentenceFirst = computed(() => sentenceGroups.value !== undefined);
+  const sentences = computed(() =>
+    (sentenceGroups.value ?? []).map((group) => {
+      const whole = currentCourse.value!.statements[group.end];
+      return {
+        ...group,
+        id: whole.id,
+        english: whole.contextBefore! + whole.english + whole.contextAfter!,
+        chinese: whole.sentenceChinese ?? "",
+      };
+    }),
+  );
+  const canUseFulltext = computed(
+    () => canUseSentenceFirst.value && sentences.value.every((sentence) => sentence.chinese.trim()),
+  );
+  const practiceView = computed(() => currentCourse.value?.practiceView ?? "single");
+  const isFulltext = computed(() => practiceView.value === "fulltext");
+  const currentSentenceIndex = computed(() =>
+    sentences.value.findIndex(
+      (sentence) => statementIndex.value >= sentence.start && statementIndex.value <= sentence.end,
+    ),
+  );
+  const precedingSentences = computed(() => sentences.value.slice(0, currentSentenceIndex.value));
   const learningMode = computed(() => currentCourse.value?.learningMode ?? "progressive");
   const questionIndices = computed(() => {
     const course = currentCourse.value;
@@ -109,18 +136,22 @@ export const useExerciseStore = defineStore("exercise", () => {
   });
 
   function toSpecificStatement(index: number) {
+    if (isFulltext.value) return;
     setQuestionIndex(index);
   }
 
   function toPreviousStatement() {
+    if (isFulltext.value) return;
     setQuestionIndex(questionIndex.value - 1);
   }
 
   function toNextStatement() {
+    if (isFulltext.value) return;
     setQuestionIndex(questionIndex.value + 1);
   }
 
   function resetStatementIndex() {
+    if (isFulltext.value) return;
     setQuestionIndex(0);
   }
 
@@ -134,6 +165,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function setStatementIndex(index: number) {
     cancelRecovery();
+    fulltextCompleted.value = false;
     statementIndex.value = index;
     refreshCurrentStatement();
 
@@ -141,13 +173,32 @@ export const useExerciseStore = defineStore("exercise", () => {
     if (!course) return;
 
     course.statementIndex = index;
+    persistProgress();
+  }
+
+  function persistProgress() {
+    const course = currentCourse.value;
+    if (!course) return;
+    const index = statementIndex.value;
     const state = {
       learningMode: learningMode.value,
       sentenceFirstStartIndex: course.sentenceFirstStartIndex ?? null,
+      practiceView: practiceView.value,
     };
     pendingProgressWrite = pendingProgressWrite
       .then(() => saveLocalExerciseProgress(course.coursePackId, course.id, index, state))
       .catch((error) => console.error("保存练习进度失败", error));
+  }
+
+  function switchPracticeView(view: PracticeView) {
+    const course = currentCourse.value;
+    if (!course || view === practiceView.value || (view === "fulltext" && !canUseFulltext.value))
+      return false;
+    course.practiceView = view;
+    currentAnswerAccepted.value = false;
+    fulltextCompleted.value = false;
+    persistProgress();
+    return true;
   }
 
   function switchLearningMode(mode: LearningMode) {
@@ -171,36 +222,45 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   function cancelRecovery() {
+    currentAnswerAccepted.value = false;
     recovery?.cancel();
     recoveryUnitId.value = undefined;
     refreshCurrentStatement();
   }
 
   function failCurrentStatement() {
+    currentAnswerAccepted.value = false;
     recoveryUnitId.value = recovery?.fail(currentStatement.value?.unitId);
     refreshCurrentStatement();
   }
 
   /** Returns true only after the final base question has been answered. */
   function advanceAfterCorrect(): boolean {
+    // Historic unit passes and an answer panel cannot unlock the next fulltext question.
+    if (isFulltext.value && (!currentAnswerAccepted.value || fulltextCompleted.value)) return false;
+    currentAnswerAccepted.value = false;
     recoveryUnitId.value = recovery?.correct();
     if (recoveryUnitId.value) {
       refreshCurrentStatement();
       return false;
     }
     refreshCurrentStatement();
-    if (isAllDone()) return true;
+    if (questionIndex.value >= totalQuestionsCount.value - 1) {
+      fulltextCompleted.value = isFulltext.value;
+      return true;
+    }
     setQuestionIndex(questionIndex.value + 1);
     return false;
   }
 
   function isAllDone() {
+    if (isFulltext.value) return fulltextCompleted.value;
     return questionIndex.value >= totalQuestionsCount.value - 1;
   }
 
   function doAgain() {
     if (currentCourse.value) currentCourse.value.sentenceFirstStartIndex = undefined;
-    resetStatementIndex();
+    setQuestionIndex(0);
     updateActiveCourseMap(currentCourse.value?.coursePackId!, currentCourse.value?.id!);
   }
 
@@ -218,6 +278,8 @@ export const useExerciseStore = defineStore("exercise", () => {
     const statement = currentStatement.value;
     if (!course || !statement) return;
 
+    currentAnswerAccepted.value = true;
+
     const key = unitPassKey(statement);
     if (isStatementPassed(statement)) return;
     course.passedUnitIds = [...(course.passedUnitIds ?? []), key];
@@ -231,6 +293,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   async function completeCourse() {
     const course = currentCourse.value;
     if (!course) return { nextCourse: undefined };
+    if (isFulltext.value && !fulltextCompleted.value) return { nextCourse: undefined };
 
     await pendingPassedWrite;
     await pendingProgressWrite;
@@ -257,6 +320,9 @@ export const useExerciseStore = defineStore("exercise", () => {
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
       : 0;
     currentCourse.value = course;
+    if (course.practiceView !== "fulltext" || !canUseFulltext.value) course.practiceView = "single";
+    currentAnswerAccepted.value = false;
+    fulltextCompleted.value = false;
     if (canUseSentenceFirst.value && course.learningMode === undefined) {
       course.learningMode = "sentence-first";
       course.sentenceFirstStartIndex = undefined;
@@ -310,6 +376,14 @@ export const useExerciseStore = defineStore("exercise", () => {
     currentStatement,
     learningMode,
     canUseSentenceFirst,
+    practiceView,
+    isFulltext,
+    canUseFulltext,
+    sentences,
+    precedingSentences,
+    currentSentenceIndex,
+    fulltextCompleted,
+    switchPracticeView,
     baseStatements,
     questionIndex,
     switchLearningMode,

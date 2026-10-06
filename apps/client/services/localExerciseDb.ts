@@ -1,4 +1,5 @@
 import type { ExerciseResponse, ExercisesResponse } from "~/api/exercise";
+import type { PracticeView } from "~/store/exercise";
 import type { LearningMode } from "~/utils/learningDirection";
 import { isLocalPackage } from "~/services/generatorClient";
 import { scopedStorageName } from "~/utils/storageScope";
@@ -197,7 +198,10 @@ export async function saveLocalExercise(coursePack: ExerciseResponse) {
     if (!isSupported()) return;
     const database = await openDatabase();
     const transaction = database.transaction([PACK_STORE, CATALOG_STORE], "readwrite");
-    transaction.objectStore(PACK_STORE).put(coursePack);
+    const transactionDone = transactionComplete(transaction);
+    const store = transaction.objectStore(PACK_STORE);
+    const request = store.get(coursePack.id);
+    request.onsuccess = () => store.put(mergeLocalExerciseProgress(request.result, coursePack));
     transaction.objectStore(CATALOG_STORE).put({
       id: coursePack.id,
       title: coursePack.title,
@@ -205,7 +209,7 @@ export async function saveLocalExercise(coursePack: ExerciseResponse) {
       isFree: coursePack.isFree,
       cover: coursePack.cover,
     });
-    await transactionComplete(transaction);
+    await transactionDone;
     return;
   }
   await migrateLegacyData();
@@ -214,11 +218,50 @@ export async function saveLocalExercise(coursePack: ExerciseResponse) {
   });
 }
 
+/** Full-pack writes may be stale; explicit progress updates own the practice cursor and modes. */
+export function mergeLocalExerciseProgress(
+  current: ExerciseResponse | undefined,
+  incoming: ExerciseResponse,
+): ExerciseResponse {
+  if (!current) return incoming;
+  return {
+    ...incoming,
+    courses: incoming.courses.map((course) => {
+      const previous = current.courses.find((item) => item.id === course.id);
+      if (!previous) return course;
+      const hasPracticeState =
+        previous.learningMode === "progressive" ||
+        previous.learningMode === "sentence-first" ||
+        previous.practiceView === "single" ||
+        previous.practiceView === "fulltext";
+      return {
+        ...course,
+        ...(hasPracticeState
+          ? {
+              statementIndex: previous.statementIndex,
+              learningMode: previous.learningMode,
+              sentenceFirstStartIndex: previous.sentenceFirstStartIndex,
+              practiceView: previous.practiceView,
+            }
+          : { statementIndex: Math.max(previous.statementIndex ?? 0, course.statementIndex ?? 0) }),
+        completionCount: Math.max(previous.completionCount ?? 0, course.completionCount ?? 0),
+        passedUnitIds: [
+          ...new Set([...(previous.passedUnitIds ?? []), ...(course.passedUnitIds ?? [])]),
+        ],
+      };
+    }),
+  };
+}
+
 export async function saveLocalExerciseProgress(
   coursePackId: string,
   courseId: string,
   statementIndex: number,
-  state?: { learningMode: LearningMode; sentenceFirstStartIndex: number | null },
+  state?: {
+    learningMode: LearningMode;
+    sentenceFirstStartIndex: number | null;
+    practiceView?: PracticeView;
+  },
 ) {
   if (typeof window === "undefined") return;
   if (!usesSharedStorage()) {
@@ -236,6 +279,7 @@ export async function saveLocalExerciseProgress(
       if (state) {
         course.learningMode = state.learningMode;
         course.sentenceFirstStartIndex = state.sentenceFirstStartIndex ?? undefined;
+        if (state.practiceView !== undefined) course.practiceView = state.practiceView;
       }
       store.put(coursePack);
     };
