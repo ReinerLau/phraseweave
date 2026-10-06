@@ -1,11 +1,12 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import { mockNuxtImport } from "@nuxt/test-utils/runtime";
+import { flushPromises, mount } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { getLocalExercise } from "~/services/localExerciseDb";
 import ExerciseCard from "../ExerciseCard.vue";
 
-vi.mock("#imports", () => ({
-  navigateTo: vi.fn(),
-}));
+const { navigateTo } = vi.hoisted(() => ({ navigateTo: vi.fn() }));
+mockNuxtImport("navigateTo", () => navigateTo);
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
 }));
@@ -109,5 +110,69 @@ describe("ExerciseCard", () => {
       ],
     ]);
     expect(wrapper.find('button[aria-label="删除"]').exists()).toBe(false);
+  });
+});
+
+describe("ExerciseCard selection", () => {
+  const exercise = { id: "exercise-1", title: "练习一", description: "", isFree: true, cover: "" };
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("toggles a card without loading or navigating to the exercise", async () => {
+    const wrapper = mount(ExerciseCard, { props: { exercise, selectionMode: true } });
+    await wrapper.trigger("click");
+    expect(wrapper.emitted("select")).toEqual([[exercise.id]]);
+    expect(wrapper.find('button[aria-label="更多操作"]').exists()).toBe(false);
+    expect(getLocalExercise).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
+    await wrapper.setProps({ selected: true });
+    expect(wrapper.get<HTMLInputElement>('input[type="checkbox"]').element.checked).toBe(true);
+  });
+
+  it("uses a labeled native checkbox and emits exactly once for its change", async () => {
+    const wrapper = mount(ExerciseCard, { props: { exercise, selectionMode: true } });
+    const checkbox = wrapper.get('input[type="checkbox"]');
+    expect(checkbox.attributes("aria-label")).toContain(exercise.title);
+    await checkbox.setValue(true);
+    expect(wrapper.emitted("select")).toEqual([[exercise.id]]);
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it("blocks both card and checkbox selection while disabled", async () => {
+    const wrapper = mount(ExerciseCard, {
+      props: { exercise, selectionMode: true, disabled: true },
+    });
+    await wrapper.trigger("click");
+    const checkbox = wrapper.get<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox.element.disabled).toBe(true);
+    await checkbox.trigger("change");
+    expect(wrapper.emitted("select")).toBeUndefined();
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it("closes the more menu across mode changes and restores normal navigation", async () => {
+    const wrapper = mount(ExerciseCard, { props: { exercise } });
+    await wrapper.get('button[aria-label="更多操作"]').trigger("click");
+    await wrapper.setProps({ selectionMode: true });
+    await wrapper.setProps({ selectionMode: false });
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    vi.mocked(getLocalExercise).mockResolvedValue({
+      ...exercise,
+      courses: [
+        {
+          id: "course-1",
+          title: "练习一",
+          order: 1,
+          coursePackId: exercise.id,
+          completionCount: 0,
+          statementIndex: 0,
+          statements: [],
+        },
+      ],
+    });
+    await wrapper.trigger("click");
+    await flushPromises();
+    expect(navigateTo).toHaveBeenCalledWith("/game/exercise-1/course-1");
   });
 });
