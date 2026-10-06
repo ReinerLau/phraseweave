@@ -376,9 +376,11 @@ export function normalizeExerciseImport(
   options: ExerciseImportOptions = {},
 ): ExerciseResponse[] {
   if (Array.isArray(value)) {
+    if (value.length !== 1) throw new Error("仅支持导入单个练习");
     const coursePacks = value.filter(isExerciseResponse);
     if (coursePacks.length !== value.length) throw new Error("旧版练习请重新生成后导入");
-    return coursePacks;
+    const title = options.title?.trim();
+    return title ? [{ ...coursePacks[0], title }] : coursePacks;
   }
 
   if (!isLexicalChunksBackup(value)) throw new Error("旧版练习请重新生成后导入");
@@ -392,7 +394,7 @@ export function normalizeExerciseImport(
   const idFactory = options.idFactory ?? createImportId;
   const coursePackId = idFactory();
   const courseId = idFactory();
-  const exerciseTitle = options.title || createImportTitle();
+  const exerciseTitle = options.title?.trim() || createImportTitle();
   const statements = value.statements.map((statement, index) => ({
     id: idFactory(),
     order: index + 1,

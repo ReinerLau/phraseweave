@@ -15,7 +15,8 @@ vi.mock("~/services/localExerciseDb", () => ({
   deleteLocalExercise: vi.fn(),
   getLocalExercise: vi.fn(),
   listLocalExercises: vi.fn(),
-  importLocalExercises: vi.fn(),
+  normalizeExerciseImport: vi.fn(),
+  saveLocalExercise: vi.fn(),
 }));
 
 describe("ExerciseList bulk management", () => {

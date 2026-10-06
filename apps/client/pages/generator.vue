@@ -182,7 +182,21 @@
           <h2 class="text-xl font-semibold">生成文件</h2>
           <p class="mt-1 text-sm opacity-70">下载本次生成的文件。</p>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:max-w-full">
+          <label
+            v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
+            class="form-control w-full min-w-0"
+          >
+            <span class="label-text mb-2 font-semibold">练习名称</span>
+            <input
+              v-model="exerciseTitle"
+              class="input input-bordered w-full"
+              type="text"
+              :placeholder="defaultExerciseTitle"
+              :disabled="savingExercise"
+            />
+            <span class="mb-2 mt-1 text-xs opacity-60">留空使用默认名称</span>
+          </label>
           <button
             v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
             class="btn btn-primary btn-sm"
@@ -337,6 +351,10 @@ const generationBusy = computed(() => submitting.value || Boolean(activeJob.valu
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
 const generatedText = ref("");
+const defaultExerciseTitle = computed(() =>
+  generatedText.value.replace(/\s+/g, " ").trim().slice(0, 80),
+);
+const exerciseTitle = ref("");
 const savingExercise = ref(false);
 const markdownFileName = ref("");
 const markdownContent = ref<string | null>(null);
@@ -509,6 +527,7 @@ async function startJob(payload: {
   markdownFileName.value = "";
   markdownContent.value = null;
   generatedText.value = payload.text;
+  exerciseTitle.value = defaultExerciseTitle.value;
   try {
     const body = await startGeneratorJob(payload);
     activeJob.value = { id: body.id, state: "running", message: "正在启动…" };
@@ -588,7 +607,7 @@ async function importGeneratedExercise(outputs: OutputFile[], sourceText: string
   const jsonFile = outputs.find((file) => file.name.endsWith(".json"));
   if (!jsonFile) throw new Error("生成结果中没有 PhraseWeave JSON 文件。");
   const [coursePack] = normalizeExerciseImport(JSON.parse(jsonFile.content), {
-    title: sourceText.replace(/\s+/g, " ").trim().slice(0, 80),
+    title: exerciseTitle.value.trim() || sourceText.replace(/\s+/g, " ").trim().slice(0, 80),
   });
   const course = coursePack?.courses[0];
   if (!course || course.statements.length === 0)
