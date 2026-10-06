@@ -45,11 +45,7 @@ const coursesStore = useExerciseStore();
 const { showQuestion } = useGameMode();
 const { hideContents, isShowContents, watchClickOutside } = useContent();
 
-const contentsList = computed(() => {
-  return coursesStore.isFulltext
-    ? coursesStore.baseStatements.slice(0, coursesStore.questionIndex + 1)
-    : coursesStore.baseStatements;
-});
+const contentsList = computed(() => coursesStore.baseStatements);
 
 const { list, containerProps, wrapperProps, scrollTo } = useVirtualList(contentsList, {
   itemHeight: 60,
