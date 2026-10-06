@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef } from "vue";
 
 import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import type { RecoverySources } from "./reviewRecovery";
@@ -73,7 +73,10 @@ export const useExerciseStore = defineStore("exercise", () => {
       recoveryUnitId.value === currentCourse.value?.statements[statementIndex.value]?.unitId,
   );
   const unitStatements = new Map<string, Statement>();
-  let recovery: ReviewRecovery | undefined;
+  const recovery = shallowRef<ReviewRecovery>();
+  const canDecomposeCurrentUnit = computed(
+    () => recovery.value?.canDecompose(currentStatement.value?.unitId) ?? false,
+  );
   let pendingPassedWrite = Promise.resolve();
   let pendingProgressWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
@@ -223,14 +226,14 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function cancelRecovery() {
     currentAnswerAccepted.value = false;
-    recovery?.cancel();
+    recovery.value?.cancel();
     recoveryUnitId.value = undefined;
     refreshCurrentStatement();
   }
 
   function failCurrentStatement() {
     currentAnswerAccepted.value = false;
-    recoveryUnitId.value = recovery?.fail(currentStatement.value?.unitId);
+    recoveryUnitId.value = recovery.value?.fail(currentStatement.value?.unitId);
     refreshCurrentStatement();
   }
 
@@ -239,7 +242,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     // Historic unit passes and an answer panel cannot unlock the next fulltext question.
     if (isFulltext.value && (!currentAnswerAccepted.value || fulltextCompleted.value)) return false;
     currentAnswerAccepted.value = false;
-    recoveryUnitId.value = recovery?.correct();
+    recoveryUnitId.value = recovery.value?.correct();
     if (recoveryUnitId.value) {
       refreshCurrentStatement();
       return false;
@@ -364,7 +367,7 @@ export const useExerciseStore = defineStore("exercise", () => {
       )
         sourcesByUnitId.set(statement.unitId, sourceUnitIds);
     }
-    recovery = new ReviewRecovery(sourcesByUnitId);
+    recovery.value = new ReviewRecovery(sourcesByUnitId);
     recoveryUnitId.value = undefined;
     setupStatement(currentCourse);
     refreshCurrentStatement();
@@ -388,6 +391,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     questionIndex,
     switchLearningMode,
     isRecovering,
+    canDecomposeCurrentUnit,
     isAnsweringBaseUnit,
     words,
     clozeTokens,
