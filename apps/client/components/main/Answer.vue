@@ -6,12 +6,6 @@
     data-testid="answer-content"
   >
     <div
-      v-if="courseStore.isRecovering"
-      class="mb-2 text-sm text-fuchsia-600 dark:text-fuchsia-300"
-    >
-      回退复习
-    </div>
-    <div
       class="answer-prompt dark:text-gray-50"
       data-testid="answer-prompt"
     >
@@ -142,9 +136,5 @@ function goToNextQuestion() {
   line-height: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.fulltext-flow .mb-2 {
-  margin-bottom: 0;
 }
 </style>
