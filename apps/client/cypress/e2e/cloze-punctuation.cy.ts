@@ -4,7 +4,7 @@ const punctuationSentence =
   "The new penalties will also be applied to other anti-social behaviour, such as putting feet on seats, littering, and eating or drinking on buses";
 const punctuationAnswer = punctuationSentence.replace("-", " ").replaceAll(",", "");
 
-function seedPunctuationExercise(english = punctuationSentence) {
+function seedPunctuationExercise(english = punctuationSentence, recognizeSentence = false) {
   return cy.window().then(
     (window) =>
       new Cypress.Promise<void>((resolve, reject) => {
@@ -44,7 +44,20 @@ function seedPunctuationExercise(english = punctuationSentence) {
                 completionCount: 0,
                 statementIndex: 0,
                 statements: [
-                  { id: "punctuation", order: 1, english, sentenceChinese: "标点保留在原位。" },
+                  {
+                    id: "punctuation",
+                    order: 1,
+                    english,
+                    sentenceChinese: "标点保留在原位。",
+                    ...(recognizeSentence
+                      ? {
+                          contextBefore: "",
+                          contextAfter: "",
+                          unitId: "punctuation-unit",
+                          sourceUnitIds: [],
+                        }
+                      : {}),
+                  },
                 ],
               },
             ],
@@ -191,4 +204,85 @@ describe("cloze punctuation", () => {
       ]);
     });
   });
+});
+
+// Range measures the rendered letters separately from the word's line box.
+function letterUnderlineGapEm(word: HTMLElement) {
+  const window = word.ownerDocument.defaultView!;
+  const styles = window.getComputedStyle(word);
+  const underline = window.getComputedStyle(word, "::after");
+  const range = word.ownerDocument.createRange();
+  range.selectNodeContents(word);
+  const bottom = word.getBoundingClientRect().bottom;
+  const underlineTop =
+    underline.content === "none"
+      ? bottom - parseFloat(styles.borderBottomWidth)
+      : bottom - parseFloat(underline.bottom) - parseFloat(underline.borderBottomWidth);
+  return (underlineTop - range.getBoundingClientRect().bottom) / parseFloat(styles.fontSize);
+}
+
+describe("letter-to-underline spacing across practice views", () => {
+  for (const [width, height] of [
+    [1000, 800],
+    [320, 568],
+  ]) {
+    it(`keeps typed letters and answer hints equally close to the underline at ${width}px`, () => {
+      cy.viewport(width, height);
+      cy.visit("/course-pack");
+      seedPunctuationExercise(punctuationSentence, true);
+      cy.visit(`/game/${punctuationPackId}/${punctuationCourseId}`);
+      cy.window().then((window) => window.document.fonts.ready);
+      cy.get('input[aria-label="填写当前英文单元"]').type(punctuationAnswer, {
+        force: true,
+        delay: 0,
+      });
+      cy.get(".question-input-word")
+        .first()
+        .should("have.text", "The")
+        .then(($word) => {
+          const singleGap = letterUnderlineGapEm($word[0]);
+          cy.get('select[aria-label="展示方式"]').select("fulltext");
+          cy.get('[data-testid="show-answer-button"]').click({ force: true });
+          cy.get(".question-input-word")
+            .first()
+            .should("have.text", "The")
+            .should(($hint) => {
+              expect(letterUnderlineGapEm($hint[0]), "answer hint gap in em").to.be.closeTo(
+                singleGap,
+                0.03,
+              );
+            });
+          cy.get('input[aria-label="填写当前英文单元"]').type(punctuationAnswer, {
+            force: true,
+            delay: 0,
+          });
+          cy.get(".question-input-word")
+            .first()
+            .should("have.text", "The")
+            .should(($typed) => {
+              expect(letterUnderlineGapEm($typed[0]), "typed letter gap in em").to.be.closeTo(
+                singleGap,
+                0.03,
+              );
+            });
+          assertFixedPunctuation();
+          cy.get(".question-input-word").then(($words) => {
+            const before = Array.from($words).map((word) => word.getBoundingClientRect());
+            cy.get('input[aria-label="填写当前英文单元"]').type("{enter}", { force: true });
+            cy.get(".answer-content .question-input-word").should(($answers) => {
+              expect($answers).to.have.length(before.length);
+              Array.from($answers).forEach((word, index) => {
+                const after = word.getBoundingClientRect();
+                for (const property of ["top", "left", "width", "height"] as const) {
+                  expect(after[property], `${property} of word ${index}`).to.be.closeTo(
+                    before[index][property],
+                    1,
+                  );
+                }
+              });
+            });
+          });
+        });
+    });
+  }
 });
