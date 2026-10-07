@@ -153,6 +153,8 @@ onUnmounted(() => {
 }
 
 .fulltext-body :deep(.question-input-words) {
+  /* Fixed 18px / 36px ratio, independent of the single view's adaptive font size. */
+  column-gap: calc(var(--question-word-gap) / 2);
   row-gap: 0;
 }
 
