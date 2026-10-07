@@ -23,8 +23,8 @@
           v-if="index < courseStore.currentSentenceIndex"
           data-testid="fulltext-history-sentence"
         >
-          <p class="text-gray-600 dark:text-gray-400">{{ sentence.chinese }}</p>
-          <p class="whitespace-pre-wrap text-gray-900 dark:text-gray-100">{{ sentence.english }}</p>
+          <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
+          <p class="whitespace-pre-wrap dark:text-gray-50">{{ sentence.english }}</p>
         </div>
         <section
           v-else-if="index === courseStore.currentSentenceIndex"
@@ -33,8 +33,8 @@
           aria-label="当前句"
         >
           <div v-if="courseStore.fulltextCompleted">
-            <p class="text-gray-600 dark:text-gray-400">{{ sentence.chinese }}</p>
-            <p class="whitespace-pre-wrap break-words dark:text-gray-100">{{ sentence.english }}</p>
+            <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
+            <p class="whitespace-pre-wrap break-words dark:text-gray-50">{{ sentence.english }}</p>
           </div>
           <ModeClozeMode v-else />
         </section>
