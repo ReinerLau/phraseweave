@@ -142,6 +142,10 @@ onUnmounted(() => {
   line-height: 1.625;
 }
 
+.fulltext-body > ol > li + li {
+  margin-top: 18px;
+}
+
 .fulltext-body p {
   margin: 0;
   white-space: pre-wrap;
