@@ -171,7 +171,8 @@ onUnmounted(() => {
 .fulltext-body :deep(.question-content .question-input-word)::after {
   content: "";
   position: absolute;
-  inset: auto 0 0;
+  /* Exclude half the extra leading; match the single view's 1em text box + 2px border. */
+  inset: auto 0 calc((1.625em - 1em) / 2 - 2px);
   border-bottom: 2px solid;
   border-bottom-color: inherit;
   pointer-events: none;
