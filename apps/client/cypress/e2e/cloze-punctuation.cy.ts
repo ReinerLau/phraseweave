@@ -221,12 +221,40 @@ function letterUnderlineGapEm(word: HTMLElement) {
   return (underlineTop - range.getBoundingClientRect().bottom) / parseFloat(styles.fontSize);
 }
 
-describe("letter-to-underline spacing across practice views", () => {
+function assertFulltextWordGap(singleGap: number) {
+  cy.get(".fulltext-body .question-input-words").should(($words) => {
+    const words = $words[0];
+    const styles = words.ownerDocument.defaultView!.getComputedStyle(words);
+    expect(parseFloat(styles.columnGap), "fulltext column gap").to.be.closeTo(singleGap / 2, 0.1);
+    expect(styles.rowGap, "fulltext row gap").to.equal("0px");
+    expect(styles.fontSize, "fulltext font size").to.equal("18px");
+    const groups = Array.from(words.querySelectorAll(".question-input-group"));
+    let sameLinePairs = 0;
+    for (let index = 1; index < groups.length; index++) {
+      const previous = groups[index - 1].getBoundingClientRect();
+      const current = groups[index].getBoundingClientRect();
+      if (Math.abs(current.top - previous.top) < 1) {
+        expect(current.left - previous.right, `gap before group ${index}`).to.be.closeTo(
+          singleGap / 2,
+          0.1,
+        );
+        sameLinePairs++;
+      } else {
+        expect(current.top - previous.top, "wrapped line spacing").to.be.closeTo(29.25, 0.1);
+      }
+    }
+    expect(sameLinePairs, "measured adjacent groups").to.be.greaterThan(0);
+  });
+}
+
+describe("cloze spacing across practice views", () => {
   for (const [width, height] of [
     [1000, 800],
     [320, 568],
+    [1000, 1000],
+    [1600, 1400],
   ]) {
-    it(`keeps typed letters and answer hints equally close to the underline at ${width}px`, () => {
+    it(`scales word gaps and preserves letter-to-underline spacing at ${width}x${height}`, () => {
       cy.viewport(width, height);
       cy.visit("/course-pack");
       seedPunctuationExercise(punctuationSentence, true);
@@ -241,7 +269,12 @@ describe("letter-to-underline spacing across practice views", () => {
         .should("have.text", "The")
         .then(($word) => {
           const singleGap = letterUnderlineGapEm($word[0]);
+          const words = $word[0].closest(".question-input-words")!;
+          const singleColumnGap = parseFloat(
+            words.ownerDocument.defaultView!.getComputedStyle(words).columnGap,
+          );
           cy.get('select[aria-label="展示方式"]').select("fulltext");
+          assertFulltextWordGap(singleColumnGap);
           cy.get('[data-testid="show-answer-button"]').click({ force: true });
           cy.get(".question-input-word")
             .first()
@@ -252,6 +285,7 @@ describe("letter-to-underline spacing across practice views", () => {
                 0.03,
               );
             });
+          assertFulltextWordGap(singleColumnGap);
           cy.get('input[aria-label="填写当前英文单元"]').type(punctuationAnswer, {
             force: true,
             delay: 0,
@@ -265,10 +299,13 @@ describe("letter-to-underline spacing across practice views", () => {
                 0.03,
               );
             });
+          assertFulltextWordGap(singleColumnGap);
           assertFixedPunctuation();
           cy.get(".question-input-word").then(($words) => {
             const before = Array.from($words).map((word) => word.getBoundingClientRect());
             cy.get('input[aria-label="填写当前英文单元"]').type("{enter}", { force: true });
+            cy.get(".answer-content").should("exist");
+            assertFulltextWordGap(singleColumnGap);
             cy.get(".answer-content .question-input-word").should(($answers) => {
               expect($answers).to.have.length(before.length);
               Array.from($answers).forEach((word, index) => {
@@ -281,6 +318,15 @@ describe("letter-to-underline spacing across practice views", () => {
                 }
               });
             });
+          });
+          cy.get('select[aria-label="展示方式"]').select("single");
+          cy.get(".question-input-words").should(($single) => {
+            expect(
+              parseFloat(
+                $single[0].ownerDocument.defaultView!.getComputedStyle($single[0]).columnGap,
+              ),
+              "single view gap after switching back",
+            ).to.be.closeTo(singleColumnGap, 0.1);
           });
         });
     });
