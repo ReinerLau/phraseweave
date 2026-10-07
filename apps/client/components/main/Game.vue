@@ -4,7 +4,8 @@
     data-testid="practice-focus-area"
     @click="handleFocusAreaClick"
   >
-    <ModeClozeMode />
+    <ModeFulltextMode v-if="courseStore.isFulltext" />
+    <ModeClozeMode v-else />
   </div>
 
   <MainSummary />
@@ -17,11 +18,18 @@ import { onMounted } from "vue";
 import { useQuestionInput } from "~/components/main/QuestionInput/questionInputHelper";
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useGameMode as useQuestionGameMode } from "~/composables/main/game";
+import { useExerciseStore } from "~/store/exercise";
 
 const { isQuestion } = useQuestionGameMode();
 const { focusInput } = useQuestionInput();
+const courseStore = useExerciseStore();
 
-function handleFocusAreaClick() {
+function handleFocusAreaClick(event: MouseEvent) {
+  if (
+    courseStore.isFulltext &&
+    !(event.target as HTMLElement).closest('[data-testid="fulltext-current"]')
+  )
+    return;
   if (isQuestion()) {
     focusInput();
   }

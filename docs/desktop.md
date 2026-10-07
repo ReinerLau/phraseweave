@@ -44,7 +44,9 @@ pnpm desktop:make:mac
 
 ## 发布
 
-每个 PR 合并到受保护的 `main` 后，现有流程递增 patch 版本并创建标签。标签工作流从该提交构建 `@reinerlau/phraseweave`，用仓库 `GITHUB_TOKEN` 发布到 GitHub Packages，同时创建 GitHub Release 并附上浏览器扩展 ZIP。首次发布后，在 GitHub Packages 设置中将包改为公开。包只发布到 GitHub Packages，不发布到 npmjs.org。
+功能改动先通过 PR 合入 `dev` 并完成整合测试，日常整合不会发版。只有明确要求发布时，才通过 `dev` → `main` 的发布 PR，以 **merge commit** 将整批改动合入受保护的 `main`。发布后再通过 `main` → `dev` PR，以 merge commit 同步历史。开发、发布和验收步骤见 [手动迭代流程](agents/delivery-workflow.md)。
+
+现有发布脚本按 `main` 第一父链上的未打标签提交递增 patch 版本；每批发布合并只新增一个这样的提交，因此只产生一个新版本。标签工作流从该提交构建 `@reinerlau/phraseweave`，用仓库 `GITHUB_TOKEN` 发布到 GitHub Packages，同时创建 GitHub Release 并附上浏览器扩展 ZIP。首次发布后，在 GitHub Packages 设置中将包改为公开。包只发布到 GitHub Packages，不发布到 npmjs.org。
 
 只有启动器本身需要更新时，才手动运行 **Build macOS desktop launcher** 工作流并输入已有的 `vMAJOR.MINOR.PATCH` 标签；它从该标签构建 PKG，附加到对应 GitHub Release。普通页面与生成器更新只需发布 npm 包，已安装的新启动器下次打开时会自动安装。
 

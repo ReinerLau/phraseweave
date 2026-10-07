@@ -10,12 +10,12 @@ Use the single-context layout with root `CONTEXT.md` and `docs/adr/` when docume
 
 ### Manual iteration
 
-The delivery loop is intentionally manual: plan, implement, run any useful checks, commit on a working branch, open a pull request, merge it into `main`, and deploy when requested. `main` is a protected branch: code destined for release must reach it through a pull request, and agents must never push directly to `main`. When the user asks to publish, inspect the current branch and changes first, then prepare or update the pull request; do not attempt a direct push to `main`. See `docs/agents/delivery-workflow.md` for the lightweight sequence.
+The delivery loop is intentionally manual: develop on a `codex/` worktree branch based on the latest `origin/dev`, run useful checks, and integrate through a pull request targeting `dev`, using squash merge by default. Test the combined changes on `dev`. Both `dev` and `main` require pull requests; agents must never push changes directly to either branch. When developing, integrating, or publishing, read `docs/agents/delivery-workflow.md` for the sequence and merge methods.
 
 ### Protected release branch
 
-Treat `main` as the production release branch and protected branch. Merging a pull request into `main` creates a version tag; the tag publishes the GitHub Packages npm runtime and a GitHub Release. Build the desktop launcher installer from an existing merged tag only when the launcher changes; see `docs/desktop.md`. Re-running a workflow for a previously merged revision does not replace the pull request requirement for new code.
+Treat `main` as the production release branch. Only when the user explicitly requests publishing, inspect the integrated changes and prepare or update a `dev` → `main` pull request. Use a merge commit for this release PR so the batch produces one version tag, which publishes the GitHub Packages npm runtime and a GitHub Release. After publishing, synchronize `main` back into the long-lived `dev` through a pull request using a merge commit. Build the desktop launcher installer from an existing merged tag only when the launcher changes; see `docs/desktop.md`.
 
-### Worktree and local main synchronization
+### Worktree and branch synchronization
 
-When working with multiple worktrees or diagnosing behavior from `main`, inspect `git worktree list`, `git status --short --branch`, and fetch `origin/main` before relying on a local base checkout. After merging changes elsewhere, verify that the checkout being used matches the intended remote revision.
+The primary checkout uses `dev` for integration testing; GitHub's default branch remains `main`. Before creating a worktree or diagnosing branch behavior, inspect `git worktree list` and `git status --short --branch`, and fetch `origin`. Explicitly select `origin/dev` as the base for new feature worktrees rather than relying on the default branch. After merging changes elsewhere, update the relevant clean checkout with a fast-forward and verify it matches the intended remote revision. Preserve other worktrees and their uncommitted changes.

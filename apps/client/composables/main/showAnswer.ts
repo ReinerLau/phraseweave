@@ -2,8 +2,10 @@ import { useQuestionInput } from "~/components/main/QuestionInput/questionInputH
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
 import { useSummary } from "~/composables/main/summary";
+import { useExerciseStore } from "~/store/exercise";
 
 export function useShowAnswer() {
+  const courseStore = useExerciseStore();
   const { focusInput } = useQuestionInput();
   const { showQuestion, isAnswer } = useGameMode();
   const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
@@ -21,6 +23,8 @@ export function useShowAnswer() {
       focusInput();
       return;
     }
+
+    if (courseStore.canDecomposeCurrentUnit) return;
 
     if (isAnswerTip()) {
       hiddenAnswerTip();

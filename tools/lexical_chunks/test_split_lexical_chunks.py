@@ -78,7 +78,7 @@ gave
 The young teacher gave
 gave her students
 The young teacher gave her students
-The young teacher gave her students a difficult problem after class""".splitlines()
+The young teacher gave her students a difficult problem after class.""".splitlines()
 
 
 class AdjacentSubtreeLearningUnitTests(TestCase):
@@ -88,6 +88,34 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
 
     def plan(self, text):
         return generate_plan(text, self.nlp)[0]
+
+    def test_reported_sentence_preserves_quotes_in_plan_and_exports(self):
+        source = (
+            'The LTA added: "Public transport is a shared space, and every commuter '
+            'has a part to play in ensuring a gracious and pleasant commuting environment."'
+        )
+        plan, traces = generate_plan(source, self.nlp)
+        sentence = plan["sentences"][0]
+        self.assertEqual(sentence["sentence"], source)
+        self.assertEqual(sentence["units"][-1]["text"], source)
+        self.assertEqual(sentence["units"][-1]["span"], {"start": 0, "end": len(source)})
+        self.assertEqual(_validate_plan(plan, self.nlp), plan)
+        for unit in sentence["units"]:
+            self.assertEqual(unit["text"], source[unit["span"]["start"]:unit["span"]["end"]])
+        clean_plan, clean_traces = generate_plan(source.replace('"', ''), self.nlp)
+        self.assertEqual(traces[0]["tree_tokens"], clean_traces[0]["tree_tokens"])
+        self.assertEqual(len(sentence["units"]), len(clean_plan["sentences"][0]["units"]))
+        self.assertIsNotNone(traces[0]["sources"][-1])
+        prompts = {"sentences": [{"sentence_chinese": "整句提示"}]}
+        self.assertIn(f"| {source} | 整句 |", render_markdown(plan, prompts, traces))
+        rows = json.loads(render_phraseweave(plan, prompts, traces))["statements"]
+        self.assertEqual(rows[-1]["english"], source)
+        self.assertEqual(rows[-1]["context_before"], "")
+        self.assertEqual(rows[-1]["context_after"], "")
+        for row in rows:
+            self.assertEqual(row["context_before"] + row["english"] + row["context_after"], source)
+        by_id = {row["unit_id"]: row for row in rows}
+        self.assertTrue(all(unit_id in by_id for row in rows for unit_id in row["source_unit_ids"]))
 
     def test_matches_manual_postorder_examples(self):
         for source, expected in ((FIRST_SENTENCE, FIRST_UNITS), (SECOND_SENTENCE, SECOND_UNITS)):
@@ -170,7 +198,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         texts = [unit["text"] for unit in plan["sentences"][0]["units"]]
         self.assertIn("He smiled", texts)
         self.assertIn("she laughed", texts)
-        self.assertEqual(texts[-1], "He smiled, and she laughed")
+        self.assertEqual(texts[-1], "He smiled, and she laughed.")
         self.assertIn("smiled, and", texts)
         self.assertIn("He smiled, and", texts)
         self.assertFalse(traces[0]["blocked"])
@@ -213,27 +241,29 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             traces[0]["blocked"],
         )
 
-    def test_double_quotes_are_removed_before_parsing_and_from_answers(self):
+    def test_double_quotes_are_ignored_by_parser_and_preserved_in_source_spans(self):
         sentence = (
             "Singapore's government said the fines would help create a "
             '"more considerate and pleasant public transport environment"'
         )
         straight, traces = generate_plan(sentence, self.nlp)
-        curly, _ = generate_plan(sentence.replace('"', "“", 1).replace('"', "”"), self.nlp)
-        self.assertEqual(straight, curly)
+        curly_sentence = sentence.replace('"', "“", 1).replace('"', "”")
+        curly, curly_traces = generate_plan(curly_sentence, self.nlp)
+        self.assertEqual(traces[0]["tree_tokens"], curly_traces[0]["tree_tokens"])
+        self.assertEqual(curly["sentences"][0]["units"][-1]["text"], curly_sentence)
+        self.assertEqual(_validate_plan(curly, self.nlp), curly)
         planned = straight["sentences"][0]
         self.assertEqual(
             planned["units"][-1]["text"],
-            "Singapore's government said the fines would help create a "
-            "more considerate and pleasant public transport environment",
+            sentence,
         )
         self.assertIn(
-            "create a more considerate and pleasant public transport environment",
+            'create a "more considerate and pleasant public transport environment',
             [unit["text"] for unit in planned["units"]],
         )
         target_index = next(
             index for index, unit in enumerate(planned["units"])
-            if unit["text"] == "a more considerate and pleasant public transport environment"
+            if unit["text"] == 'a "more considerate and pleasant public transport environment'
         )
         source_span = traces[0]["sources"][target_index]
         self.assertEqual(len(source_span), 2)
@@ -241,15 +271,21 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             [planned["sentence"][slice(*span)] for span in source_span],
             ["a", "more considerate and pleasant public transport environment"],
         )
-        self.assertTrue(all('"' not in unit["text"] for unit in planned["units"]))
+        self.assertEqual(planned["sentence"], sentence)
         self.assertTrue(all(token["text"] not in {'"', "“", "”"} for token in traces[0]["tree_tokens"]))
         for unit in planned["units"]:
             start, end = unit["span"]["start"], unit["span"]["end"]
             self.assertEqual(unit["text"], planned["sentence"][start:end])
 
-    def test_double_quote_removal_keeps_word_boundaries_and_single_quotes(self):
+    def test_quote_projection_keeps_word_boundaries_and_single_quotes(self):
         plan = self.plan('She said"hello"today.')
-        self.assertEqual(plan["sentences"][0]["sentence"], "She said hello today.")
+        self.assertEqual(plan["sentences"][0]["sentence"], 'She said"hello"today.')
+        self.assertEqual(plan["sentences"][0]["units"][-1]["text"], 'She said"hello"today.')
+        self.assertEqual(
+            [unit["text"] for unit in plan["sentences"][0]["units"] if unit["kind"] == "word"],
+            ["She", "hello", "today", "said"],
+        )
+        self.assertEqual(_validate_plan(plan, self.nlp), plan)
         single_quote_sentence = "Singapore's government said 'hello'."
         self.assertEqual(self.plan(single_quote_sentence)["sentences"][0]["sentence"], single_quote_sentence)
 
@@ -260,7 +296,32 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
     def test_multiple_sentences_keep_independent_units(self):
         plan = self.plan("Dogs bark. Cats sleep!")
         self.assertEqual(len(plan["sentences"]), 2)
-        self.assertEqual([sentence["units"][-1]["text"] for sentence in plan["sentences"]], ["Dogs bark", "Cats sleep"])
+        self.assertEqual([sentence["units"][-1]["text"] for sentence in plan["sentences"]], ["Dogs bark.", "Cats sleep!"])
+
+    def test_quoted_sentences_keep_independent_original_boundaries(self):
+        for source, expected in (
+            ('  "Dogs bark." "Cats sleep!"  ', ['"Dogs bark."', '"Cats sleep!"']),
+            ('“Dogs bark.”\n“Cats sleep!”', ['“Dogs bark.”', '“Cats sleep!”']),
+            ('"Dogs bark. Cats sleep!"', ['"Dogs bark.', 'Cats sleep!"']),
+            ('“Run!”', ['“Run!”']),
+            ('"  Dogs bark.  "', ['"  Dogs bark.  "']),
+            ('" Dogs bark. " " Cats sleep! "', ['" Dogs bark. "', '" Cats sleep! "']),
+            ('“ Dogs bark. ”\n“ Cats sleep! ”', ['“ Dogs bark. ”', '“ Cats sleep! ”']),
+        ):
+            with self.subTest(source=source):
+                plan, traces = generate_plan(source, self.nlp)
+                self.assertEqual([sentence["sentence"] for sentence in plan["sentences"]], expected)
+                self.assertEqual([sentence["units"][-1]["text"] for sentence in plan["sentences"]], expected)
+                self.assertEqual(_validate_plan(plan, self.nlp), plan)
+                _, clean_traces = generate_plan(source.translate(str.maketrans('', '', '"“”')), self.nlp)
+                self.assertEqual(
+                    [trace["tree_tokens"] for trace in traces],
+                    [trace["tree_tokens"] for trace in clean_traces],
+                )
+                for sentence, trace in zip(plan["sentences"], traces, strict=True):
+                    _exercise_steps(sentence, trace)
+                    for unit in sentence["units"]:
+                        self.assertEqual(unit["text"], sentence["sentence"][unit["span"]["start"]:unit["span"]["end"]])
 
     def test_rejects_old_and_tampered_plans(self):
         plan = self.plan("Dogs bark.")
@@ -275,7 +336,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             _validate_plan(wrong_version, self.nlp)
 
         old_algorithm = deepcopy(plan)
-        old_algorithm["algorithm_version"] = 5
+        old_algorithm["algorithm_version"] = 6
         with self.assertRaisesRegex(ConfigurationError, "generator versions"):
             _validate_plan(old_algorithm, self.nlp)
 
@@ -295,7 +356,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         payload = json.loads(render_phraseweave(plan, translations, traces))
         self.assertEqual(payload["schema_version"], 4)
         self.assertEqual(len(payload["statements"]), len(_exercise_steps(plan["sentences"][0], traces[0])))
-        self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good")
+        self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good.")
         self.assertEqual(set(payload["statements"][0]), {"sentence_chinese", "english", "context_before", "context_after", "unit_id", "source_unit_ids"})
 
     def test_markdown_and_trace_show_composition_explanations(self):
@@ -398,7 +459,7 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertEqual(rows[-3:], [
             ("she laughed", True),
             ("He smiled, and", True),
-            ("He smiled, and she laughed", False),
+            ("He smiled, and she laughed.", False),
         ])
 
     def test_penalties_sentence_exports_complete_sources_and_replays_them(self):

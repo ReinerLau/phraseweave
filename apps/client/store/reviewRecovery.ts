@@ -14,6 +14,10 @@ export class ReviewRecovery {
 
   constructor(private readonly sourcesByUnitId: Map<string, RecoverySources>) {}
 
+  canDecompose(unitId: string | undefined): boolean {
+    return !!unitId && this.sourcesByUnitId.has(unitId);
+  }
+
   fail(unitId: string | undefined): string | undefined {
     if (!unitId) return this.currentUnitId;
     const sources = this.sourcesByUnitId.get(unitId);

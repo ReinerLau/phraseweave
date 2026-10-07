@@ -19,7 +19,12 @@
           <div class="w-12 text-center">{{ item.index + 1 }}</div>
           <div class="min-w-0 flex-1 text-left">
             <div class="truncate">
-              {{ coursesStore.isStatementPassed(item.data) ? item.data.english : "____" }}
+              {{
+                coursesStore.isStatementPassed(item.data) &&
+                (!coursesStore.isFulltext || item.index < coursesStore.questionIndex)
+                  ? item.data.english
+                  : "____"
+              }}
             </div>
           </div>
         </div>
@@ -40,9 +45,7 @@ const coursesStore = useExerciseStore();
 const { showQuestion } = useGameMode();
 const { hideContents, isShowContents, watchClickOutside } = useContent();
 
-const contentsList = computed(() => {
-  return coursesStore.baseStatements;
-});
+const contentsList = computed(() => coursesStore.baseStatements);
 
 const { list, containerProps, wrapperProps, scrollTo } = useVirtualList(contentsList, {
   itemHeight: 60,
@@ -54,7 +57,7 @@ onMounted(async () => {
 });
 
 watch(
-  () => [coursesStore.questionIndex, coursesStore.learningMode],
+  () => [coursesStore.questionIndex, coursesStore.learningMode, coursesStore.practiceView],
   async () => {
     await nextTick();
     scrollTo(Math.max(0, coursesStore.questionIndex));
@@ -70,11 +73,12 @@ function getItemClassNames(index: number) {
   if (isActive(index)) {
     classNames.push("text-fuchsia-500");
   }
-  classNames.push("hover:text-fuchsia-500 cursor-pointer");
+  if (!coursesStore.isFulltext) classNames.push("hover:text-fuchsia-500 cursor-pointer");
   return classNames;
 }
 
 function jumpTo(index: number) {
+  if (coursesStore.isFulltext) return;
   hideContents();
   showQuestion();
   coursesStore.toSpecificStatement(index);

@@ -1,12 +1,27 @@
 <template>
   <div
     class="card h-full w-full cursor-pointer bg-base-100 shadow-xl"
+    :class="{
+      'ring-2 ring-inset ring-primary': selectionMode && selected,
+      'cursor-wait': disabled,
+    }"
     @click="handleGoToExercise"
   >
     <div class="card-body">
       <div class="flex items-start justify-between gap-2">
+        <input
+          v-if="selectionMode"
+          class="checkbox-primary checkbox shrink-0"
+          type="checkbox"
+          :aria-label="`选择练习“${exercise.title}”`"
+          :checked="selected"
+          :disabled="disabled"
+          @click.stop
+          @change="handleSelect"
+        />
         <h2 class="card-title line-clamp-2 min-w-0 flex-1 break-words">{{ exercise.title }}</h2>
         <div
+          v-if="!selectionMode"
           ref="actionsMenu"
           class="dropdown dropdown-end shrink-0"
           :class="{ 'dropdown-open': showActions }"
@@ -58,7 +73,7 @@
 <script setup lang="ts">
 import { onClickOutside } from "@vueuse/core";
 import { navigateTo } from "#imports";
-import { ref } from "vue";
+import { ref, watch } from "vue";
 
 import type { ExercisesResponse } from "~/api/exercise";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
@@ -67,11 +82,19 @@ import { getLocalExercise } from "~/services/localExerciseDb";
 type Exercise = ExercisesResponse[number];
 interface Props {
   exercise: Exercise;
+  selectionMode?: boolean;
+  selected?: boolean;
+  disabled?: boolean;
 }
 
-const { exercise } = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  selectionMode: false,
+  selected: false,
+  disabled: false,
+});
 const emit = defineEmits<{
   delete: [exercise: Exercise];
+  select: [id: string];
 }>();
 const { updateActiveCourseMap } = useActiveCourseMap();
 const actionsMenu = ref<HTMLElement>();
@@ -81,12 +104,30 @@ onClickOutside(actionsMenu, () => {
   showActions.value = false;
 });
 
+watch(
+  () => props.selectionMode,
+  () => {
+    showActions.value = false;
+  },
+);
+
+function handleSelect() {
+  if (!props.disabled) emit("select", props.exercise.id);
+}
+
 function handleDelete() {
   showActions.value = false;
-  emit("delete", exercise);
+  emit("delete", props.exercise);
 }
 
 async function handleGoToExercise() {
+  if (props.disabled) return;
+  if (props.selectionMode) {
+    handleSelect();
+    return;
+  }
+
+  const exercise = props.exercise;
   if (exercise.isFree) {
     const localExercise = await getLocalExercise(exercise.id);
     const course = localExercise?.courses[0];

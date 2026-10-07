@@ -17,6 +17,7 @@ describe("shared exercise progress", () => {
     await saveLocalExerciseProgress("pack", "course", 3, {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: 3,
+      practiceView: "fulltext",
     });
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
@@ -28,18 +29,21 @@ describe("shared exercise progress", () => {
           statementIndex: 3,
           learningMode: "sentence-first",
           sentenceFirstStartIndex: 3,
+          practiceView: "fulltext",
         }),
       }),
     );
     await saveLocalExerciseProgress("pack", "course", 0, {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
+      practiceView: "single",
     });
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({
       courseId: "course",
       statementIndex: 0,
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
+      practiceView: "single",
     });
   });
 });

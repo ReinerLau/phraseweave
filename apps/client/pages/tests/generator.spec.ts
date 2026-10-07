@@ -154,6 +154,9 @@ describe("generator capture preview", () => {
     await button("保存并进入练习").trigger("click");
     expect(mocks.save).toHaveBeenCalledTimes(1);
     expect(button("正在保存…").attributes("disabled")).toBeDefined();
+    expect(wrapper!.find('input[type="text"]').attributes("disabled")).toBeDefined();
+    await button("正在保存…").trigger("click");
+    expect(mocks.save).toHaveBeenCalledTimes(1);
     expect(mocks.navigate).not.toHaveBeenCalled();
     finishSave();
     await flushPromises();
@@ -162,18 +165,56 @@ describe("generator capture preview", () => {
     expect(mocks.updateActiveCourseMap).toHaveBeenCalledWith(pack.id, pack.courses[0].id);
   });
 
+  it("edits the result name and saves the trimmed title on both the exercise and course", async () => {
+    await mountAndGenerate();
+    const input = wrapper!.find('input[type="text"]');
+    expect((input.element as HTMLInputElement).value).toBe(text);
+    expect(input.element.closest("section")?.textContent).toContain("生成文件");
+    await input.setValue("  猫的练习  ");
+    await button("保存并进入练习").trigger("click");
+    await flushPromises();
+    const pack = mocks.save.mock.calls[0][0];
+    expect(pack.title).toBe("猫的练习");
+    expect(pack.courses[0].title).toBe("猫的练习");
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the generated text as the default name even when the source form changes", async () => {
+    await mountAndGenerate();
+    await wrapper!.find('input[type="text"]').setValue("  ");
+    await wrapper!.find("textarea").setValue("A different text.");
+    await button("保存并进入练习").trigger("click");
+    await flushPromises();
+    expect(mocks.save.mock.calls[0][0].title).toBe(text);
+  });
+
+  it("resets the name for the next generation", async () => {
+    await mountAndGenerate();
+    await wrapper!.find('input[type="text"]').setValue("旧名称");
+    await wrapper!.find("textarea").setValue("  A new\nsource text.  ");
+    await submit();
+    expect((wrapper!.find('input[type="text"]').element as HTMLInputElement).value).toBe(
+      "A new source text.",
+    );
+  });
+
   it("keeps preview after a save failure and retries without regenerating", async () => {
     await mountAndGenerate();
+    await wrapper!.find('input[type="text"]').setValue("重试名称");
     mocks.save.mockRejectedValueOnce(new Error("保存失败"));
     await button("保存并进入练习").trigger("click");
     await flushPromises();
     expect(wrapper!.text()).toContain("保存失败");
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(mocks.navigate).not.toHaveBeenCalled();
+    expect((wrapper!.find('input[type="text"]').element as HTMLInputElement).value).toBe(
+      "重试名称",
+    );
     await button("保存并进入练习").trigger("click");
     await flushPromises();
     expect(mocks.start).toHaveBeenCalledTimes(1);
     expect(mocks.save).toHaveBeenCalledTimes(2);
+    expect(mocks.save.mock.calls[1][0].title).toBe("重试名称");
     expect(mocks.navigate).toHaveBeenCalledTimes(1);
   });
 
