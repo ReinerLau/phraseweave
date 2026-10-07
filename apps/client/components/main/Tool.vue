@@ -6,7 +6,7 @@
     <div class="flex w-full min-w-0 flex-none items-start gap-2 sm:w-auto sm:flex-1">
       <NuxtLink
         href="/course-pack"
-        class="clickable-item shrink-0"
+        class="clickable-item flex h-11 shrink-0 items-center justify-center"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
