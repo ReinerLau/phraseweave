@@ -4,7 +4,7 @@ const courseTitle = "一个非常非常长的练习标题用于验证窄屏布�
 const englishSentence =
   "this is a deliberately long sentence that should wrap inside the mobile practice page";
 const veryLongEnglishSentence =
-  `${"this deliberately long sentence contains enough words to exercise every available line in the mobile practice area while keeping the answer action after the final input block "}`.repeat(
+  `${"this deliberately long sentence contains enough words to exercise every available line in the mobile practice area while keeping the answer action in the toolbar "}`.repeat(
     10,
   );
 
@@ -361,39 +361,41 @@ describe("mobile practice layout", () => {
       );
       expect(root.scrollHeight).to.be.greaterThan(root.clientHeight);
 
-      const action = root.querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
       root.scrollTop = root.scrollHeight;
-      expect(action.getBoundingClientRect().bottom).to.be.at.most(
-        root.getBoundingClientRect().bottom + 1,
-      );
-      assertNoVerticalOverflow();
     });
+    cy.get('.question-content [data-testid="show-answer-button"]').should("not.exist");
+    cy.get('[data-testid="practice-toolbar"] [data-testid="show-answer-button"]').should(
+      "be.visible",
+    );
+    assertNoHorizontalOverflow();
+    assertNoVerticalOverflow();
   });
 
-  it("keeps the practice controls at the bottom without a version or arrow controls", () => {
+  it("keeps the answer hint in the toolbar before the title without a version or arrow controls", () => {
     cy.get("footer").should("not.exist");
     cy.get(".arrow-btn").should("not.exist");
     cy.get('[data-testid="practice-tips"]').should("not.exist");
     cy.get('[data-testid="next-question-button"]').should("not.exist");
     cy.get('[data-testid="show-answer-button"]')
+      .should("have.length", 1)
       .should("be.visible")
       .and("have.attr", "aria-label", "显示答案");
-    cy.get(".question-content").should(($question) => {
-      const words = $question[0].querySelector<HTMLElement>(".question-input-words")!;
-      const inputWords = words.querySelectorAll<HTMLElement>(".question-input-word");
-      const lastInputWord = inputWords[inputWords.length - 1];
-      const button = $question[0].querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
-      const lastInputRect = lastInputWord.getBoundingClientRect();
+    cy.get('.question-content [data-testid="show-answer-button"]').should("not.exist");
+    cy.get('[data-testid="practice-toolbar"]').should(($toolbar) => {
+      const button = $toolbar[0].querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
+      const title = $toolbar[0].querySelector<HTMLElement>('[data-tip="练习卡片列表"]')!;
       const buttonRect = button.getBoundingClientRect();
 
       expect(buttonRect.height).to.be.at.least(44);
-      expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
+      expect(buttonRect.width).to.be.at.least(44);
+      expect(buttonRect.right).to.be.at.most(title.getBoundingClientRect().left);
     });
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
       const questionTop = $question[0].getBoundingClientRect().top;
       const toolBottom =
-        document.querySelector('[data-tip="练习卡片列表"]')?.getBoundingClientRect().bottom ?? 0;
+        document.querySelector('[data-testid="practice-toolbar"]')?.getBoundingClientRect()
+          .bottom ?? 0;
       const questionBottom = $question[0].getBoundingClientRect().bottom;
 
       expect(toolBottom).to.be.at.most(questionTop);
@@ -549,7 +551,7 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
-  it("keeps the answer button below the input with the keyboard open", () => {
+  it("keeps the toolbar answer button visible with the keyboard open", () => {
     cy.get('input[type="text"]').click({ force: true });
     cy.window().then((window) => {
       const viewport = window.visualViewport;
@@ -564,16 +566,28 @@ describe("mobile practice layout", () => {
       viewport?.dispatchEvent(new Event("resize"));
     });
 
-    cy.get(".question-content").should(($question) => {
-      const words = $question[0].querySelector<HTMLElement>(".question-input-words")!;
-      const inputWords = words.querySelectorAll<HTMLElement>(".question-input-word");
-      const lastInputWord = inputWords[inputWords.length - 1];
-      const button = $question[0].querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
-      const lastInputRect = lastInputWord.getBoundingClientRect();
-      const buttonRect = button.getBoundingClientRect();
+    cy.get('[data-testid="practice-toolbar"] [data-testid="show-answer-button"]')
+      .should("be.visible")
+      .should(($button) => {
+        const document = $button[0].ownerDocument;
+        const questionTop = document
+          .querySelector(".question-content")!
+          .getBoundingClientRect().top;
+        const button = $button[0];
+        const buttonRect = button.getBoundingClientRect();
 
-      expect(buttonRect.top).to.be.at.least(lastInputRect.bottom - 1);
-    });
+        expect(buttonRect.height).to.be.at.least(44);
+        expect(buttonRect.width).to.be.at.least(44);
+        expect(buttonRect.bottom).to.be.at.most(questionTop);
+      });
+    cy.get('[data-testid="show-answer-button"]').click();
+    cy.get('input[type="text"]').should("be.focused");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
+    cy.get('[data-testid="show-answer-button"]').click();
+    cy.get('input[type="text"]').should("be.focused");
+    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "显示答案");
+    assertNoHorizontalOverflow();
+    assertNoVerticalOverflow();
   });
 
   it("uses the same shrinking font size for the Chinese prompt and input", () => {

@@ -104,25 +104,43 @@ describe("answer availability", () => {
     expect(store.canDecomposeCurrentUnit).toBe(false);
   });
 
-  it("moves the fulltext leaf hint to the toolbar and hides it in answer and summary states", async () => {
+  it.each(["single", "fulltext"] as const)(
+    "keeps the %s leaf hint only in the toolbar and hides it in answer and summary states",
+    async (view) => {
+      course.practiceView = view;
+      course.learningMode = "progressive";
+      course.statementIndex = 0;
+      const { store, wrapper } = await setup();
+      expect(wrapper.findComponent(Question).find("button").exists()).toBe(false);
+      expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
+      expect(wrapper.findAll('[data-testid="show-answer-button"]')).toHaveLength(1);
+      useGameMode().showAnswer();
+      await flushPromises();
+      expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+      useGameMode().showQuestion();
+      useSummary().showSummary();
+      await flushPromises();
+      expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+      useSummary().hideSummary();
+      store.switchPracticeView(view === "single" ? "fulltext" : "single");
+      await flushPromises();
+      expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
+      expect(wrapper.findComponent(Question).find("button").exists()).toBe(false);
+      expect(wrapper.findAll('[data-testid="show-answer-button"]')).toHaveLength(1);
+    },
+  );
+
+  it("hides the toolbar hint when the final fulltext leaf is completed", async () => {
     course.practiceView = "fulltext";
     course.learningMode = "progressive";
-    course.statementIndex = 0;
+    course.statements[4].sourceUnitIds = [];
     const { store, wrapper } = await setup();
-    expect(wrapper.findComponent(Question).find("button").exists()).toBe(false);
     expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
-    useGameMode().showAnswer();
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(true);
     await flushPromises();
+    expect(store.fulltextCompleted).toBe(true);
     expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
-    useGameMode().showQuestion();
-    useSummary().showSummary();
-    await flushPromises();
-    expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
-    useSummary().hideSummary();
-    store.switchPracticeView("single");
-    await flushPromises();
-    expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
-    expect(wrapper.findComponent(Question).find("button").exists()).toBe(true);
   });
 
   async function correct(store: ReturnType<typeof useExerciseStore>) {
