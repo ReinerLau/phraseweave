@@ -1,6 +1,7 @@
 <template>
   <div
     class="relative flex min-w-0 max-w-full flex-wrap items-center justify-between gap-y-2 border-t border-solid border-slate-200 py-3 text-base dark:border-slate-500"
+    data-testid="practice-toolbar"
   >
     <!-- 左侧 -->
     <div class="flex w-full min-w-0 flex-none items-start gap-2 sm:w-auto sm:flex-1">
@@ -18,11 +19,10 @@
 
     <!-- 右侧 -->
     <div
-      class="flex w-full min-w-0 items-center justify-end gap-2 sm:ml-2 sm:w-auto sm:max-w-[30%]"
-      :class="{ 'min-h-11': courseStore.isFulltext }"
+      class="flex min-h-11 w-full min-w-0 items-center justify-end gap-2 sm:ml-2 sm:w-auto sm:max-w-[30%]"
     >
       <AnswerHintButton
-        v-if="showFulltextAnswerHint"
+        v-if="showAnswerHint"
         class="shrink-0"
       />
       <div
@@ -63,9 +63,8 @@ import PracticeViewSwitch from "./PracticeViewSwitch.vue";
 const courseStore = useExerciseStore();
 const { isQuestion } = useGameMode();
 const { showModal } = useSummary();
-const showFulltextAnswerHint = computed(
+const showAnswerHint = computed(
   () =>
-    courseStore.isFulltext &&
     courseStore.currentStatement &&
     !courseStore.canDecomposeCurrentUnit &&
     isQuestion() &&

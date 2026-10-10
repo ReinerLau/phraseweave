@@ -21,10 +21,6 @@
           courseStore.currentStatement?.contextAfter
         }}</span>
       </div>
-      <AnswerHintButton
-        v-if="!courseStore.isFulltext && !courseStore.canDecomposeCurrentUnit"
-        class="mt-3"
-      />
     </div>
   </div>
 </template>
@@ -32,7 +28,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import AnswerHintButton from "~/components/main/AnswerHintButton.vue";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useExerciseStore } from "~/store/exercise";
 import { findLargestFittingFontSize, QUESTION_FONT_MAX_SIZE_PX } from "./questionLayoutHelper";
