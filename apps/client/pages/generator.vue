@@ -12,11 +12,13 @@
           }}
         </p>
       </div>
-      <CommonBackLink
-        class="shrink-0"
-        label="返回练习清单"
-        to="/"
-      />
+      <div class="flex shrink-0 items-center gap-2">
+        <CommonBackLink
+          label="返回练习清单"
+          to="/"
+        />
+        <RemoteLogout />
+      </div>
     </header>
 
     <section class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm">

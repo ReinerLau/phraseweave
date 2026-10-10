@@ -60,7 +60,36 @@ pnpm desktop:make:mac
 
 ## 手机访问整个应用
 
-准备一个可以修改 DNS 服务器的域名，将其接入 Cloudflare。手机访问的固定地址可设为 `https://phraseweave.example.com`；Mac 必须开机、联网并保持唤醒。访问时，Cloudflare 会先要求登录，生成器、练习清单和练习页面均受保护。
+准备一个可以修改 DNS 服务器的域名，将其接入 Cloudflare。手机访问的固定地址可设为 `https://phraseweave.example.com`；Mac 必须开机、联网并保持唤醒。支持本机账号密码和 Cloudflare Access 两种认证，生成器、练习清单、音频和 API 均受保护。两种方式都沿用 Mac 上的共享练习库和学习进度。
+
+### 本机账号密码
+
+这种方式只需要已有的 Cloudflare Tunnel 和 DNS，不需要开通 Zero Trust 或绑定支付方式。
+
+1. 在 Mac 安装 `cloudflared`，执行 `cloudflared tunnel login`，再用 `cloudflared tunnel create phraseweave` 创建本地管理的 Tunnel。记下 UUID 和凭据文件路径，用 `cloudflared tunnel route dns phraseweave phraseweave.example.com` 创建 DNS 记录。
+2. 在本机交互式终端执行以下命令，替换占位值：
+
+   ```sh
+   phraseweave remote configure \
+     --auth password \
+     --username phraseweave \
+     --origin https://phraseweave.example.com \
+     --tunnel-id TUNNEL_UUID \
+     --credentials-file /绝对路径/TUNNEL_UUID.json
+   ```
+
+   按提示输入两次至少 8 位的密码，输入只显示星号和字符计数。过短或两次不同可直接重试。用户名默认是 `phraseweave`，可使用 1–64 位字母、数字、下划线、点或短横线。密码不接受命令行参数或管道输入；独立的 `remote-auth.json` 只保存带随机盐的 scrypt 哈希，文件仅当前用户可读写。
+
+3. 关闭原来的 CLI 和桌面入口，重新启动 `phraseweave` 或桌面启动器。隧道连接独立的本机密码网关；未登录时不能访问本地应用。密码配置缺失或损坏时，远程入口拒绝访问，不会回退到直接转发。Mac 本地 `http://127.0.0.1:3000/` 仍无需登录。
+4. 手机关闭 Wi-Fi，用移动网络打开固定域名，输入用户名和密码。登录后可访问练习、音频、生成器和进度；练习清单与生成器提供“退出登录”。
+
+登录 Cookie 使用 `Secure`、`HttpOnly` 和 `SameSite=Strict`，不设置持久有效期；服务端最多保留会话 24 小时。通常关闭浏览器后退出，但手机浏览器恢复上次会话时可能恢复 Cookie，明确退出请使用“退出登录”。重启服务也会清除会话。
+
+忘记密码时，在本机运行 `phraseweave remote password` 隐藏输入新密码；已有远程会话立即失效，无需重启。连续 5 次错误尝试会对该来源限流 10 分钟。单账号共用现有数据，不创建独立用户空间。
+
+### Cloudflare Access
+
+已有 Access 配置继续兼容，不带 `--auth` 的旧命令默认使用这种方式。它需要在 Cloudflare 控制台完成 Zero Trust 开通。
 
 1. 在 Mac 安装 `cloudflared`。执行 `cloudflared tunnel login`，再用 `cloudflared tunnel create phraseweave` 创建本地管理的 Tunnel，记下输出的 UUID 和凭据文件路径。用 `cloudflared tunnel route dns phraseweave phraseweave.example.com` 创建 DNS 记录。
 2. 在 Cloudflare Zero Trust 中为 `phraseweave.example.com` 创建 Self-hosted Access 应用，覆盖整个域名；启用 One-time PIN，只在 Allow 策略中列出自己的**具体邮箱地址**。从应用设置中记录 Access AUD 标签，以及 Zero Trust 团队名称。建议把应用会话设为 30 天。
@@ -75,6 +104,8 @@ pnpm desktop:make:mac
      --aud-tag ACCESS_AUD_TAG
    ```
 
-4. 重新启动 `phraseweave` 或桌面启动器。CLI 会让 `cloudflared` 转发到固定的本机 3000 端口。手机用浏览器打开固定地址并输入邮件验证码。可用 `phraseweave remote status` 查看已配置的地址，Tunnel 错误记录在 `~/Library/Application Support/PhraseWeave/cloudflared.log`。
+4. 重新启动 `phraseweave` 或桌面启动器。CLI 会让 `cloudflared` 验证 Access JWT 后转发到固定的本机 3000 端口。手机用浏览器打开固定地址并输入邮件验证码。
 
-`phraseweave remote disable` 会删除远程配置，重启后生效。配置和 Tunnel 凭据只保存在本机，不提交到仓库。请确保域名的 Access 应用覆盖所有路径；CLI 会让 `cloudflared` 在转发前验证 Access JWT。当前正在运行的旧版 CLI 不支持共享控制 socket，升级后先关闭旧实例再启动新版本。
+### 状态与停用
+
+可用 `phraseweave remote status` 查看地址和认证方式，Tunnel 错误记录在 `~/Library/Application Support/PhraseWeave/cloudflared.log`。`phraseweave remote disable` 删除远程配置，重启后生效；密码哈希保留在本机，重新配置密码模式时会设置新密码。配置和 Tunnel 凭据不提交到仓库。Access 模式必须让 Access 应用覆盖所有路径。
