@@ -28,3 +28,22 @@ test("remote origin must be a plain HTTPS hostname", () => {
     validateRemoteConfig({ ...config, origin: "https://user:pass@phraseweave.example.com" }),
   );
 });
+
+test("password tunnels use the protected gateway without requiring an Access organization", () => {
+  const passwordConfig = validateRemoteConfig({
+    ...config,
+    auth: "password",
+    teamName: undefined,
+    audTag: undefined,
+  });
+  assert.equal(passwordConfig.username, "phraseweave");
+  const yaml = renderTunnelConfig(passwordConfig, "http://127.0.0.1:43567/");
+  assert.match(yaml, /service: "http:\/\/127\.0\.0\.1:43567"/);
+  assert.doesNotMatch(yaml, /access:|required:|teamName:|audTag:/);
+  assert.match(yaml, /http_status:404/);
+  assert.equal(validateRemoteConfig(config).auth, "cloudflare-access");
+  assert.throws(() => validateRemoteConfig({ ...config, auth: "none" }));
+  assert.throws(() => validateRemoteConfig({ ...config, teamName: undefined }));
+  assert.throws(() => validateRemoteConfig({ ...config, audTag: undefined }));
+  assert.throws(() => validateRemoteConfig({ ...config, auth: "password", username: "" }));
+});

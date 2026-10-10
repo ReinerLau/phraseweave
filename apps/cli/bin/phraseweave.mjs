@@ -3,7 +3,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { disableRemote, loadRemoteConfig, saveRemoteConfig, startTunnel } from "./remote.mjs";
+import { promptPassword, savePassword } from "./remote-auth.mjs";
+import { startRemoteServer } from "./remote-server.mjs";
+import {
+  disableRemote,
+  loadRemoteConfig,
+  saveRemoteConfig,
+  startTunnel,
+  validateRemoteConfig,
+} from "./remote.mjs";
 import { GeneratorRuntime, snapshotRuntime } from "./runtime.mjs";
 import { startPageServer } from "./server.mjs";
 import { connectOrStart, startControlServer, WEB_UI_PORT } from "./shared.mjs";
@@ -43,27 +51,56 @@ async function handleRemote(command, args) {
   }
   if (command === "status") {
     const config = await loadRemoteConfig();
-    process.stdout.write(config ? `${config.origin}\n` : "远程访问尚未配置。\n");
+    process.stdout.write(
+      config
+        ? `${config.origin}\n认证：${config.auth === "password" ? `本机密码（${config.username}）` : "Cloudflare Access"}\n`
+        : "远程访问尚未配置。\n",
+    );
+    return;
+  }
+  if (command === "password") {
+    const config = await loadRemoteConfig();
+    if (config?.auth !== "password") throw new Error("请先配置 --auth password 远程访问。");
+    await savePassword(config.username, await promptPassword());
+    process.stdout.write("密码已更新；已有远程登录失效，无需重启。\n");
     return;
   }
   if (command !== "configure")
     throw new Error(
-      "Usage: phraseweave remote configure --origin URL --tunnel-id UUID --credentials-file PATH --team-name NAME --aud-tag TAG",
+      "Usage: phraseweave remote configure --origin URL --tunnel-id UUID --credentials-file PATH (--auth password [--username NAME] | --team-name NAME --aud-tag TAG)",
     );
   const values = {};
   for (let index = 0; index < args.length; index += 2) {
     const key = args[index];
     const value = args[index + 1];
     if (!key?.startsWith("--") || !value) throw new Error("远程配置参数不完整。");
+    if (
+      ![
+        "--origin",
+        "--tunnel-id",
+        "--credentials-file",
+        "--auth",
+        "--username",
+        "--team-name",
+        "--aud-tag",
+      ].includes(key)
+    )
+      throw new Error(`未知的远程配置参数：${key}`);
+    if (Object.hasOwn(values, key.slice(2))) throw new Error(`重复的远程配置参数：${key}`);
     values[key.slice(2)] = value;
   }
-  const config = await saveRemoteConfig({
+  const valid = validateRemoteConfig({
     origin: values.origin,
     tunnelId: values["tunnel-id"],
     credentialsFile: values["credentials-file"],
     teamName: values["team-name"],
     audTag: values["aud-tag"],
+    auth: values.auth,
+    username: values.username,
   });
+  await fs.access(valid.credentialsFile);
+  if (valid.auth === "password") await savePassword(valid.username, await promptPassword());
+  const config = await saveRemoteConfig(valid);
   process.stdout.write(`已配置 ${config.origin}；重启 PhraseWeave 后生效。\n`);
 }
 
@@ -71,12 +108,17 @@ async function serveDaemon(port) {
   let server;
   let runtime;
   let tunnel;
+  let gateway;
   let control;
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
     stopping = true;
     tunnel?.kill("SIGTERM");
+    if (gateway) {
+      gateway.closeAllConnections();
+      await new Promise((resolve) => gateway.close(resolve));
+    }
     if (server) await new Promise((resolve) => server.close(resolve));
     runtime?.stop();
     await control?.close();
@@ -93,7 +135,12 @@ async function serveDaemon(port) {
         : await snapshotRuntime(source, metadata.version);
     runtime = new GeneratorRuntime(root);
     await runtime.start();
-    const remote = await loadRemoteConfig();
+    let remote;
+    try {
+      remote = await loadRemoteConfig();
+    } catch (error) {
+      process.stderr.write(`远程配置不可用：${error.message} 本机服务仍可使用。\n`);
+    }
     const started = await startPageServer({
       clientRoot: path.join(root, "client"),
       runtime,
@@ -101,7 +148,22 @@ async function serveDaemon(port) {
       remoteOrigin: remote?.origin,
     });
     server = started.server;
-    tunnel = await startTunnel(remote, started.url);
+    try {
+      let tunnelUrl = started.url;
+      if (remote?.auth === "password") {
+        const protectedRemote = await startRemoteServer({ config: remote, localUrl: started.url });
+        gateway = protectedRemote.server;
+        tunnelUrl = protectedRemote.url;
+      }
+      tunnel = await startTunnel(remote, tunnelUrl);
+    } catch (error) {
+      if (gateway) {
+        gateway.closeAllConnections();
+        await new Promise((resolve) => gateway.close(resolve));
+        gateway = undefined;
+      }
+      process.stderr.write(`远程入口未启动：${error.message} 本机服务仍可使用。\n`);
+    }
     control.setReady({ type: "ready", url: started.url, version: metadata.version });
   } catch (error) {
     process.stderr.write(`PhraseWeave 服务启动失败：${error.stack || error.message}\n`);
@@ -133,7 +195,7 @@ async function main() {
   if (flags.version) return process.stdout.write(`${metadata.version}\n`);
   if (flags.help) {
     return process.stdout.write(
-      "Usage: phraseweave [--json-ready] [--version] | remote configure|status|disable\n",
+      "Usage: phraseweave [--json-ready] [--version] | remote configure|password|status|disable\n",
     );
   }
   if (process.platform !== "darwin" || process.arch !== "arm64") {

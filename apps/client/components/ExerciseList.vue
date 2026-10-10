@@ -28,6 +28,7 @@
         >
           添加练习
         </button>
+        <RemoteLogout />
       </div>
     </div>
     <div

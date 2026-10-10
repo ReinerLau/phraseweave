@@ -2,6 +2,7 @@ import type { ExerciseResponse, ExercisesResponse } from "~/api/exercise";
 import type { PracticeView } from "~/store/exercise";
 import type { LearningMode } from "~/utils/learningDirection";
 import { isLocalPackage } from "~/services/generatorClient";
+import { handleRemoteAuth } from "~/services/remoteSession";
 import { scopedStorageName } from "~/utils/storageScope";
 
 const DATABASE_NAME = "phraseweave-local";
@@ -93,6 +94,7 @@ async function localRequest<T>(path: string, method = "GET", body?: unknown): Pr
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  await handleRemoteAuth(response);
   const result = (await response.json()) as T & { error?: string };
   if (!response.ok)
     throw new Error(result.error || `Local storage request failed (${response.status}).`);
