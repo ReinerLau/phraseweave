@@ -12,6 +12,7 @@ import { onMounted } from "vue";
 
 import { useDarkMode } from "~/composables/darkMode";
 import { isAuthEnabled, isAuthenticated } from "~/services/auth";
+import { loadRemoteSession } from "~/services/remoteSession";
 import { useUserStore } from "./store/user";
 
 const { initDarkMode } = useDarkMode();
@@ -32,6 +33,7 @@ setup();
 
 onMounted(() => {
   initDarkMode();
+  void loadRemoteSession();
 });
 </script>
 

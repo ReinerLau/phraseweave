@@ -1,3 +1,5 @@
+import { handleRemoteAuth } from "~/services/remoteSession";
+
 export type TranslationProvider = "local" | "index-translate";
 
 export interface GeneratorStatus {
@@ -44,6 +46,7 @@ async function localRequest<T>(path: string, init: RequestInit = {}): Promise<T>
     `${packagePage ? window.location.origin : SERVICE_URL}${path}`,
     options,
   );
+  await handleRemoteAuth(response);
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `本地服务返回错误（${response.status}）。`);
   return body as T;

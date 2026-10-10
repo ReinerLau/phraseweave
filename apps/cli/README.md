@@ -25,3 +25,30 @@ Keep `phraseweave` running in a terminal. Select English text in Chrome and choo
 
 This package includes the `uv` executable from Astral Software Inc. Its MIT license is
 included in `third-party/uv/LICENSE-MIT`.
+
+## Remote access with a password
+
+After connecting a domain to Cloudflare and creating a locally managed Tunnel, configure
+the existing tunnel from an interactive terminal:
+
+```sh
+phraseweave remote configure --auth password --username phraseweave \
+  --origin https://your-domain.example \
+  --tunnel-id TUNNEL_UUID \
+  --credentials-file /absolute/path/TUNNEL_UUID.json
+```
+
+Enter a password of at least 8 characters twice at the masked prompts, then restart the app.
+The tunnel connects to a password gateway protecting all pages, audio, and APIs. Local access
+remains available without login. This mode does not require activating Cloudflare Access.
+
+The single account shares the existing exercises and progress. Sessions use a Secure,
+HttpOnly, SameSite=Strict browser session cookie and expire after at most 24 hours or a service
+restart. Mobile browser session restoration may retain the cookie; use **退出登录** to end a
+session explicitly. Run `phraseweave remote password` locally to reset the password and
+immediately invalidate all existing sessions. Only a salted scrypt hash is stored, in a private
+`remote-auth.json` file alongside the app data; passwords cannot be supplied as arguments or pipes.
+
+`phraseweave remote status` shows the address and authentication mode. `phraseweave remote disable`
+disables remote access after a restart. Existing `--team-name` and `--aud-tag` configurations
+continue to use Cloudflare Access and its JWT validation.
