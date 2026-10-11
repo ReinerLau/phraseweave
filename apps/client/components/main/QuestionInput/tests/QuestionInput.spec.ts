@@ -57,6 +57,7 @@ describe("QuestionInput", () => {
 
     await submitAnswer(input, "I like");
     await wrapper.vm.$nextTick();
+    const submittedInput = (input.element as HTMLInputElement).value;
 
     expect((input.element as HTMLInputElement).value).not.toBe("");
     expect(wrapper.findAll(".question-input-word")).toHaveLength(2);
@@ -71,6 +72,16 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("");
     expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(0);
     expect(wrapper.find(".question-input-word").classes()).toContain("border-b-fuchsia-500");
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput);
+  });
+
+  it("uses the submitted snapshot even when input changes during error feedback", async () => {
+    const { input } = mountQuestionInput();
+    await submitAnswer(input, "I like");
+    const submittedInput = (input.element as HTMLInputElement).value;
+    await input.setValue("I eat");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput);
   });
 
   it("replaces a pending reset for a newer incorrect answer", async () => {
@@ -83,6 +94,7 @@ describe("QuestionInput", () => {
 
     await submitAnswer(input, "I love");
     await wrapper.vm.$nextTick();
+    const submittedInput = (input.element as HTMLInputElement).value;
     await vi.advanceTimersByTimeAsync(200);
 
     expect((input.element as HTMLInputElement).value).not.toBe("");
@@ -90,6 +102,8 @@ describe("QuestionInput", () => {
     await vi.advanceTimersByTimeAsync(100);
     await wrapper.vm.$nextTick();
     expect((input.element as HTMLInputElement).value).toBe("");
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledOnce();
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput);
   });
 
   it("cancels a pending reset after a correct answer", async () => {

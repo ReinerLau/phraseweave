@@ -53,6 +53,17 @@ describe("ReviewRecovery", () => {
     expect(recovery.correct()).toBeUndefined();
   });
 
+  it("replaces selected sources when a retry fails elsewhere", () => {
+    const recovery = new ReviewRecovery(sources);
+    expect(recovery.fail("whole", ["new"])).toBe("new");
+    expect(recovery.correct()).toBe("whole");
+    expect(recovery.fail("whole", ["old"])).toBe("old");
+    expect(recovery.fail("old", ["leaf-b"])).toBe("leaf-b");
+    expect(recovery.correct()).toBe("old");
+    expect(recovery.correct()).toBe("whole");
+    expect(recovery.correct()).toBeUndefined();
+  });
+
   it("retries after the only retained source and can reopen a failed retry", () => {
     const recovery = new ReviewRecovery(
       new Map<string, RecoverySources>([["with-article", ["core"]]]),

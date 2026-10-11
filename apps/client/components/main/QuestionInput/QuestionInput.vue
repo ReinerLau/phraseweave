@@ -219,10 +219,11 @@ function cancelErrorReset() {
 
 function handleAnswerError() {
   cancelErrorReset();
+  const submittedInput = inputValue.value;
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
     clearInput();
-    courseStore.failCurrentStatement();
+    courseStore.failCurrentStatement(submittedInput);
   }, ERROR_FEEDBACK_DURATION_MS);
 }
 

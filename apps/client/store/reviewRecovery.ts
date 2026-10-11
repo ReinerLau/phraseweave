@@ -18,13 +18,15 @@ export class ReviewRecovery {
     return !!unitId && this.sourcesByUnitId.has(unitId);
   }
 
-  fail(unitId: string | undefined): string | undefined {
+  fail(unitId: string | undefined, selectedSourceUnitIds?: RecoverySources): string | undefined {
     if (!unitId) return this.currentUnitId;
-    const sources = this.sourcesByUnitId.get(unitId);
-    if (!sources) return this.currentUnitId;
+    const originalSources = this.sourcesByUnitId.get(unitId);
+    if (!originalSources) return this.currentUnitId;
+    const sources = selectedSourceUnitIds ?? originalSources;
 
     const frame = this.frames.at(-1);
     if (frame?.targetUnitId === unitId && frame.retrying) {
+      frame.sourceUnitIds = sources;
       frame.sourceIndex = 0;
       frame.retrying = false;
     } else {

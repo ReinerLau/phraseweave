@@ -17,6 +17,7 @@ import {
   groupExerciseSentences,
   sentenceFirstIndices,
 } from "~/utils/learningDirection";
+import { selectRecoverySources } from "~/utils/recoverySources";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
 
@@ -231,9 +232,15 @@ export const useExerciseStore = defineStore("exercise", () => {
     refreshCurrentStatement();
   }
 
-  function failCurrentStatement() {
+  function failCurrentStatement(input?: string) {
     currentAnswerAccepted.value = false;
-    recoveryUnitId.value = recovery.value?.fail(currentStatement.value?.unitId);
+    const statement = currentStatement.value;
+    const sources = statement?.sourceUnitIds;
+    const selected =
+      statement && sources?.length
+        ? selectRecoverySources(statement, input, sources, unitStatements)
+        : undefined;
+    recoveryUnitId.value = recovery.value?.fail(statement?.unitId, selected);
     refreshCurrentStatement();
   }
 

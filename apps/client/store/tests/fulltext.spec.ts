@@ -159,6 +159,30 @@ describe("fulltext practice", () => {
     expect(store.isRecovering).toBe(false);
   });
 
+  it.each(["sentence-first", "progressive"] as const)(
+    "keeps filtered recovery within the current sentence in %s mode",
+    async (mode) => {
+      course.learningMode = mode;
+      course.statementIndex = 8;
+      const store = await setup();
+      store.failCurrentStatement("A B");
+      expect(store.currentStatement?.unitId).toBe("0:C");
+      expect(store.statementIndex).toBe(8);
+      expect(store.precedingSentences).toHaveLength(0);
+      expect(store.advanceAfterCorrect()).toBe(false); // Still requires a correct submission.
+      correct(store);
+      expect(store.currentStatement?.unitId).toBe("0:ABC");
+      expect(store.precedingSentences).toHaveLength(0);
+      expect(store.advanceAfterCorrect()).toBe(false);
+      correct(store);
+      expect(store.precedingSentences).toHaveLength(1);
+      expect(store.statementIndex).toBe(mode === "sentence-first" ? 17 : 9);
+      expect(store.isRecovering).toBe(false);
+      await flushPromises();
+      expect(saveLocalExerciseProgress).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("uses the last occurrence before the anchor on direction switches during recovery", async () => {
     course.statementIndex = 26;
     const store = await setup();
