@@ -24,7 +24,9 @@
           data-testid="fulltext-history-sentence"
         >
           <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
-          <p class="whitespace-pre-wrap dark:text-gray-50">{{ sentence.english }}</p>
+          <p class="whitespace-pre-wrap dark:text-gray-50">
+            <SpeakableText :text="sentence.english" />
+          </p>
         </div>
         <section
           v-else-if="index === courseStore.currentSentenceIndex"
@@ -34,7 +36,9 @@
         >
           <div v-if="courseStore.fulltextCompleted">
             <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
-            <p class="whitespace-pre-wrap break-words dark:text-gray-50">{{ sentence.english }}</p>
+            <p class="whitespace-pre-wrap break-words dark:text-gray-50">
+              <SpeakableText :text="sentence.english" />
+            </p>
           </div>
           <ModeClozeMode v-else />
         </section>
@@ -68,6 +72,7 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import type { ChineseMaskLayout } from "./chineseMaskLayout";
+import SpeakableText from "~/components/SpeakableText.vue";
 import { useExerciseStore } from "~/store/exercise";
 import { measureChineseMasks } from "./chineseMaskLayout";
 

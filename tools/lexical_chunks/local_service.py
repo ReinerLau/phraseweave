@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR, TRANSLATION_PROVIDERS
+from tts import AudioCache, synthesize
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -41,6 +42,7 @@ DATA_DIR = Path(os.environ.get(
     str(Path.home() / "Library" / "Application Support" / "PhraseWeave"),
 ))
 DATABASE_PATH = DATA_DIR / "phraseweave.sqlite3"
+TTS_CACHE = AudioCache(DATA_DIR / "tts", lambda word: synthesize(word, PYTHON))
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
 ACTIVE_JOB: str | None = None
@@ -356,6 +358,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "Origin is not allowed."}, 403)
             return
         path = urlparse(self.path).path
+        if path == "/api/tts/cache":
+            try:
+                TTS_CACHE.clear()
+                self._json({"ok": True})
+            except OSError:
+                self._json({"error": "无法清空朗读缓存，请重试。"}, 503)
+            return
         exercise_id = _route_id(path, "/api/local-exercises/")
         if exercise_id:
             with _database() as database:
@@ -386,6 +395,24 @@ class Handler(BaseHTTPRequestHandler):
         global ACTIVE_JOB
         if not self._desktop_authorized() or (not DESKTOP_TOKEN and not self._valid_origin()):
             self._json({"error": "Origin is not allowed."}, 403)
+            return
+        if urlparse(self.path).path == "/api/tts":
+            try:
+                payload = self._body(2048)
+                audio = TTS_CACHE.get(payload.get("text"))
+            except (ValueError, json.JSONDecodeError) as error:
+                self._json({"error": str(error)}, 400)
+                return
+            except (RuntimeError, OSError, TimeoutError) as error:
+                self._json({"error": str(error) if isinstance(error, RuntimeError) else "朗读服务暂时不可用，请重试。"}, 503)
+                return
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", str(len(audio)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(audio)
             return
         if urlparse(self.path).path == "/api/local-exercises/migrate":
             try:

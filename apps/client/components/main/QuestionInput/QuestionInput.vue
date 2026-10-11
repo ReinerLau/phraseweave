@@ -12,10 +12,30 @@
         <template #word="{ token }">
           <span
             class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
-            :class="getWordsClassNames(token.wordIndex)"
+            :class="[
+              getWordsClassNames(token.wordIndex),
+              {
+                'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
+                'speech-loading':
+                  loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                  questionInputWordsEl?.contains(loadingElement),
+              },
+            ]"
+            :data-word-index="token.wordIndex"
+            :data-speech-text="displayedWord(token.wordIndex, token.text)"
+            :title="
+              isSpeakableWord(displayedWord(token.wordIndex, token.text))
+                ? `朗读 ${displayedWord(token.wordIndex, token.text)}`
+                : undefined
+            "
+            :aria-busy="
+              (loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                questionInputWordsEl?.contains(loadingElement)) ||
+              undefined
+            "
             :style="{ width: `${inputWidth(token.wordIndex)}em` }"
           >
-            {{ isAnswerTip() ? token.text : userInputWords[token.wordIndex]?.userInput }}
+            {{ displayedWord(token.wordIndex, token.text) }}
           </span>
         </template>
       </ClozeText>
@@ -30,6 +50,7 @@
         @blur="handleInputBlur"
         @dblclick.prevent
         @mousedown="preventCursorMove"
+        @click="handleWordClick"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         autoFocus
@@ -59,6 +80,8 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
+import { isSpeakableWord } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
 import ClozeText from "./ClozeText.vue";
 import {
@@ -73,6 +96,7 @@ import { useTypingSound } from "./useTypingSound";
 defineProps<{ inline?: boolean }>();
 
 const courseStore = useExerciseStore();
+const { loadingElement } = useWordAudio();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
@@ -292,6 +316,14 @@ function handleKeydown(e: KeyboardEvent) {
       errorCallback: handleAnswerError,
     },
   });
+}
+
+function displayedWord(index: number, target: string) {
+  return isAnswerTip() ? target : userInputWords[index]?.userInput ?? "";
+}
+
+function handleWordClick(event: MouseEvent) {
+  if (questionInputWordsEl.value) playWordUnderInput(event, questionInputWordsEl.value);
 }
 
 function preventCursorMove(event: MouseEvent) {

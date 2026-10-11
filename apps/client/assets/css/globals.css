@@ -174,3 +174,22 @@ body {
   white-space: pre-wrap;
   color: inherit;
 }
+
+/* Inline pronunciation preserves the existing word geometry. */
+.speech-word {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.speech-word:hover,
+.speech-word:focus-visible {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.speech-loading {
+  cursor: progress;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: #a855f7;
+  text-underline-offset: 3px;
+}
