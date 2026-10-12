@@ -1,9 +1,15 @@
 import { ref, shallowRef } from "vue";
 
-import { deleteWordAudioCache, fetchWordAudio, isSpeakableWord } from "~/services/wordAudio";
+import {
+  deleteWordAudioCache,
+  fetchSentenceAudio,
+  fetchWordAudio,
+  isSpeakableWord,
+} from "~/services/wordAudio";
 
 const loadingElement = shallowRef<HTMLElement>();
 const audioError = ref("");
+const activeSentence = ref<string>();
 let player: HTMLAudioElement | undefined;
 let controller: AbortController | undefined;
 let objectUrl: string | undefined;
@@ -18,6 +24,7 @@ export function stopWordAudio() {
   controller?.abort();
   controller = undefined;
   loadingElement.value = undefined;
+  activeSentence.value = undefined;
   if (player) {
     player.onended = null;
     player.onerror = null;
@@ -35,9 +42,23 @@ export function disposeWordAudio() {
   player = undefined;
 }
 
-export async function playWordAudio(text: string, element: HTMLElement) {
+export function playWordAudio(text: string, element: HTMLElement) {
   if (!isSpeakableWord(text)) return;
+  return playAudio(text, element, "word");
+}
+
+export function playSentenceAudio(text: string, element: HTMLElement) {
+  if (!text.trim()) return;
+  if (activeSentence.value === text) {
+    stopWordAudio();
+    return;
+  }
+  return playAudio(text, element, "sentence");
+}
+
+async function playAudio(text: string, element: HTMLElement, kind: "word" | "sentence") {
   stopWordAudio();
+  if (kind === "sentence") activeSentence.value = text;
   const request = sequence;
   const abort = new AbortController();
   controller = abort;
@@ -46,7 +67,9 @@ export async function playWordAudio(text: string, element: HTMLElement) {
     player ??= new Audio();
     player.src = SILENCE;
     void player.play().catch(() => {});
-    const blob = await fetchWordAudio(text, abort.signal);
+    const blob = await (kind === "sentence"
+      ? fetchSentenceAudio(text, abort.signal)
+      : fetchWordAudio(text, abort.signal));
     if (request !== sequence) return;
     objectUrl = URL.createObjectURL(blob);
     player.src = objectUrl;
@@ -56,14 +79,14 @@ export async function playWordAudio(text: string, element: HTMLElement) {
     player.onerror = () => {
       if (request !== sequence) return;
       stopWordAudio();
-      audioError.value = "音频播放失败，请再次点击单词。";
+      audioError.value = "音频播放失败，请再次点击朗读。";
     };
     await player.play();
     if (request === sequence) loadingElement.value = undefined;
   } catch (error) {
     if (request !== sequence) return;
     stopWordAudio();
-    audioError.value = error instanceof Error ? error.message : "朗读失败，请再次点击单词。";
+    audioError.value = error instanceof Error ? error.message : "朗读失败，请再次点击朗读。";
   }
 }
 
@@ -97,6 +120,8 @@ export function useWordAudio() {
   return {
     loadingElement,
     audioError,
+    activeSentence,
+    playSentenceAudio,
     playWordAudio,
     stopWordAudio,
     disposeWordAudio,

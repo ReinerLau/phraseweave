@@ -42,7 +42,11 @@ DATA_DIR = Path(os.environ.get(
     str(Path.home() / "Library" / "Application Support" / "PhraseWeave"),
 ))
 DATABASE_PATH = DATA_DIR / "phraseweave.sqlite3"
-TTS_CACHE = AudioCache(DATA_DIR / "tts", lambda word: synthesize(word, PYTHON))
+TTS_CACHE = AudioCache(
+    DATA_DIR / "tts",
+    lambda word: synthesize(word, PYTHON),
+    lambda sentence: synthesize(sentence, PYTHON, kind="sentence"),
+)
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
 ACTIVE_JOB: str | None = None
@@ -398,8 +402,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if urlparse(self.path).path == "/api/tts":
             try:
-                payload = self._body(2048)
-                audio = TTS_CACHE.get(payload.get("text"))
+                payload = self._body(16 * 1024)
+                audio = TTS_CACHE.get(payload.get("text"), payload.get("kind", "word"))
             except (ValueError, json.JSONDecodeError) as error:
                 self._json({"error": str(error)}, 400)
                 return

@@ -81,6 +81,18 @@ test("preserves binary word audio and accepts cache deletion", async () => {
   assert.equal(rejected.status, 403);
 });
 
+test("proxies sentence audio with its kind and full source text", async () => {
+  const payload = JSON.stringify({ text: "I use a computer every day.", kind: "sentence" });
+  const response = await fetch(new URL("/api/tts", url), {
+    method: "POST",
+    headers: { Origin: new URL(url).origin, "Content-Type": "application/json" },
+    body: payload,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "audio/mpeg");
+  assert.deepEqual(requests.at(-1), ["/api/tts", "POST", payload]);
+});
+
 test("rejects cross-origin mutation and DNS rebinding hosts", async () => {
   const api = new URL("/api/generate", url);
   const crossOrigin = await fetch(api, {

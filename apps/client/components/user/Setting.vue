@@ -54,7 +54,7 @@
             </td>
           </tr>
           <tr class="hover">
-            <td class="label-text">单词朗读缓存（保留至手动清理）</td>
+            <td class="label-text">朗读缓存（单词与整句，保留至手动清理）</td>
             <td class="text-center">
               <button
                 class="btn btn-outline btn-secondary btn-sm"

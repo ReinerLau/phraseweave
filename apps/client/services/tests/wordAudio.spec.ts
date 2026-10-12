@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { deleteWordAudioCache, fetchWordAudio } from "~/services/wordAudio";
+import { deleteWordAudioCache, fetchSentenceAudio, fetchWordAudio } from "~/services/wordAudio";
 
 describe("word audio service", () => {
   const fetchMock = vi.fn();
@@ -34,6 +34,21 @@ describe("word audio service", () => {
       expect.objectContaining({
         method: "POST",
         body: '{"text":"NASA"}',
+        signal,
+      }),
+    );
+  });
+
+  it("requests a whole sentence without dropping punctuation or the target word", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("audio", { headers: { "Content-Type": "audio/mpeg" } }),
+    );
+    const signal = new AbortController().signal;
+    await fetchSentenceAudio("I use a computer every day.", signal);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8765/api/tts",
+      expect.objectContaining({
+        body: JSON.stringify({ text: "I use a computer every day.", kind: "sentence" }),
         signal,
       }),
     );
