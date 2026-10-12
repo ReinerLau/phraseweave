@@ -1,4 +1,4 @@
-"""Persistent word audio, independent of the translation model runtime."""
+"""Persistent word and sentence audio, independent of the translation model runtime."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ VOICE = "en-US-AriaNeural"
 RATE = "+0%"
 TIMEOUT = 20
 MAX_WORD_LENGTH = 100
+MAX_SENTENCE_LENGTH = 2000
+SENTENCE_TIMEOUT = 60
 
 
 def normalize_word(value: object) -> str:
@@ -29,7 +31,16 @@ def normalize_word(value: object) -> str:
     return word
 
 
-def synthesize(word: str, python: Path) -> bytes:
+def normalize_sentence(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("请选择一个英文句子。")
+    text = " ".join(unicodedata.normalize("NFC", value).split())
+    if not text or len(text) > MAX_SENTENCE_LENGTH or not re.search(r"[A-Za-z]", text):
+        raise ValueError("请选择一个不超过 2000 字符的英文句子。")
+    return text
+
+
+def synthesize(word: str, python: Path, *, kind: str = "word") -> bytes:
     command = (
         [sys.executable, "--tts"]
         if getattr(sys, "frozen", False)
@@ -40,7 +51,7 @@ def synthesize(word: str, python: Path) -> bytes:
             command,
             input=json.dumps({"text": word, "voice": VOICE, "rate": RATE}).encode(),
             capture_output=True,
-            timeout=TIMEOUT,
+            timeout=SENTENCE_TIMEOUT if kind == "sentence" else TIMEOUT,
             check=False,
         )
     except subprocess.TimeoutExpired as error:
@@ -53,18 +64,25 @@ def synthesize(word: str, python: Path) -> bytes:
 
 
 class AudioCache:
-    def __init__(self, directory: Path, generate: Callable[[str], bytes]):
+    def __init__(self, directory: Path, generate: Callable[[str], bytes],
+                 generate_sentence: Callable[[str], bytes] | None = None):
         self.directory = directory
         self.generate = generate
+        self.generate_sentence = generate_sentence if generate_sentence is not None else generate
         self.lock = threading.Lock()
         self.epoch = 0
         self.pending: dict[tuple[int, str], Future[bytes]] = {}
         # Bound simultaneous upstream requests; cached audio never takes a slot.
         self.slots = threading.BoundedSemaphore(2)
 
-    def get(self, text: object) -> bytes:
-        word = normalize_word(text)
-        key = hashlib.sha256(json.dumps([1, word, VOICE, RATE]).encode()).hexdigest()
+    def get(self, text: object, kind: str = "word") -> bytes:
+        if kind not in ("word", "sentence"):
+            raise ValueError("请选择单词或整句朗读。")
+        word = normalize_sentence(text) if kind == "sentence" else normalize_word(text)
+        timeout = SENTENCE_TIMEOUT if kind == "sentence" else TIMEOUT
+        # Preserve persisted word keys from the first release.
+        identity = [1, word, VOICE, RATE] if kind == "word" else [1, kind, word, VOICE, RATE]
+        key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
         with self.lock:
             path = self.directory / f"{key}.mp3"
             if path.is_file():
@@ -78,12 +96,12 @@ class AudioCache:
                 future = Future()
                 self.pending[flight] = future
         if not owner:
-            return future.result(timeout=TIMEOUT + 1)
+            return future.result(timeout=timeout + 1)
         try:
             if not self.slots.acquire(blocking=False):
                 raise RuntimeError("朗读服务繁忙，请稍后重试。")
             try:
-                audio = self.generate(word)
+                audio = self.generate_sentence(word) if kind == "sentence" else self.generate(word)
                 if not audio:
                     raise RuntimeError("没有收到朗读音频，请重试。")
             finally:

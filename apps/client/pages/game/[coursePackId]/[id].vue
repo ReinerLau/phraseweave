@@ -32,6 +32,7 @@ import { useRoute } from "vue-router";
 
 import { useGameMode } from "~/composables/main/game";
 import { useWordAudio } from "~/composables/useWordAudio";
+import { preloadPronunciations } from "~/services/pronunciation";
 import { useExerciseStore } from "~/store/exercise";
 
 const isLoading = ref(true);
@@ -66,6 +67,7 @@ onMounted(async () => {
   const { coursePackId, id } = route.params;
   await coursesStore.setup(coursePackId as string, id as string);
 
+  void preloadPronunciations().catch(() => {});
   isLoading.value = false;
 });
 

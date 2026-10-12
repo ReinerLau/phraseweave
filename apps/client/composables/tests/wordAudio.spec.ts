@@ -8,16 +8,18 @@ import { useAnswerTip } from "~/composables/main/answerTip";
 import {
   clearWordAudioCache,
   disposeWordAudio,
+  playSentenceAudio,
   playWordAudio,
   stopWordAudio,
   useWordAudio,
 } from "~/composables/useWordAudio";
-import { deleteWordAudioCache, fetchWordAudio } from "~/services/wordAudio";
+import { deleteWordAudioCache, fetchSentenceAudio, fetchWordAudio } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
 
 vi.mock("~/services/wordAudio", async (original) => ({
   ...(await original<typeof import("~/services/wordAudio")>()),
   fetchWordAudio: vi.fn(),
+  fetchSentenceAudio: vi.fn(),
   deleteWordAudioCache: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -61,6 +63,7 @@ beforeEach(() => {
   );
   vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:word"), revokeObjectURL: vi.fn() });
   vi.mocked(fetchWordAudio).mockResolvedValue(new Blob(["audio"], { type: "audio/mpeg" }));
+  vi.mocked(fetchSentenceAudio).mockResolvedValue(new Blob(["sentence"], { type: "audio/mpeg" }));
   useAnswerTip().hiddenAnswerTip();
 });
 
@@ -72,6 +75,39 @@ afterEach(() => {
 });
 
 describe("word audio playback", () => {
+  it("shares one player between sentences and words, discarding interrupted responses", async () => {
+    const pending = deferred<Blob>();
+    vi.mocked(fetchSentenceAudio).mockReturnValueOnce(pending.promise);
+    const element = document.createElement("button");
+    const old = playSentenceAudio("I use a computer.", element);
+    const signal = vi.mocked(fetchSentenceAudio).mock.calls[0][1];
+    expect(useWordAudio().activeSentence.value).toBe("I use a computer.");
+    await playWordAudio("hello", document.createElement("span"));
+    expect(signal.aborted).toBe(true);
+    expect(useWordAudio().activeSentence.value).toBeUndefined();
+    pending.resolve(new Blob(["old"]));
+    await old;
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    await playSentenceAudio("I use a computer.", element);
+    expect(useWordAudio().activeSentence.value).toBe("I use a computer.");
+    playSentenceAudio("I use a computer.", element);
+    expect(useWordAudio().activeSentence.value).toBeUndefined();
+    expect(fetchSentenceAudio).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops a sentence even while its audio request is pending", async () => {
+    const pending = deferred<Blob>();
+    vi.mocked(fetchSentenceAudio).mockReturnValueOnce(pending.promise);
+    const button = document.createElement("button");
+    const play = playSentenceAudio("Hello world.", button);
+    const signal = vi.mocked(fetchSentenceAudio).mock.calls[0][1];
+    playSentenceAudio("Hello world.", button);
+    pending.resolve(new Blob(["cancelled"]));
+    await play;
+    expect(signal.aborted).toBe(true);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it("only plays the latest click and discards late responses", async () => {
     const first = deferred<Blob>();
     const second = deferred<Blob>();

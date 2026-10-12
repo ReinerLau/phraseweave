@@ -19,7 +19,10 @@
         <SpeakableText
           class="cloze-context"
           :text="courseStore.currentStatement?.contextBefore"
-        /><MainQuestionInput inline /><SpeakableText
+        /><MainQuestionInput
+          inline
+          @hint-change="scheduleQuestionFontSize"
+        /><SpeakableText
           class="cloze-context"
           :text="courseStore.currentStatement?.contextAfter"
         />
