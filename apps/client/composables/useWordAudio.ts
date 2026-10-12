@@ -10,6 +10,7 @@ import {
 const loadingElement = shallowRef<HTMLElement>();
 const audioError = ref("");
 const activeSentence = ref<string>();
+const activeElement = shallowRef<HTMLElement>();
 let player: HTMLAudioElement | undefined;
 let controller: AbortController | undefined;
 let objectUrl: string | undefined;
@@ -25,6 +26,7 @@ export function stopWordAudio() {
   controller = undefined;
   loadingElement.value = undefined;
   activeSentence.value = undefined;
+  activeElement.value = undefined;
   if (player) {
     player.onended = null;
     player.onerror = null;
@@ -49,7 +51,7 @@ export function playWordAudio(text: string, element: HTMLElement) {
 
 export function playSentenceAudio(text: string, element: HTMLElement) {
   if (!text.trim()) return;
-  if (activeSentence.value === text) {
+  if (activeSentence.value === text && activeElement.value === element) {
     stopWordAudio();
     return;
   }
@@ -59,6 +61,7 @@ export function playSentenceAudio(text: string, element: HTMLElement) {
 async function playAudio(text: string, element: HTMLElement, kind: "word" | "sentence") {
   stopWordAudio();
   if (kind === "sentence") activeSentence.value = text;
+  activeElement.value = element;
   const request = sequence;
   const abort = new AbortController();
   controller = abort;
@@ -121,6 +124,7 @@ export function useWordAudio() {
     loadingElement,
     audioError,
     activeSentence,
+    activeElement,
     playSentenceAudio,
     playWordAudio,
     stopWordAudio,

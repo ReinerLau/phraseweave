@@ -94,6 +94,22 @@ describe("answer availability", () => {
     return { store, wrapper };
   }
 
+  it("places the original sentence audio after the cloze text instead of in the toolbar", async () => {
+    const { wrapper } = await setup();
+    const sentence = wrapper.get('[data-testid="cloze-sentence"]');
+    const button = sentence.get('[data-testid="sentence-audio-button"]');
+    expect(button.element).toBe(sentence.element.lastElementChild);
+    expect(sentence.findComponent({ name: "SentenceAudioButton" }).props("text")).toBe(
+      "Cats sleep quietly.",
+    );
+    expect(
+      wrapper
+        .get('[data-testid="practice-toolbar"]')
+        .find('[data-testid="sentence-audio-button"]')
+        .exists(),
+    ).toBe(false);
+  });
+
   it("updates a query read before course setup and after reloading the same current unit", async () => {
     const store = useExerciseStore();
     expect(store.canDecomposeCurrentUnit).toBe(false);

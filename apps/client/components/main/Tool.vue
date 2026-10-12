@@ -21,7 +21,6 @@
     <div
       class="flex min-h-11 w-full min-w-0 items-center justify-end gap-2 sm:ml-2 sm:w-auto sm:max-w-[40%]"
     >
-      <SentenceAudioButton class="shrink-0" />
       <AnswerHintButton
         v-if="showAnswerHint"
         class="shrink-0"
@@ -60,7 +59,6 @@ import AnswerHintButton from "./AnswerHintButton.vue";
 import { useContent } from "./Contents/useContents";
 import LearningModeSwitch from "./LearningModeSwitch.vue";
 import PracticeViewSwitch from "./PracticeViewSwitch.vue";
-import SentenceAudioButton from "./SentenceAudioButton.vue";
 
 const courseStore = useExerciseStore();
 const { isQuestion } = useGameMode();

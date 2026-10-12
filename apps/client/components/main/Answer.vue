@@ -41,7 +41,7 @@
       <SpeakableText
         class="cloze-context"
         :text="courseStore.currentStatement?.contextAfter"
-      />
+      /><SentenceAudioButton :text="courseStore.originalSentence" />
     </div>
     <div
       v-if="courseStore.currentStatement?.soundmark"
@@ -57,6 +57,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import ClozeText from "~/components/main/QuestionInput/ClozeText.vue";
 import { useWordWidths } from "~/components/main/QuestionInput/questionInputHelper";
+import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
 import SpeakableText from "~/components/SpeakableText.vue";
 import SpeakableWord from "~/components/SpeakableWord.vue";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
