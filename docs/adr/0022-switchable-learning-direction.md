@@ -1,6 +1,6 @@
 # 在练习中切换学习方向
 
-> 两种学习方向的回退分支现统一按本次作答选择，逐层组合重试继续保留，见 [ADR 0025](0025-select-recovery-sources-by-answer.md)。
+> 两种学习方向的回退分支统一按本次作答选择，见 [ADR 0025](0025-select-recovery-sources-by-answer.md)；返回路径现只练错误单元、受影响的直接组成单元与原题，见 [ADR 0026](0026-shorten-word-recovery-path.md)。
 
 同一份练习保留完整单元库与组成关系，在练习页面选择“渐进组合”或“整句优先”。渐进组合保留生成器的复习题序；整句优先每句先练整句，答错时复用回退复习，组成单元再次出错才继续拆解，最终逐层重试。临时复习不推进基础题进度。这扩展了 [ADR 0013](0013-error-driven-review-recovery.md) 中固定基础题序的后续约定，填空展示继续遵循 [ADR 0017](0017-sentence-context-cloze.md)。
 

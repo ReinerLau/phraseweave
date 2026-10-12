@@ -72,7 +72,7 @@ describe("deep error recovery", () => {
   );
 
   it.each(scenarios)(
-    "descends eleven levels in one failure and returns through every parent ($mode, $view)",
+    "descends eleven levels but only retries the direct source and target ($mode, $view)",
     async ({ mode, view }) => {
       const { store, anchor } = await setup(mode, view);
       store.failCurrentStatement(pneumonicSentence.replace("pneumonic", "x"));
@@ -81,7 +81,7 @@ describe("deep error recovery", () => {
       store.failCurrentStatement("x");
       expect(store.currentStatement?.unitId).toBe("0:3");
       expect(pneumonicReturnPath).toHaveLength(11);
-      for (const [id] of pneumonicReturnPath) {
+      for (const id of ["0:28", "0:29"]) {
         correct(store);
         expect(store.currentStatement?.unitId).toBe(id);
         expect(store.statementIndex).toBe(anchor);
@@ -98,37 +98,43 @@ describe("deep error recovery", () => {
     const { store } = await setup();
     store.failCurrentStatement(pneumonicSentence.replace("pneumonic", "x"));
     correct(store);
-    expect(store.currentStatement?.unitId).toBe("0:7");
-    store.failCurrentStatement("pneumonic x bacteria");
+    expect(store.currentStatement?.unitId).toBe("0:28");
+    store.failCurrentStatement(store.currentStatement!.english.replace("plague", "x"));
     expect(store.currentStatement?.unitId).toBe("0:4");
     correct(store);
-    expect(store.currentStatement?.unitId).toBe("0:6");
-    store.failCurrentStatement("plague x");
+    expect(store.currentStatement?.unitId).toBe("0:25");
+    store.failCurrentStatement(store.currentStatement!.english.replace("bacteria", "x"));
     expect(store.currentStatement?.unitId).toBe("0:5");
-    for (const id of ["0:6", "0:7", "0:9"]) {
+    for (const id of ["0:24", "0:25", "0:28", "0:29"]) {
       correct(store);
       expect(store.currentStatement?.unitId).toBe(id);
     }
+    correct(store);
+    expect(store.currentStatement?.unitId).toBe("next");
+    expect(store.isRecovering).toBe(false);
   });
 
   it("replaces the root review sequence when its retry fails at another word", async () => {
     const { store } = await setup();
     store.failCurrentStatement(pneumonicSentence.replace("pneumonic", "x"));
-    for (const _ of pneumonicReturnPath) correct(store);
+    correct(store);
+    correct(store);
     store.failCurrentStatement(pneumonicSentence.replace("plague", "x"));
     expect(store.currentStatement?.unitId).toBe("0:4");
     correct(store);
-    expect(store.currentStatement?.unitId).toBe("0:6");
+    expect(store.currentStatement?.unitId).toBe("0:28");
     correct(store);
-    expect(store.currentStatement?.unitId).toBe("0:7");
+    expect(store.currentStatement?.unitId).toBe("0:29");
+    correct(store);
+    expect(store.currentStatement?.unitId).toBe("next");
   });
 
-  it("reviews every unfilled tail word before its combinations", async () => {
+  it("reviews every unfilled tail word before its direct source and target", async () => {
     const { store } = await setup();
     store.failCurrentStatement(
       pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic")).trimEnd(),
     );
-    for (const id of ["0:3", "0:4", "0:5", "0:6", ...pneumonicReturnPath.map(([id]) => id)]) {
+    for (const id of ["0:3", "0:4", "0:5", "0:28", "0:29"]) {
       expect(store.currentStatement?.unitId).toBe(id);
       correct(store);
     }

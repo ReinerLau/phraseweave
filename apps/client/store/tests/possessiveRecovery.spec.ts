@@ -25,7 +25,7 @@ describe("possessive error recovery", () => {
   );
 
   it.each(scenarios)(
-    "starts at woman and returns through its combinations ($mode, $view)",
+    "starts at woman and returns to the direct source and target ($mode, $view)",
     async ({ mode, view }) => {
       const statements = russiaStatements();
       const anchor = statements.length - 1;
@@ -51,7 +51,7 @@ describe("possessive error recovery", () => {
       const store = useExerciseStore();
       await store.setup("pack", "course");
       store.failCurrentStatement(russiaSentence.replace("woman", "womon"));
-      for (const id of ["2:2", "2:3", "2:4", "2:5", "2:7", "2:26", "2:28", "2:32", "2:33"]) {
+      for (const id of ["2:2", "2:32", "2:33"]) {
         expect(store.currentStatement?.unitId).toBe(id);
         expect(store.statementIndex).toBe(anchor);
         if (id === "2:2") {
