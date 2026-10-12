@@ -72,12 +72,23 @@ export async function clearWordAudioCache() {
   await deleteWordAudioCache();
 }
 
+/** Resolve a visible, playable word beneath the transparent typing input. */
+export function findWordUnderInput(
+  point: Pick<MouseEvent, "clientX" | "clientY">,
+  root: HTMLElement,
+) {
+  const element = document
+    .elementsFromPoint(point.clientX, point.clientY)
+    .find((candidate) => root.contains(candidate) && candidate.hasAttribute("data-speech-text"));
+  return element instanceof HTMLElement && isSpeakableWord(element.dataset.speechText ?? "")
+    ? element
+    : undefined;
+}
+
 /** Hit-test beneath the transparent typing input without moving its caret. */
 export function playWordUnderInput(event: MouseEvent, root: HTMLElement) {
-  const element = document
-    .elementsFromPoint(event.clientX, event.clientY)
-    .find((candidate) => root.contains(candidate) && candidate.hasAttribute("data-speech-text"));
-  if (element instanceof HTMLElement) {
+  const element = findWordUnderInput(event, root);
+  if (element) {
     void playWordAudio(element.dataset.speechText ?? "", element);
   }
 }

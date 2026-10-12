@@ -7,6 +7,8 @@
       ref="questionInputWordsEl"
       class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       :class="inline ? 'w-fit' : 'w-full'"
+      @pointermove="handleWordHover"
+      @pointerleave="clearWordHover"
     >
       <ClozeText :tokens="courseStore.clozeTokens">
         <template #word="{ token }">
@@ -16,6 +18,7 @@
               getWordsClassNames(token.wordIndex),
               {
                 'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
+                'speech-hover': hoveredWordIndex === token.wordIndex,
                 'speech-loading':
                   loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
                   questionInputWordsEl?.contains(loadingElement),
@@ -42,6 +45,7 @@
       <input
         ref="inputEl"
         class="absolute h-full w-full opacity-0"
+        :class="{ 'cursor-pointer': hoveredWordIndex !== undefined }"
         type="text"
         aria-label="填写当前英文单元"
         v-model="inputValue"
@@ -80,7 +84,7 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
-import { playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
+import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
 import { isSpeakableWord } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
 import ClozeText from "./ClozeText.vue";
@@ -107,6 +111,8 @@ const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
+const hoveredWordIndex = ref<number>();
+let hoverPoint: Pick<MouseEvent, "clientX" | "clientY"> | undefined;
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
 const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInputWordsEl);
 
@@ -123,6 +129,9 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     getInputWordCapacity,
   });
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+
+// Re-check after visible text changes, even when the pointer stays still.
+watch(() => [inputValue.value, isAnswerTip()], refreshWordHover, { flush: "post" });
 
 function inputChangedCallback(event: KeyboardEvent) {
   if (isKeyboardSoundEnabled() && checkPlayTypingSound(event)) {
@@ -170,6 +179,7 @@ watch(
   () => [courseStore.currentStatement?.id, courseStore.learningMode, courseStore.practiceView],
   () => {
     cancelErrorReset();
+    clearWordHover();
     clearInput();
     focusInput();
   },
@@ -324,6 +334,28 @@ function displayedWord(index: number, target: string) {
 
 function handleWordClick(event: MouseEvent) {
   if (questionInputWordsEl.value) playWordUnderInput(event, questionInputWordsEl.value);
+}
+
+function refreshWordHover() {
+  const word =
+    hoverPoint && questionInputWordsEl.value
+      ? findWordUnderInput(hoverPoint, questionInputWordsEl.value)
+      : undefined;
+  hoveredWordIndex.value = word ? Number(word.dataset.wordIndex) : undefined;
+}
+
+function handleWordHover(event: PointerEvent) {
+  if (event.pointerType === "touch") {
+    clearWordHover();
+    return;
+  }
+  hoverPoint = { clientX: event.clientX, clientY: event.clientY };
+  refreshWordHover();
+}
+
+function clearWordHover() {
+  hoverPoint = undefined;
+  hoveredWordIndex.value = undefined;
 }
 
 function preventCursorMove(event: MouseEvent) {

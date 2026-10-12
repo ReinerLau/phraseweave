@@ -180,16 +180,13 @@ body {
   cursor: pointer;
   touch-action: manipulation;
 }
-.speech-word:hover,
-.speech-word:focus-visible {
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
+/* Override normal and dark text utilities without changing the resting color. */
+:root .speech-word:hover,
+:root .speech-word:focus-visible,
+:root .speech-word.speech-hover,
+:root .speech-word.speech-loading {
+  @apply text-fuchsia-500;
 }
 .speech-loading {
   cursor: progress;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-decoration-color: #a855f7;
-  text-underline-offset: 3px;
 }
