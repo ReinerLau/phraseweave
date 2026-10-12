@@ -53,13 +53,27 @@ describe("ReviewRecovery", () => {
     expect(recovery.correct()).toBeUndefined();
   });
 
-  it("replaces selected sources when a retry fails elsewhere", () => {
+  it("replaces planned steps when a retry fails elsewhere", () => {
     const recovery = new ReviewRecovery(sources);
-    expect(recovery.fail("whole", ["new"])).toBe("new");
+    expect(recovery.fail("whole", ["new", "whole"])).toBe("new");
     expect(recovery.correct()).toBe("whole");
-    expect(recovery.fail("whole", ["old"])).toBe("old");
-    expect(recovery.fail("old", ["leaf-b"])).toBe("leaf-b");
+    expect(recovery.fail("whole", ["old", "whole"])).toBe("old");
+    expect(recovery.fail("old", ["leaf-b", "old"])).toBe("leaf-b");
     expect(recovery.correct()).toBe("old");
+    expect(recovery.correct()).toBe("whole");
+    expect(recovery.correct()).toBeUndefined();
+  });
+
+  it("resumes an outer planned step exactly once after nested retries", () => {
+    const recovery = new ReviewRecovery(sources);
+    expect(recovery.fail("whole", ["leaf-a", "old", "new", "whole"])).toBe("leaf-a");
+    expect(recovery.correct()).toBe("old");
+    expect(recovery.fail("old", ["leaf-b", "old"])).toBe("leaf-b");
+    expect(recovery.fail("leaf-b")).toBe("leaf-b");
+    expect(recovery.correct()).toBe("old");
+    expect(recovery.fail("old", ["leaf-a", "old"])).toBe("leaf-a");
+    expect(recovery.correct()).toBe("old");
+    expect(recovery.correct()).toBe("new");
     expect(recovery.correct()).toBe("whole");
     expect(recovery.correct()).toBeUndefined();
   });

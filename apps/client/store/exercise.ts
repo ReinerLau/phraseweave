@@ -17,7 +17,7 @@ import {
   groupExerciseSentences,
   sentenceFirstIndices,
 } from "~/utils/learningDirection";
-import { selectRecoverySources } from "~/utils/recoverySources";
+import { buildRecoverySteps } from "~/utils/recoverySources";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
 
@@ -74,6 +74,7 @@ export const useExerciseStore = defineStore("exercise", () => {
       recoveryUnitId.value === currentCourse.value?.statements[statementIndex.value]?.unitId,
   );
   const unitStatements = new Map<string, Statement>();
+  const sourcesByUnitId = new Map<string, RecoverySources>();
   const recovery = shallowRef<ReviewRecovery>();
   const canDecomposeCurrentUnit = computed(
     () => recovery.value?.canDecompose(currentStatement.value?.unitId) ?? false,
@@ -241,12 +242,10 @@ export const useExerciseStore = defineStore("exercise", () => {
   function failCurrentStatement(input?: string) {
     currentAnswerAccepted.value = false;
     const statement = currentStatement.value;
-    const sources = statement?.sourceUnitIds;
-    const selected =
-      statement && sources?.length
-        ? selectRecoverySources(statement, input, sources, unitStatements)
-        : undefined;
-    recoveryUnitId.value = recovery.value?.fail(statement?.unitId, selected);
+    const steps = statement
+      ? buildRecoverySteps(statement, input, unitStatements, sourcesByUnitId)
+      : undefined;
+    recoveryUnitId.value = recovery.value?.fail(statement?.unitId, steps);
     refreshCurrentStatement();
   }
 
@@ -361,8 +360,8 @@ export const useExerciseStore = defineStore("exercise", () => {
       }
     }
     unitStatements.clear();
+    sourcesByUnitId.clear();
     const firstUnitOrder = new Map<string, number>();
-    const sourcesByUnitId = new Map<string, RecoverySources>();
     for (const [index, statement] of course.statements.entries()) {
       if (!statement.unitId || unitStatements.has(statement.unitId)) continue;
       unitStatements.set(statement.unitId, statement);

@@ -2,13 +2,18 @@ import { createTestingPinia } from "@pinia/testing";
 import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Course, PracticeView, Statement } from "~/store/exercise";
+import type { Course, PracticeView } from "~/store/exercise";
 import type { LearningMode } from "~/utils/learningDirection";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
 import { getLocalExercise, saveLocalExerciseProgress } from "~/services/localExerciseDb";
 import { useExerciseStore } from "~/store/exercise";
+import {
+  deepPneumonicStatements,
+  pneumonicReturnPath,
+  pneumonicSentence,
+} from "~/store/tests/fixtures/pneumonic";
 import QuestionInput from "../QuestionInput.vue";
 
 vi.mock("~/services/localExerciseDb", () => ({
@@ -21,29 +26,6 @@ vi.mock("~/services/localExerciseDb", () => ({
 enableAutoUnmount(afterEach);
 
 describe("submitted-answer recovery", () => {
-  const sentence = "Local reports say she may have broken a test tube of pneumonic plague bacteria";
-  const tailStart = sentence.indexOf("pneumonic");
-  const prefix = sentence.slice(0, tailStart - 1);
-  const tail = sentence.slice(tailStart);
-
-  function row(
-    id: string,
-    start: number,
-    end: number,
-    sourceUnitIds: Statement["sourceUnitIds"],
-  ): Statement {
-    return {
-      id,
-      unitId: id,
-      order: 1,
-      english: sentence.slice(start, end),
-      contextBefore: sentence.slice(0, start),
-      contextAfter: sentence.slice(end),
-      sentenceChinese: "当地报道说她可能打破了一支装有肺鼠疫细菌的试管。",
-      sourceUnitIds,
-    };
-  }
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -64,28 +46,26 @@ describe("submitted-answer recovery", () => {
   );
 
   it.each(scenarios)(
-    "reviews only the failed tail, then retries each parent ($mode, $view, auto-next: $autoNext)",
+    "descends directly and resumes every parent after a nested failure ($mode, $view, auto-next: $autoNext)",
     async ({ mode, view, autoNext }) => {
       localStorage.setItem("autoNextQuestion", String(autoNext));
+      const statements = deepPneumonicStatements();
+      const anchor = statements.length - 1;
       const course: Course = {
         id: "course",
         coursePackId: "pack",
         title: "练习",
         order: 1,
         completionCount: 0,
-        statementIndex: 4,
+        statementIndex: anchor,
         learningMode: mode,
         practiceView: view,
         statements: [
-          row("prefix", 0, tailStart - 1, []),
-          row("pneumonic", tailStart, tailStart + "pneumonic".length, []),
-          row("bacteria", sentence.indexOf("plague"), sentence.length, []),
-          row("tail", tailStart, sentence.length, ["pneumonic", "bacteria"]),
-          row("whole", 0, sentence.length, ["prefix", "tail"]),
+          ...statements,
           {
             id: "next",
             unitId: "next",
-            order: 6,
+            order: statements.length + 1,
             english: "Birds sing",
             contextBefore: "",
             contextAfter: ".",
@@ -113,22 +93,15 @@ describe("submitted-answer recovery", () => {
         await input.trigger("keydown", { code: "Enter", key: "Enter" });
       }
 
-      await submit(prefix);
+      await submit(pneumonicSentence.replace("pneumonic", "x"));
       await vi.advanceTimersByTimeAsync(300);
-      expect(store.currentStatement?.unitId).toBe("tail");
-      expect(store.statementIndex).toBe(4);
+      expect(store.currentStatement?.unitId).toBe("0:3");
+      expect(store.statementIndex).toBe(anchor);
       expect(store.currentCourse?.passedUnitIds).toBeUndefined();
-      await submit("x plague bacteria");
-      await vi.advanceTimersByTimeAsync(300);
-      expect(store.currentStatement?.unitId).toBe("pneumonic");
       expect(store.canDecomposeCurrentUnit).toBe(false);
       expect(saveLocalExerciseProgress).not.toHaveBeenCalled();
 
-      for (const [answer, next] of [
-        ["pneumonic", "tail"],
-        [tail, "whole"],
-        [sentence, "next"],
-      ]) {
+      async function submitCorrect(answer: string, next: string) {
         await submit(answer);
         if (!autoNext) {
           expect(useGameMode().isAnswer()).toBe(true);
@@ -137,14 +110,24 @@ describe("submitted-answer recovery", () => {
         await wrapper.vm.$nextTick();
         expect(store.currentStatement?.unitId).toBe(next);
         expect((input.element as HTMLInputElement).value).toBe("");
-        if (next !== "next") expect(store.statementIndex).toBe(4);
+        if (next !== "next") expect(store.statementIndex).toBe(anchor);
+      }
+      await submitCorrect("pneumonic", "0:7");
+      await submit("pneumonic x bacteria");
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.currentStatement?.unitId).toBe("0:4");
+      await submitCorrect("plague", "0:6");
+      await submitCorrect("plague bacteria", "0:7");
+      for (const [index, [, english]] of pneumonicReturnPath.entries()) {
+        await submitCorrect(english, pneumonicReturnPath[index + 1]?.[0] ?? "next");
       }
       expect(store.isRecovering).toBe(false);
-      expect(store.statementIndex).toBe(5);
+      expect(store.statementIndex).toBe(anchor + 1);
       expect(store.currentCourse?.passedUnitIds).toEqual([
-        "unit:pneumonic",
-        "unit:tail",
-        "unit:whole",
+        "unit:0:3",
+        "unit:0:4",
+        "unit:0:6",
+        ...pneumonicReturnPath.map(([id]) => `unit:${id}`),
       ]);
     },
   );

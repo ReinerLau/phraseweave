@@ -218,8 +218,6 @@ describe("learning direction", () => {
       expect(store.currentStatement?.unitId).toBe("0:4");
 
       store.failCurrentStatement("A X C");
-      expect(store.currentStatement?.unitId).toBe("0:2");
-      store.failCurrentStatement("A X");
       expect(store.currentStatement?.unitId).toBe("0:1");
       store.failCurrentStatement(""); // A leaf stays in place.
       expect(store.currentStatement?.unitId).toBe("0:1");

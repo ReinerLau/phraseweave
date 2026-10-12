@@ -2,9 +2,8 @@ export type RecoverySources = [string] | [string, string];
 
 interface RecoveryFrame {
   targetUnitId: string;
-  sourceUnitIds: RecoverySources;
-  sourceIndex: number;
-  retrying: boolean;
+  unitIds: readonly string[];
+  index: number;
 }
 
 /** Keeps error-driven review separate from the course's saved question index. */
@@ -18,44 +17,38 @@ export class ReviewRecovery {
     return !!unitId && this.sourcesByUnitId.has(unitId);
   }
 
-  fail(unitId: string | undefined, selectedSourceUnitIds?: RecoverySources): string | undefined {
+  /** Planned steps end with the failed target; absent evidence keeps direct-source recovery. */
+  fail(unitId: string | undefined, reviewSteps?: readonly string[]): string | undefined {
     if (!unitId) return this.currentUnitId;
     const originalSources = this.sourcesByUnitId.get(unitId);
     if (!originalSources) return this.currentUnitId;
-    const sources = selectedSourceUnitIds ?? originalSources;
+    const unitIds = reviewSteps?.length ? reviewSteps : [...originalSources, unitId];
 
     const frame = this.frames.at(-1);
-    if (frame?.targetUnitId === unitId && frame.retrying) {
-      frame.sourceUnitIds = sources;
-      frame.sourceIndex = 0;
-      frame.retrying = false;
+    if (frame?.targetUnitId === unitId && frame.index === frame.unitIds.length - 1) {
+      frame.unitIds = unitIds;
+      frame.index = 0;
     } else {
       this.frames.push({
         targetUnitId: unitId,
-        sourceUnitIds: sources,
-        sourceIndex: 0,
-        retrying: false,
+        unitIds,
+        index: 0,
       });
     }
-    this.currentUnitId = sources[0];
+    this.currentUnitId = unitIds[0];
     return this.currentUnitId;
   }
 
   correct(): string | undefined {
     while (this.frames.length) {
       const frame = this.frames.at(-1)!;
-      if (frame.retrying) {
-        this.frames.pop();
-        continue;
-      }
-      if (frame.sourceIndex + 1 < frame.sourceUnitIds.length) {
-        frame.sourceIndex += 1;
-        this.currentUnitId = frame.sourceUnitIds[frame.sourceIndex];
+      if (frame.index + 1 < frame.unitIds.length) {
+        frame.index += 1;
+        this.currentUnitId = frame.unitIds[frame.index];
         return this.currentUnitId;
       }
-      frame.retrying = true;
-      this.currentUnitId = frame.targetUnitId;
-      return this.currentUnitId;
+      // Completing a nested target also completes the paused outer step.
+      this.frames.pop();
     }
     this.currentUnitId = undefined;
     return undefined;

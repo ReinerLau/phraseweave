@@ -18,14 +18,16 @@ function sentenceText(statement: Statement) {
 }
 
 /** Undefined preserves the original review path when positional evidence is incomplete. */
-export function selectRecoverySources(
+export function buildRecoverySteps(
   statement: Statement,
   input: string | undefined,
-  sourceUnitIds: RecoverySources,
   units: ReadonlyMap<string, Statement>,
-): RecoverySources | undefined {
+  sourcesByUnitId: ReadonlyMap<string, RecoverySources>,
+): string[] | undefined {
   const sentence = sentenceText(statement);
-  if (input === undefined || sentence === undefined) return undefined;
+  const targetId = statement.unitId;
+  if (input === undefined || sentence === undefined || !targetId || !sourcesByUnitId.has(targetId))
+    return undefined;
 
   const words = wordSpans(statement);
   const answer = normalizeClozeInput(
@@ -39,32 +41,56 @@ export function selectRecoverySources(
 
   const start = statement.contextBefore!.length;
   const end = start + statement.english.length;
-  const sourceWords: { id: string; spans: ReturnType<typeof wordSpans> }[] = [];
-  for (const id of sourceUnitIds) {
+  const spanKey = (word: (typeof words)[number]) => `${word.start}:${word.end}`;
+  const targetSpans = new Set(words.map(spanKey));
+  const errorSpans = new Set(errors.map(spanKey));
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const steps: string[] = [];
+
+  function positionedUnit(id: string, parentStart: number, parentEnd: number) {
     const source = units.get(id);
     if (!source || sentenceText(source) !== sentence) return undefined;
     const sourceStart = source.contextBefore!.length;
     const sourceEnd = sourceStart + source.english.length;
-    if (sourceStart < start || sourceEnd > end) return undefined;
+    if (sourceStart < parentStart || sourceEnd > parentEnd) return undefined;
     const spans = wordSpans(source);
     // Sources must cover complete answer tokens, including internal apostrophes.
-    if (
-      !spans.length ||
-      spans.some(
-        (span) => !words.some((word) => word.start === span.start && word.end === span.end),
-      )
-    )
-      return undefined;
-    sourceWords.push({ id, spans });
+    if (!spans.length || spans.some((span) => !targetSpans.has(spanKey(span)))) return undefined;
+    return { id, source, start: sourceStart, end: sourceEnd, spans };
   }
 
-  const covers = (spans: ReturnType<typeof wordSpans>, error: (typeof errors)[number]) =>
-    spans.some((span) => span.start === error.start && span.end === error.end);
-  if (errors.some((error) => !sourceWords.some((source) => covers(source.spans, error))))
-    return undefined;
+  function visit(unit: NonNullable<ReturnType<typeof positionedUnit>>): boolean {
+    const affected = unit.spans.filter((span) => errorSpans.has(spanKey(span)));
+    if (!affected.length || visited.has(unit.id)) return true;
+    if (visiting.has(unit.id)) return false;
+    visiting.add(unit.id);
 
-  const selected = sourceWords
-    .filter((source) => errors.some((error) => covers(source.spans, error)))
-    .map((source) => source.id);
-  return selected.length === 1 ? [selected[0]] : [selected[0], selected[1]];
+    const sources = sourcesByUnitId.get(unit.id);
+    if (sources) {
+      const children: NonNullable<ReturnType<typeof positionedUnit>>[] = [];
+      for (const id of sources) {
+        const child = positionedUnit(id, unit.start, unit.end);
+        if (!child) return false;
+        children.push(child);
+      }
+      const covered = new Set(children.flatMap((child) => child.spans.map(spanKey)));
+      if (affected.some((span) => !covered.has(spanKey(span)))) return false;
+      for (const child of children) {
+        if (!visit(child)) return false;
+      }
+    } else if (unit.source.sourceUnitIds?.length) {
+      // An unvalidated relationship is not evidence that this is a leaf.
+      return false;
+    }
+
+    visiting.delete(unit.id);
+    visited.add(unit.id);
+    steps.push(unit.id);
+    return true;
+  }
+
+  const target = positionedUnit(targetId, start, end);
+  if (!target || target.start !== start || target.end !== end || !visit(target)) return undefined;
+  return steps;
 }
