@@ -31,12 +31,13 @@ function sentenceText(statement: Statement) {
   return statement.contextBefore + statement.english + statement.contextAfter;
 }
 
-/** Undefined preserves the original review path when positional evidence is incomplete. */
+/** Undefined keeps the legacy path; an empty list means no in-range errors. */
 export function buildRecoverySteps(
   statement: Statement,
   input: string | undefined,
   units: ReadonlyMap<string, Statement>,
   sourcesByUnitId: ReadonlyMap<string, RecoverySources>,
+  lastWordIndex?: number,
 ): string[] | undefined {
   const sentence = sentenceText(statement);
   const targetId = statement.unitId;
@@ -46,7 +47,9 @@ export function buildRecoverySteps(
   const words = wordSpans(statement);
   const targetWords = getClozeWords(statement.english);
   const answer = normalizeClozeInput(input, targetWords).split(" ");
+  const boundary = lastWordIndex ?? Math.min(answer.length - 1, targetWords.length - 1);
   const errors = words.filter((word) => {
+    if (word.wordIndex > boundary) return false;
     const expectedParts = normalizeClozeWord(targetWords[word.wordIndex]).split("'");
     const answerParts = normalizeClozeWord(answer[word.wordIndex] ?? "").split("'");
     // A missing/extra apostrophe cannot reliably identify just one part.
@@ -55,7 +58,7 @@ export function buildRecoverySteps(
       normalizeClozeWord(word.text) !== answerParts[word.partIndex]
     );
   });
-  if (!errors.length) return undefined;
+  if (!errors.length) return [];
 
   const start = statement.contextBefore!.length;
   const end = start + statement.english.length;

@@ -37,13 +37,15 @@ describe("submitted-answer recovery", () => {
 
   const scenarios = (["progressive", "sentence-first"] as LearningMode[]).flatMap((mode) =>
     (["single", "fulltext"] as PracticeView[]).flatMap((view) =>
-      [false, true].map((autoNext) => ({ mode, view, autoNext })),
+      [false, true].flatMap((autoNext) =>
+        [false, true].map((partial) => ({ mode, view, autoNext, partial })),
+      ),
     ),
   );
 
   it.each(scenarios)(
-    "skips deeper combinations and resumes after a nested failure ($mode, $view, auto-next: $autoNext)",
-    async ({ mode, view, autoNext }) => {
+    "skips deeper combinations and resumes after a nested failure ($mode, $view, auto-next: $autoNext, partial: $partial)",
+    async ({ mode, view, autoNext, partial }) => {
       localStorage.setItem("autoNextQuestion", String(autoNext));
       const statements = deepPneumonicStatements();
       const anchor = statements.length - 1;
@@ -89,7 +91,15 @@ describe("submitted-answer recovery", () => {
         await input.trigger("keydown", { code: "Enter", key: "Enter" });
       }
 
-      await submit(pneumonicSentence.replace("pneumonic", "x"));
+      const prefix = pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic"));
+      await submit(prefix.trimEnd());
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.currentStatement?.unitId).toBe("0:29");
+      expect(store.isRecovering).toBe(false);
+      expect(store.statementIndex).toBe(anchor);
+      expect((input.element as HTMLInputElement).value).toBe(prefix.trimEnd());
+
+      await submit(partial ? prefix : pneumonicSentence.replace("pneumonic", "x"));
       await vi.advanceTimersByTimeAsync(299);
       expect(store.currentStatement?.unitId).toBe("0:29");
       await vi.advanceTimersByTimeAsync(1);
@@ -111,7 +121,17 @@ describe("submitted-answer recovery", () => {
         if (next !== "next") expect(store.statementIndex).toBe(anchor);
       }
       await submitCorrect("pneumonic", "0:28");
-      await submit(store.currentStatement!.english.replace("plague", "x"));
+      const combination = store.currentStatement!.english;
+      await submit(combination.slice(0, combination.indexOf("plague")).trimEnd());
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.currentStatement?.unitId).toBe("0:28");
+      expect(store.isRecovering).toBe(true);
+      expect(store.statementIndex).toBe(anchor);
+      await submit(
+        partial
+          ? combination.slice(0, combination.indexOf("plague"))
+          : combination.replace("plague", "x"),
+      );
       await vi.advanceTimersByTimeAsync(300);
       expect(store.currentStatement?.unitId).toBe("0:4");
       await submitCorrect("plague", "0:25");

@@ -283,14 +283,13 @@ function cancelErrorReset() {
   errorResetTimer = undefined;
 }
 
-function handleAnswerError() {
+function handleAnswerError(submittedInput: string, lastWordIndex: number) {
   cancelErrorReset();
-  const submittedInput = inputValue.value;
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
     void showPhoneticHint();
     clearInput();
-    courseStore.failCurrentStatement(submittedInput);
+    courseStore.failCurrentStatement(submittedInput, lastWordIndex);
   }, ERROR_FEEDBACK_DURATION_MS);
 }
 
@@ -349,8 +348,9 @@ function handleKeydown(e: KeyboardEvent) {
   }
 
   if (e.code === "Enter" && !isComposing.value) {
+    e.preventDefault();
     e.stopPropagation();
-    submitAnswer(handleAnswerRight, handleAnswerError);
+    if (submitAnswer(handleAnswerRight, handleAnswerError) === "continue") cancelErrorReset();
     return;
   }
 

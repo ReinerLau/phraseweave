@@ -24,6 +24,8 @@ interface InputOptions {
   getInputWordCapacity?: (word: string) => number;
 }
 
+type IncorrectAnswerCallback = (input: string, lastWordIndex: number) => void;
+
 const separator = " ";
 
 const inputValue = ref("");
@@ -168,17 +170,15 @@ export function useInput({
   }
 
   function checkWordCorrect() {
-    return userInputWords.every((w) => !w.incorrect);
+    return userInputWords.every(
+      (word) => normalizeClozeWord(word.userInput) === normalizeClozeWord(word.text),
+    );
   }
 
-  function markIncorrectWord() {
-    userInputWords.forEach((word) => {
+  function markIncorrectWord(lastWordIndex: number) {
+    userInputWords.forEach((word, index) => {
       const formattedWord = normalizeClozeWord(word.userInput);
-      if (formattedWord !== normalizeClozeWord(word.text)) {
-        word.incorrect = true;
-      } else {
-        word.incorrect = false;
-      }
+      word.incorrect = index <= lastWordIndex && formattedWord !== normalizeClozeWord(word.text);
     });
   }
 
@@ -187,30 +187,33 @@ export function useInput({
     return userInputWords[len - 1]?.isActive ?? false;
   }
 
-  function submitAnswer(correctCallback?: () => void, wrongCallback?: () => void) {
-    resetAllWordActive();
-    markIncorrectWord();
+  function submitAnswer(correctCallback?: () => void, wrongCallback?: IncorrectAnswerCallback) {
+    const submittedInput = inputValue.value;
+    const activeWordIndex = userInputWords.findIndex((word) => word.isActive);
+    const lastWordIndex =
+      activeWordIndex >= 0
+        ? activeWordIndex
+        : Math.min(submittedInput.split(separator).length - 1, userInputWords.length - 1);
+    markIncorrectWord(lastWordIndex);
 
     if (checkWordCorrect()) {
+      resetAllWordActive();
       correctCallback?.(); // 调用输入正确的回调
       inputValue.value = "";
-    } else {
-      wrongCallback?.(); // 调用输入错误的回调
+      return "correct";
     }
+    if (!userInputWords.some((word) => word.incorrect)) return "continue";
+
+    resetAllWordActive();
+    wrongCallback?.(submittedInput, lastWordIndex);
+    return "incorrect";
   }
 
   function handleSpaceSubmitAnswer(
     useSpaceSubmitAnswer: KeyboardInputOptions["useSpaceSubmitAnswer"],
   ) {
     if (useSpaceSubmitAnswer?.enable) {
-      submitAnswer(
-        () => {
-          useSpaceSubmitAnswer?.rightCallback?.();
-        },
-        () => {
-          useSpaceSubmitAnswer?.errorCallback?.();
-        },
-      );
+      submitAnswer(useSpaceSubmitAnswer.rightCallback, useSpaceSubmitAnswer.errorCallback);
     }
   }
 
@@ -218,7 +221,7 @@ export function useInput({
     useSpaceSubmitAnswer?: {
       enable: boolean;
       rightCallback?: () => void;
-      errorCallback?: () => void;
+      errorCallback?: IncorrectAnswerCallback;
     };
   }
 

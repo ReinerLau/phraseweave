@@ -1,6 +1,6 @@
 # 直达错误单元并逐层组合返回
 
-> 返回路径已缩短为错误单元、原出错单元的直接组成单元及原题，见 [ADR 0026](0026-shorten-word-recovery-path.md)。本 ADR 的错误定位与兼容规则继续适用。
+> 返回路径已缩短为错误单元、原出错单元的直接组成单元及原题，见 [ADR 0026](0026-shorten-word-recovery-path.md)。错误选择范围现限定到当前词元，见 [ADR 0027](0027-current-word-recovery-boundary.md)。本 ADR 的位置匹配与兼容规则继续适用。
 
 整句或组合单元只在一处卡住时，固定复习全部来源会重复练习正确部分；只筛选直接来源仍需连续答错许多层才能到达词元。渐进组合与整句优先统一按本次作答的错误或未填写位置，沿已校验的组成关系自动定位到最小可练习单元，并以来源顺序生成相关分支的后序复习题序：错误单元在前，相关组合在后，最初出错的题最后出现。全部正确的旁支不单独复习，同一题序中的共享单元按 ID 去重。这修订了 [ADR 0013](0013-error-driven-review-recovery.md)、[ADR 0016](0016-retain-available-review-sources.md) 和 [ADR 0022](0022-switchable-learning-direction.md) 中逐层答错才能继续拆解的规则。
 

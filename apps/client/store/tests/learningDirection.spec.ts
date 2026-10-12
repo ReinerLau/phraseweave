@@ -210,7 +210,7 @@ describe("learning direction", () => {
       course.statementIndex = 8;
       course.learningMode = mode;
       const store = await setup();
-      store.failCurrentStatement("A B");
+      store.failCurrentStatement("A B ");
       expect(store.currentStatement?.unitId).toBe("0:3");
       expect(store.currentCourse?.passedUnitIds).toBeUndefined();
       expect(store.statementIndex).toBe(8);
