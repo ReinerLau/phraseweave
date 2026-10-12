@@ -53,6 +53,25 @@
               />
             </td>
           </tr>
+          <tr class="hover">
+            <td class="label-text">单词朗读缓存（保留至手动清理）</td>
+            <td class="text-center">
+              <button
+                class="btn btn-outline btn-secondary btn-sm"
+                :disabled="clearingAudioCache"
+                @click="clearAudioCache"
+              >
+                {{ clearingAudioCache ? "正在清理…" : "清空朗读缓存" }}
+              </button>
+              <p
+                v-if="cacheMessage"
+                class="mt-2 text-sm"
+                role="status"
+              >
+                {{ cacheMessage }}
+              </p>
+            </td>
+          </tr>
         </tbody>
       </table>
     </section>
@@ -140,7 +159,23 @@ import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { clearWordAudioCache } from "~/composables/useWordAudio";
 import { parseShortcutKeys } from "~/utils/keyboardShortcuts";
+
+const clearingAudioCache = ref(false);
+const cacheMessage = ref("");
+async function clearAudioCache() {
+  clearingAudioCache.value = true;
+  cacheMessage.value = "";
+  try {
+    await clearWordAudioCache();
+    cacheMessage.value = "朗读缓存已清空。";
+  } catch (error) {
+    cacheMessage.value = error instanceof Error ? error.message : "清理失败，请重试。";
+  } finally {
+    clearingAudioCache.value = false;
+  }
+}
 
 const dialogBoxRef = ref<HTMLElement | null>(null);
 // TODO 暂时不支持 nickname 的修改
