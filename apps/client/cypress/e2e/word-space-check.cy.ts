@@ -100,7 +100,28 @@ describe("word space checking", () => {
         });
         cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
         const input = 'input[aria-label="填写当前英文单元"]';
-        cy.get(input).type("don'tx ", { force: true });
+        cy.document().then((document) => document.fonts.ready);
+        cy.get(".question-input-word")
+          .first()
+          .then(($word) => {
+            const word = $word[0];
+            const window = word.ownerDocument.defaultView!;
+            const underlineWidth = parseFloat(window.getComputedStyle(word, "::after").width);
+            cy.get(input).type("don'tx ", { force: true });
+            cy.get(".question-input-word")
+              .first()
+              .should(($typed) => {
+                const underline = window.getComputedStyle($typed[0], "::after");
+                expect(parseFloat(underline.width)).to.be.closeTo(underlineWidth, 1);
+                expect(parseFloat(underline.borderBottomWidth)).to.equal(2);
+                expect(underline.borderBottomColor).to.equal(
+                  window.getComputedStyle($typed[0]).borderBottomColor,
+                );
+                const range = word.ownerDocument.createRange();
+                range.selectNodeContents($typed[0]);
+                expect(range.getBoundingClientRect().width).to.be.greaterThan(underlineWidth);
+              });
+          });
         cy.get(input).should("have.value", "don'tx");
         cy.get(".question-input-word").eq(0).should("not.have.class", "border-b-transparent");
         cy.get(input).type("{backspace}", { force: true });
@@ -121,6 +142,10 @@ describe("word space checking", () => {
               }
             });
             expect(getComputedStyle($confirmed[0]).borderBottomColor).to.equal("rgba(0, 0, 0, 0)");
+            expect(
+              $confirmed[0].ownerDocument.defaultView!.getComputedStyle($confirmed[0], "::after")
+                .borderBottomColor,
+            ).to.equal("rgba(0, 0, 0, 0)");
           });
         });
         cy.get(input).type("{backspace}", { force: true });

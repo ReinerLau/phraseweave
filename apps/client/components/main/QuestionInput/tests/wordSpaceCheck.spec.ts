@@ -47,7 +47,7 @@ describe("word space checking in QuestionInput", () => {
     store.currentStatement = { id: "word-space", order: 1, english };
     const wrapper = mount(QuestionInput, { global: { plugins: [pinia] } });
     const input = wrapper.get("input");
-    const words = () => wrapper.findAll(".question-input-word");
+    const words = () => wrapper.findAll<HTMLElement>(".question-input-word");
     const press = (code = "Space", extra = {}) =>
       input.trigger("keydown", {
         code,
@@ -148,6 +148,25 @@ describe("word space checking in QuestionInput", () => {
     await input.setValue("I");
     expect(words()[0].classes()).toContain("border-b-fuchsia-500");
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retains overlong drafts without changing the target underline width", async () => {
+    const { input, words, store, press } = setup("eat apples");
+    const underlineWidth = words()[0].element.style.getPropertyValue("--word-underline-width");
+    expect(words()[0].classes()).toContain("fixed-underline");
+    for (const draft of ["e", "eat", "eatx", "EATXXXX", "eat apples"]) {
+      await input.setValue(draft);
+      expect((input.element as HTMLInputElement).value).toBe(draft);
+      expect(words()[0].text()).toBe(draft);
+      expect(words()[0].element.style.getPropertyValue("--word-underline-width")).toBe(
+        underlineWidth,
+      );
+    }
+    await press();
+    expect(words()[0].classes()).toContain("border-b-red-500");
+    expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
   });
 
   it.each(["", "x", "ea", "eats", "eat apples"])(

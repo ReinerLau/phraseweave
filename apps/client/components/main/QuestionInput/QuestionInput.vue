@@ -17,6 +17,7 @@
             :class="[
               getWordsClassNames(token.wordIndex),
               {
+                'fixed-underline': isWordSpaceCheckEnabled(),
                 'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
                 'speech-hover': hoveredWordIndex === token.wordIndex,
                 'speech-loading':
@@ -36,7 +37,10 @@
                 questionInputWordsEl?.contains(loadingElement)) ||
               undefined
             "
-            :style="{ width: `${inputWidth(token.wordIndex)}em` }"
+            :style="{
+              width: `${inputWidth(token.wordIndex)}em`,
+              '--word-underline-width': `${wordWidth(token.text)}em`,
+            }"
           >
             {{ displayedWord(token.wordIndex, token.text) }}
           </span>
@@ -122,7 +126,7 @@ const questionInputWordsEl = ref<HTMLElement>();
 const hoveredWordIndex = ref<number>();
 let hoverPoint: Pick<MouseEvent, "clientX" | "clientY"> | undefined;
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
-const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInputWordsEl);
+const { probeEl: questionInputProbeEl, measureEm, wordWidth } = useWordWidths(questionInputWordsEl);
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -289,8 +293,7 @@ function getWordsClassNames(index: number) {
   return "text-[#20202099] border-b-gray-300 dark:text-gray-300 dark:border-b-gray-400";
 }
 
-// 输入块宽度 = 目标单词实测宽度的固定长度提示，不随输入生长；
-// 仅当实际显示文字更宽（如大小写差异）时才撑开，避免文字被挤出块外换行。单位 em。
+// 词块可容纳完整草稿；实验模式的下划线单独按目标词元宽度绘制。
 function inputWidth(index: number) {
   const targetWord = courseStore.words[index] ?? "";
   const typedWord = isAnswerTip() ? "" : userInputWords[index]?.userInput ?? "";
@@ -487,6 +490,25 @@ function preventCursorMove(event: MouseEvent) {
 </script>
 
 <style scoped>
+/* Retain the shared minimum height while drawing a target-sized underline.
+   Draft text can grow without stretching its line or losing editable characters. */
+.fixed-underline {
+  position: relative;
+  border-bottom-width: 0;
+}
+
+.fixed-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--word-underline-width);
+  max-width: 100%;
+  border-bottom: 2px solid;
+  border-bottom-color: inherit;
+  pointer-events: none;
+}
+
 /* 词块样式（.question-input-words / .question-input-word）已迁移到
    assets/css/globals.css，与答案区共用同一套规则，保证答题前后零偏移。 */
 .question-input-shell {
