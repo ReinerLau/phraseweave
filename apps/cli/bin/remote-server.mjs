@@ -123,7 +123,9 @@ function proxy(request, response, local, url) {
       incoming.pipe(response);
     },
   );
-  upstream.setTimeout(30_000, () => upstream.destroy(new Error("Upstream timeout")));
+  upstream.setTimeout(url.pathname === "/api/tts" ? 65_000 : 30_000, () =>
+    upstream.destroy(new Error("Upstream timeout")),
+  );
   upstream.on("error", () => {
     if (!response.headersSent) reply(response, 502, { error: "本机服务暂时无法连接。" });
     else response.destroy();

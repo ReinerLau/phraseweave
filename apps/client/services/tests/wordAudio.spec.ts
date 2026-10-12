@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { deleteWordAudioCache, fetchSentenceAudio, fetchWordAudio } from "~/services/wordAudio";
+import {
+  deleteWordAudioCache,
+  fetchSentenceAudio,
+  fetchWordAudio,
+  getTtsStatus,
+  retryTts,
+} from "~/services/wordAudio";
 
 describe("word audio service", () => {
   const fetchMock = vi.fn();
@@ -105,5 +111,24 @@ describe("word audio service", () => {
     expect(fetchMock).toHaveBeenLastCalledWith(`${window.location.origin}/api/tts/cache`, {
       method: "DELETE",
     });
+  });
+  it("uses the shared service for preparation status and retry", async () => {
+    packageMarker();
+    fetchMock.mockImplementation(
+      async () => new Response('{"state":"downloading","message":"Downloading"}'),
+    );
+    expect((await getTtsStatus()).state).toBe("downloading");
+    expect(fetchMock).toHaveBeenLastCalledWith(`${window.location.origin}/api/tts/status`, {
+      signal: undefined,
+    });
+    await retryTts();
+    expect(fetchMock).toHaveBeenLastCalledWith(`${window.location.origin}/api/tts/retry`, {
+      method: "POST",
+      signal: undefined,
+    });
+    fetchMock.mockResolvedValueOnce(
+      new Response('{"error":"Environment not ready"}', { status: 503 }),
+    );
+    await expect(retryTts()).rejects.toThrow("Environment not ready");
   });
 });
