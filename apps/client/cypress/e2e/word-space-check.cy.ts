@@ -57,6 +57,32 @@ function seedWordSpaceExercise() {
 }
 
 describe("word space checking", () => {
+  it("opens the experiment from homepage settings and returns to practice", () => {
+    cy.intercept("GET", "http://127.0.0.1:8765/api/tts/status", {
+      state: "ready",
+      message: "准备完成",
+    });
+    cy.visit("/", {
+      onBeforeLoad(window) {
+        window.localStorage.removeItem("wordSpaceCheck");
+        window.localStorage.setItem("keyboardSoundEnabled", "false");
+        window.localStorage.setItem("autoNextQuestion", "false");
+      },
+    });
+    seedWordSpaceExercise();
+    cy.contains("a", "设置").should("be.visible").click();
+    cy.location("pathname").should("equal", "/user/info");
+    cy.get("#word-space-check").should("not.be.checked").check();
+    cy.contains("空格确认当前词元，回车表示不会并回退").should("be.visible");
+    cy.reload();
+    cy.get("#word-space-check").should("be.checked");
+    cy.contains("a", "返回练习清单").click();
+    cy.location("pathname").should("equal", "/");
+    cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+    cy.get('input[aria-label="填写当前英文单元"]').type("don't ", { force: true });
+    cy.get(".question-input-word").eq(0).should("have.class", "border-b-transparent");
+  });
+
   for (const [width, height] of [
     [1280, 800],
     [320, 568],
