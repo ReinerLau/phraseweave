@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import rightSoundPath from "~/assets/sounds/right.mp3";
+
 describe("correct feedback sound", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -9,58 +11,78 @@ describe("correct feedback sound", () => {
   });
 
   function mockContext(state = "running") {
-    const oscillator = {
-      type: "",
-      frequency: { setValueAtTime: vi.fn() },
+    const createSource = () => ({
+      buffer: null as AudioBuffer | null,
       connect: vi.fn(),
       disconnect: vi.fn(),
       start: vi.fn(),
-      stop: vi.fn(),
       onended: () => {},
-    };
-    const gain = {
-      gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() },
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-    };
+    });
+    const buffer = {} as AudioBuffer;
+    const data = new ArrayBuffer(8);
     const context = {
       state,
-      currentTime: 5,
       destination: {},
       resume: vi.fn().mockResolvedValue(undefined),
-      createOscillator: vi.fn(() => oscillator),
-      createGain: vi.fn(() => gain),
+      decodeAudioData: vi.fn().mockResolvedValue(buffer),
+      createBufferSource: vi.fn(createSource),
     };
+    const fetchSound = vi.fn().mockResolvedValue({ ok: true, arrayBuffer: async () => data });
     const construct = vi.fn(() => context);
     vi.stubGlobal("AudioContext", construct);
-    return { context, construct, oscillator, gain };
+    vi.stubGlobal("fetch", fetchSound);
+    return { context, construct, buffer, data, fetchSound };
   }
 
-  it("plays a short rising tone and disconnects its nodes", async () => {
-    const { context, construct, oscillator, gain } = mockContext();
+  it("plays the original MP3 in full and reuses its decoded buffer for later confirmations", async () => {
+    const { context, construct, buffer, data, fetchSound } = mockContext();
     const { useCorrectSound } = await import("../useCorrectSound");
     await useCorrectSound().playCorrectSound();
-    expect(oscillator.frequency.setValueAtTime.mock.calls).toEqual([
-      [660, 5],
-      [880, 5.06],
-    ]);
-    expect(oscillator.start).toHaveBeenCalledWith(5);
-    expect(oscillator.stop).toHaveBeenCalledWith(5.16);
-    oscillator.onended();
-    expect(oscillator.disconnect).toHaveBeenCalledOnce();
-    expect(gain.disconnect).toHaveBeenCalledOnce();
+    expect(fetchSound).toHaveBeenCalledWith(rightSoundPath);
+    expect(context.decodeAudioData).toHaveBeenCalledWith(data);
+    const source = context.createBufferSource.mock.results[0].value;
+    expect(source.buffer).toBe(buffer);
+    expect(source.connect).toHaveBeenCalledWith(context.destination);
+    expect(source.start).toHaveBeenCalledOnce();
+    expect(source.start).toHaveBeenCalledWith();
+    source.onended();
+    expect(source.disconnect).toHaveBeenCalledOnce();
     await useCorrectSound().playCorrectSound();
     expect(construct).toHaveBeenCalledOnce();
-    expect(context.createOscillator).toHaveBeenCalledTimes(2);
+    expect(fetchSound).toHaveBeenCalledOnce();
+    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+    expect(context.createBufferSource).toHaveBeenCalledTimes(2);
   });
 
-  it("requests resume immediately from the confirming gesture", async () => {
-    const { context } = mockContext("suspended");
+  it("requests resume immediately while the MP3 is still loading", async () => {
+    const { context, fetchSound } = mockContext("suspended");
+    let resolveResponse!: (response: unknown) => void;
+    fetchSound.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
     const { useCorrectSound } = await import("../useCorrectSound");
     const playing = useCorrectSound().playCorrectSound();
     expect(context.resume).toHaveBeenCalledOnce();
+    expect(context.createBufferSource).not.toHaveBeenCalled();
+    resolveResponse({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
     await playing;
-    expect(context.createOscillator).toHaveBeenCalledOnce();
+    expect(context.createBufferSource).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed MP3 fetch or decode on the next confirmation", async () => {
+    const { context, fetchSound, buffer } = mockContext();
+    fetchSound.mockResolvedValueOnce({ ok: false });
+    const { useCorrectSound } = await import("../useCorrectSound");
+    await expect(useCorrectSound().playCorrectSound()).resolves.toBeUndefined();
+    expect(context.createBufferSource).not.toHaveBeenCalled();
+    context.decodeAudioData.mockRejectedValueOnce(new Error("invalid audio"));
+    await expect(useCorrectSound().playCorrectSound()).resolves.toBeUndefined();
+    expect(context.createBufferSource).not.toHaveBeenCalled();
+    await useCorrectSound().playCorrectSound();
+    expect(fetchSound).toHaveBeenCalledTimes(3);
+    expect(context.createBufferSource.mock.results[0].value.buffer).toBe(buffer);
   });
 
   it("ignores unavailable audio, failed resume, and node failures", async () => {
@@ -70,8 +92,9 @@ describe("correct feedback sound", () => {
     const { context } = mockContext("suspended");
     context.resume.mockRejectedValue(new Error("blocked"));
     await expect(useCorrectSound().playCorrectSound()).resolves.toBeUndefined();
+    expect(context.createBufferSource).not.toHaveBeenCalled();
     context.state = "running";
-    context.createOscillator.mockImplementation(() => {
+    context.createBufferSource.mockImplementation(() => {
       throw new Error("audio failed");
     });
     await expect(useCorrectSound().playCorrectSound()).resolves.toBeUndefined();

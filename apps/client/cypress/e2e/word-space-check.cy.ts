@@ -89,6 +89,7 @@ describe("word space checking", () => {
   ]) {
     it(`locks confirmed words without shifting their geometry at ${width}x${height}`, () => {
       cy.viewport(width, height);
+      cy.intercept("GET", "**/right.mp3").as("correctSound");
       cy.visit("/course-pack");
       seedWordSpaceExercise();
       cy.window().then((window) => {
@@ -107,6 +108,7 @@ describe("word space checking", () => {
       cy.get(".question-input-word").then(($words) => {
         const before = Array.from($words).map((word) => word.getBoundingClientRect());
         cy.get(input).type(" ", { force: true }).should("have.value", "");
+        cy.wait("@correctSound").its("response.statusCode").should("be.oneOf", [200, 304]);
         cy.get(".question-input-word").should(($confirmed) => {
           Array.from($confirmed).forEach((word, index) => {
             const after = word.getBoundingClientRect();

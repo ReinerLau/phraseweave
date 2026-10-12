@@ -1,4 +1,8 @@
+import rightSoundPath from "~/assets/sounds/right.mp3";
+
 let audioContext: AudioContext | undefined;
+let audioBuffer: AudioBuffer | undefined;
+let audioBufferPromise: Promise<AudioBuffer | undefined> | undefined;
 
 export function useCorrectSound() {
   async function playCorrectSound() {
@@ -6,30 +10,39 @@ export function useCorrectSound() {
       if (typeof AudioContext === "undefined") return;
       if (!audioContext || audioContext.state === "closed") audioContext = new AudioContext();
       const context = audioContext;
-      // Resume from the confirming key event to satisfy browser autoplay policy.
-      if (context.state === "suspended") await context.resume();
+      // Request resume during the confirming gesture, before the MP3 loads.
+      const resumePromise = context.state === "suspended" ? context.resume() : Promise.resolve();
+      const [buffer] = await Promise.all([loadAudioBuffer(context), resumePromise]);
+      if (!buffer) return;
 
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const start = context.currentTime;
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(660, start);
-      oscillator.frequency.setValueAtTime(880, start + 0.06);
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.12, start + 0.01);
-      gain.gain.linearRampToValueAtTime(0, start + 0.16);
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.onended = () => {
-        oscillator.disconnect();
-        gain.disconnect();
-      };
-      oscillator.start(start);
-      oscillator.stop(start + 0.16);
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(context.destination);
+      source.onended = () => source.disconnect();
+      source.start();
     } catch {
       // Feedback audio must never interrupt answering, including on resume failure.
     }
   }
 
   return { playCorrectSound };
+}
+
+async function loadAudioBuffer(context: AudioContext) {
+  if (audioBuffer) return audioBuffer;
+  audioBufferPromise ??= fetch(rightSoundPath)
+    .then((response) => {
+      if (!response.ok) throw new Error("Correct sound could not be loaded.");
+      return response.arrayBuffer();
+    })
+    .then((data) => context.decodeAudioData(data))
+    .then((buffer) => {
+      audioBuffer = buffer;
+      return buffer;
+    })
+    .catch(() => {
+      audioBufferPromise = undefined;
+      return undefined;
+    });
+  return audioBufferPromise;
 }
