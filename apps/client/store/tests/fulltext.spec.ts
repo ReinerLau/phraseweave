@@ -381,7 +381,7 @@ describe("fulltext practice", () => {
       course.learningMode = mode;
       course.statementIndex = 8;
       const store = await setup();
-      store.failCurrentStatement("A B");
+      store.failCurrentStatement("A B ");
       expect(store.currentStatement?.unitId).toBe("0:C");
       expect(store.statementIndex).toBe(8);
       expect(store.precedingSentences).toHaveLength(0);

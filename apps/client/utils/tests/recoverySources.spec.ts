@@ -31,14 +31,14 @@ describe("leaf and direct-source recovery planning", () => {
   const prefix = unit(sentence, "prefix", 0, split - 1);
   const tail = unit(sentence, "tail", split, sentence.length);
 
-  it.each([sentence.slice(0, split - 1), sentence.replace("pneumonic", "pneumatic")])(
+  it.each([sentence.slice(0, split), sentence.replace("pneumonic", "pneumatic")])(
     "skips the correct prefix for a failed or unfilled tail: %s",
     (input) => {
       expect(select(whole, input, [prefix, tail])).toEqual(["tail", "whole"]);
     },
   );
 
-  it.each(["", sentence.replace("Local", "Wrong").replace("pneumonic", "wrong")])(
+  it.each([sentence.replace("Local", "Wrong").replace("pneumonic", "wrong")])(
     "keeps all affected branches in source order: %s",
     (input) => {
       expect(select(whole, input, [tail, prefix])).toEqual(["tail", "prefix", "whole"]);
@@ -61,7 +61,7 @@ describe("leaf and direct-source recovery planning", () => {
     expect(select(target, "woman'z", sources)).toEqual(["suffix", "whole"]);
     expect(select(target, "womon'z", sources)).toEqual(["woman", "suffix", "whole"]);
     expect(select(target, "womans", sources)).toEqual(["woman", "suffix", "whole"]);
-    expect(select(target, "WOMAN’S", sources)).toBeUndefined();
+    expect(select(target, "WOMAN’S", sources)).toEqual([]);
   });
 
   it("retains contraction leaves when the word is not split into source units", () => {
@@ -86,7 +86,7 @@ describe("leaf and direct-source recovery planning", () => {
     const sources = [unit(text, "prefix", 0, 13), unit(text, "social", 14, 20)];
     expect(select(target, "DON'T be anti-bad.", sources)).toEqual(["social", "whole"]);
     expect(select(target, "Dont be anti social", sources)).toEqual(["prefix", "whole"]);
-    expect(select(target, "don't be anti-social.", sources)).toBeUndefined();
+    expect(select(target, "don't be anti-social.", sources)).toEqual([]);
   });
 
   it("supports a single retained source and falls back for an uncovered error", () => {
@@ -146,7 +146,7 @@ describe("leaf and direct-source recovery planning", () => {
   it("deduplicates shared leaves while retaining both affected combinations", () => {
     const { target, units, graph } = overlappingGraph();
     expect(buildRecoverySteps(target, "A X C", units, graph)).toEqual(["B", "AB", "BC", "whole"]);
-    expect(buildRecoverySteps(target, "", units, graph)).toEqual([
+    expect(buildRecoverySteps(target, "X X X", units, graph)).toEqual([
       "A",
       "B",
       "AB",
@@ -154,6 +154,20 @@ describe("leaf and direct-source recovery planning", () => {
       "BC",
       "whole",
     ]);
+  });
+
+  it("ignores later errors when an explicit word boundary is supplied", () => {
+    const { target, units, graph } = overlappingGraph();
+    expect(buildRecoverySteps(target, "X B X", units, graph, 1)).toEqual(["A", "AB", "whole"]);
+    expect(buildRecoverySteps(target, "A B", units, graph, 1)).toEqual([]);
+    expect(buildRecoverySteps(target, "A B ", units, graph, 2)).toEqual(["C", "BC", "whole"]);
+  });
+
+  it("infers the boundary from normalized input including a trailing separator", () => {
+    const { target, units, graph } = overlappingGraph();
+    expect(buildRecoverySteps(target, "", units, graph)).toEqual(["A", "AB", "whole"]);
+    expect(buildRecoverySteps(target, "A B", units, graph)).toEqual([]);
+    expect(buildRecoverySteps(target, "A ", units, graph)).toEqual(["B", "AB", "BC", "whole"]);
   });
 
   function deepGraph() {

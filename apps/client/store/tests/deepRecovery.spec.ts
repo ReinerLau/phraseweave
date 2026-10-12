@@ -129,16 +129,26 @@ describe("deep error recovery", () => {
     expect(store.currentStatement?.unitId).toBe("next");
   });
 
-  it("reviews every unfilled tail word before its direct source and target", async () => {
+  it("reviews only the current unfilled word before its direct source and target", async () => {
     const { store } = await setup();
-    store.failCurrentStatement(
-      pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic")).trimEnd(),
-    );
-    for (const id of ["0:3", "0:4", "0:5", "0:28", "0:29"]) {
+    store.failCurrentStatement(pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic")));
+    for (const id of ["0:3", "0:28", "0:29"]) {
       expect(store.currentStatement?.unitId).toBe(id);
       correct(store);
     }
     expect(store.currentStatement?.unitId).toBe("next");
+  });
+
+  it("keeps a correct prefix on the base question without starting recovery", async () => {
+    const { store, anchor } = await setup();
+    store.failCurrentStatement(
+      pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic")).trimEnd(),
+    );
+    expect(store.currentStatement?.unitId).toBe("0:29");
+    expect(store.statementIndex).toBe(anchor);
+    expect(store.isRecovering).toBe(false);
+    expect(store.currentCourse?.passedUnitIds).toBeUndefined();
+    expect(store.advanceAfterCorrect()).toBe(false);
   });
 
   it("restores only the base question on reload", async () => {

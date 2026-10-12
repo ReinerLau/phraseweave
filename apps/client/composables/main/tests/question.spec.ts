@@ -12,6 +12,69 @@ describe("question", () => {
   const characterWidth = (word: string) => word.length;
   const targetCapacity = (word: string) => word.length;
 
+  it.each([
+    { value: "", errors: [true, false, false, false, false], index: 0 },
+    { value: "I like ", errors: [false, false, true, false, false], index: 2 },
+    { value: "I like app", errors: [false, false, true, false, false], index: 2 },
+    { value: "X like app", errors: [true, false, true, false, false], index: 2 },
+    { value: "X lik apples", errors: [true, true, false, false, false], index: 2 },
+  ])("checks only through the current word for '$value'", ({ value, errors, index }) => {
+    const { inputValue, userInputWords, setInputValue, submitAnswer } = useInput({
+      source: () => "I like apples very much",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => value.length,
+    });
+    setInputValue(value);
+    const wrong = vi.fn();
+    const correct = vi.fn();
+    expect(submitAnswer(correct, wrong)).toBe("incorrect");
+    expect(wrong).toHaveBeenCalledWith(value, index);
+    expect(correct).not.toHaveBeenCalled();
+    expect(inputValue.value).toBe(value);
+    expect(userInputWords.map((word) => word.incorrect)).toEqual(errors);
+  });
+
+  it("preserves a correct prefix and its active word until the next blank is entered", () => {
+    let cursor = 6;
+    const { inputValue, userInputWords, setInputValue, submitAnswer } = useInput({
+      source: () => "I like apples very much",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => cursor,
+    });
+    const correct = vi.fn();
+    const wrong = vi.fn();
+    setInputValue("I like");
+    expect(submitAnswer(correct, wrong)).toBe("continue");
+    expect(inputValue.value).toBe("I like");
+    expect(userInputWords[1].isActive).toBe(true);
+    expect(userInputWords.every((word) => !word.incorrect)).toBe(true);
+    expect(correct).not.toHaveBeenCalled();
+    expect(wrong).not.toHaveBeenCalled();
+    cursor++;
+    setInputValue("I like ");
+    expect(submitAnswer(correct, wrong)).toBe("incorrect");
+    expect(wrong).toHaveBeenCalledWith("I like ", 2);
+  });
+
+  it("forwards the input snapshot and boundary on a last-word space submission", () => {
+    const { setInputValue, handleKeyboardInput } = useInput({
+      source: () => "I eat apples",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => "I eat app".length,
+    });
+    setInputValue("I eat app");
+    const wrong = vi.fn();
+    handleKeyboardInput(
+      {
+        code: "Space",
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as KeyboardEvent,
+      { useSpaceSubmitAnswer: { enable: true, errorCallback: wrong } },
+    );
+    expect(wrong).toHaveBeenCalledWith("I eat app", 2);
+  });
+
   it("does not require a comma in a word answer", () => {
     const { userInputWords, setInputValue, submitAnswer } = useInput({
       source: () => "seats,",
@@ -92,7 +155,7 @@ describe("question", () => {
     const { userInputWords, inputValue, setInputValue, submitAnswer } = useInput({
       source: () => source.value,
       setInputCursorPosition: () => {},
-      getInputCursorPosition: () => 0,
+      getInputCursorPosition: () => "anti sociel".length,
     });
     setInputValue("anti sociel");
     submitAnswer();
@@ -195,7 +258,7 @@ describe("question", () => {
 
   it("should be incorrect when checked the answer", async () => {
     const setInputCursorPosition = () => {};
-    const getInputCursorPosition = () => 0;
+    const getInputCursorPosition = () => "i like".length;
 
     const { userInputWords, setInputValue, submitAnswer } = useInput({
       source: () => "i eat",
@@ -278,7 +341,7 @@ describe("question", () => {
     const { setInputValue, submitAnswer } = useInput({
       source: () => "He said “don’t”",
       setInputCursorPosition: () => {},
-      getInputCursorPosition: () => 0,
+      getInputCursorPosition: () => "He said dont".length,
     });
 
     setInputValue('He said "don\'t"');

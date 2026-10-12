@@ -277,12 +277,13 @@ export const useExerciseStore = defineStore("exercise", () => {
     refreshCurrentStatement();
   }
 
-  function failCurrentStatement(input?: string) {
+  function failCurrentStatement(input?: string, lastWordIndex?: number) {
     currentAnswerAccepted.value = false;
     const statement = currentStatement.value;
     const steps = statement
-      ? buildRecoverySteps(statement, input, unitStatements, sourcesByUnitId)
+      ? buildRecoverySteps(statement, input, unitStatements, sourcesByUnitId, lastWordIndex)
       : undefined;
+    if (steps?.length === 0) return;
     recoveryUnitId.value = recovery.value?.fail(statement?.unitId, steps);
     refreshCurrentStatement();
   }
