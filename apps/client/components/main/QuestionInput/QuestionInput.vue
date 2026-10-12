@@ -50,6 +50,7 @@
         aria-label="填写当前英文单元"
         v-model="inputValue"
         @keydown="handleKeydown"
+        @beforeinput="handleBeforeInput"
         @focus="handleInputFocus"
         @blur="handleInputBlur"
         @dblclick.prevent
@@ -84,6 +85,7 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { useWordSpaceCheck } from "~/composables/user/wordSpaceCheck";
 import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
 import { lookupPronunciation } from "~/services/pronunciation";
 import { isSpeakableWord } from "~/services/wordAudio";
@@ -96,6 +98,7 @@ import {
   useQuestionInput,
   useWordWidths,
 } from "./questionInputHelper";
+import { useCorrectSound } from "./useCorrectSound";
 import { useTypingSound } from "./useTypingSound";
 
 defineProps<{ inline?: boolean }>();
@@ -110,8 +113,10 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 const { showAnswer } = useGameMode();
 const { showSummary } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
+const { wordSpaceCheck, isWordSpaceCheckEnabled } = useWordSpaceCheck();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
+const { playCorrectSound } = useCorrectSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 const hoveredWordIndex = ref<number>();
@@ -121,16 +126,27 @@ const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInput
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
+let wordFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
-const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
-  useInput({
-    source: () => courseStore.currentStatement?.english ?? "",
-    setInputCursorPosition,
-    getInputCursorPosition,
-    inputChangedCallback,
-    getInputWordWidth,
-    getInputWordCapacity,
-  });
+const {
+  inputValue,
+  userInputWords,
+  submitAnswer,
+  setInputValue,
+  clearInput,
+  handleKeyboardInput,
+  confirmCurrentWord,
+  clearWordFeedback,
+  getWordHelpRequest,
+} = useInput({
+  source: () => courseStore.currentStatement?.english ?? "",
+  setInputCursorPosition,
+  getInputCursorPosition,
+  inputChangedCallback,
+  getInputWordWidth,
+  getInputWordCapacity,
+  isWordSpaceCheckEnabled,
+});
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 
 // Re-check after visible text changes, even when the pointer stays still.
@@ -157,7 +173,9 @@ onMounted(() => {
 focusInputWhenWIndowFocus();
 onUnmounted(() => {
   cancelErrorReset();
+  cancelWordFeedback();
   clearPhoneticHint();
+  clearInput();
 });
 
 function clearPhoneticHint() {
@@ -182,6 +200,7 @@ async function showPhoneticHint() {
 watch(
   () => inputValue.value,
   (val) => {
+    if (isWordSpaceCheckEnabled()) cancelWordFeedback();
     const sanitizedValue = sanitizeQuestionInput(val);
     if (isAnswerTip() && containsAllowedQuestionCharacter(sanitizedValue)) {
       hiddenAnswerTip();
@@ -196,6 +215,9 @@ watch(
 
 watch(isAnswerTip, (isVisible) => {
   if (isVisible) {
+    cancelErrorReset();
+    cancelWordFeedback();
+    clearPhoneticHint();
     clearInput();
   }
 });
@@ -207,9 +229,11 @@ watch(
     courseStore.currentCourse?.id,
     courseStore.learningMode,
     courseStore.practiceView,
+    wordSpaceCheck.value,
   ],
   () => {
     cancelErrorReset();
+    cancelWordFeedback();
     clearPhoneticHint();
     clearWordHover();
     clearInput();
@@ -241,6 +265,14 @@ function getWordsClassNames(index: number) {
     }
 
     return "text-gray-400 border-b-gray-300 dark:text-gray-500 dark:border-b-gray-400";
+  }
+
+  if (word.confirmed) {
+    return "text-[#202020] border-b-transparent dark:text-gray-50";
+  }
+
+  if (isWordSpaceCheckEnabled() && word.incorrect) {
+    return "text-red-500 border-b-red-500";
   }
 
   // 当前单词激活 且 聚焦
@@ -283,6 +315,45 @@ function cancelErrorReset() {
   errorResetTimer = undefined;
 }
 
+function cancelWordFeedback() {
+  if (wordFeedbackTimer !== undefined) clearTimeout(wordFeedbackTimer);
+  wordFeedbackTimer = undefined;
+  clearWordFeedback();
+}
+
+function handleWordConfirmation() {
+  if (isAnswerTip() || !userInputWords.some((word) => word.isActive)) return;
+  cancelWordFeedback();
+  setInputValue(inputEl.value?.value ?? inputValue.value);
+  const result = confirmCurrentWord();
+  if (result === "unmatched") {
+    wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
+  } else if (result === "confirmed" || result === "complete") {
+    void playCorrectSound();
+    if (result === "complete") handleAnswerRight();
+  }
+}
+
+function handleWordHelp() {
+  const request = getWordHelpRequest();
+  if (!request) return;
+  cancelWordFeedback();
+  cancelErrorReset();
+  void showPhoneticHint();
+  clearInput();
+  courseStore.failCurrentStatement(request.input, request.lastWordIndex);
+}
+
+// Soft keyboards can insert a space without dispatching a keydown event.
+function handleBeforeInput(event: Event) {
+  const inputEvent = event as InputEvent;
+  if (!isWordSpaceCheckEnabled() || isComposing.value || inputEvent.isComposing) return;
+  if (inputEvent.inputType === "insertText" && inputEvent.data === " ") {
+    event.preventDefault();
+    handleWordConfirmation();
+  }
+}
+
 function handleAnswerError(submittedInput: string, lastWordIndex: number) {
   cancelErrorReset();
   errorResetTimer = setTimeout(() => {
@@ -295,6 +366,7 @@ function handleAnswerError(submittedInput: string, lastWordIndex: number) {
 
 function handleAnswerRight() {
   cancelErrorReset();
+  cancelWordFeedback();
   clearPhoneticHint();
   courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
@@ -326,6 +398,9 @@ function handleCompositionEnd() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (isWordSpaceCheckEnabled() && (isComposing.value || e.isComposing || e.keyCode === 229)) {
+    return;
+  }
   if (e.ctrlKey) {
     e.preventDefault();
     return;
@@ -345,6 +420,15 @@ function handleKeydown(e: KeyboardEvent) {
       }
       return;
     }
+  }
+
+  if (isWordSpaceCheckEnabled() && (e.code === "Space" || e.code === "Enter")) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.repeat) return;
+    if (e.code === "Space") handleWordConfirmation();
+    else handleWordHelp();
+    return;
   }
 
   if (e.code === "Enter" && !isComposing.value) {

@@ -1,4 +1,4 @@
-import { nextTick, reactive, ref, watchEffect } from "vue";
+import { nextTick, reactive, ref, watch } from "vue";
 
 import { getClozeWords, normalizeClozeInput, normalizeClozeWord } from "~/utils/clozeText";
 
@@ -9,6 +9,7 @@ interface Word {
   isActive: boolean;
   userInput: string;
   incorrect: boolean;
+  confirmed: boolean;
   end: number;
   start: number;
   position: number;
@@ -22,6 +23,7 @@ interface InputOptions {
   inputChangedCallback?: (e: KeyboardEvent) => void;
   getInputWordWidth?: (word: string) => number;
   getInputWordCapacity?: (word: string) => number;
+  isWordSpaceCheckEnabled?: () => boolean;
 }
 
 type IncorrectAnswerCallback = (input: string, lastWordIndex: number) => void;
@@ -65,13 +67,28 @@ export function useInput({
   inputChangedCallback,
   getInputWordWidth,
   getInputWordCapacity,
+  isWordSpaceCheckEnabled = () => false,
 }: InputOptions) {
   const userInputWords = reactive<Word[]>([]);
+  let confirmedWordCount = 0;
 
   setupUserInputWords();
-  updateActiveWord(getInputCursorPosition());
+  if (!isWordSpaceCheckEnabled()) updateActiveWord(getInputCursorPosition());
 
   function setInputValue(val: string) {
+    if (isWordSpaceCheckEnabled()) {
+      const word = userInputWords[confirmedWordCount];
+      // The native input only contains the current draft. Confirmed words never
+      // enter its editable value, including during paste or selection replacement.
+      const draft = word ? normalizeClozeInput(val, [word.text]).trim() : "";
+      inputValue.value = draft;
+      if (word) word.userInput = draft;
+      if (draft !== val) {
+        void nextTick(() => setInputCursorPosition(draft.length));
+      }
+      return;
+    }
+
     const targetWords = getClozeWords(source());
     const sanitizedValue = normalizeClozeInput(val, targetWords);
     const fitInput = (value: string) => {
@@ -95,10 +112,12 @@ export function useInput({
   }
 
   function clearInput() {
+    confirmedWordCount = 0;
     inputValue.value = "";
     userInputWords.forEach((word) => {
       word.userInput = "";
       word.incorrect = false;
+      word.confirmed = false;
     });
     inputSyncUserInputWords();
     updateActiveWord(0);
@@ -110,6 +129,7 @@ export function useInput({
       isActive: false,
       userInput: "",
       incorrect: false,
+      confirmed: false,
       start: 0,
       end: 0,
       position: 0,
@@ -118,17 +138,52 @@ export function useInput({
   }
 
   function setupUserInputWords() {
-    watchEffect(() => {
-      resetUserInputWords();
+    watch(
+      () => [source(), isWordSpaceCheckEnabled()],
+      () => {
+        resetUserInputWords();
 
-      getClozeWords(source())
-        .map(createWord)
-        .forEach((word, i) => {
-          userInputWords[i] = word;
-          // 首个单词自动聚焦
-          i === 0 && (userInputWords[0].isActive = true);
-        });
+        getClozeWords(source())
+          .map(createWord)
+          .forEach((word, i) => {
+            userInputWords[i] = word;
+            // 首个单词自动聚焦
+            i === 0 && (userInputWords[0].isActive = true);
+          });
+      },
+      { immediate: true },
+    );
+  }
+
+  function confirmCurrentWord() {
+    const word = userInputWords[confirmedWordCount];
+    if (!word) return "inactive";
+    if (!word.userInput || normalizeClozeWord(word.userInput) !== normalizeClozeWord(word.text)) {
+      word.incorrect = true;
+      return "unmatched";
+    }
+
+    word.confirmed = true;
+    word.incorrect = false;
+    resetAllWordActive();
+    confirmedWordCount++;
+    inputValue.value = "";
+    const nextWord = userInputWords[confirmedWordCount];
+    if (nextWord) nextWord.isActive = true;
+    return nextWord ? "confirmed" : "complete";
+  }
+
+  function clearWordFeedback() {
+    userInputWords.forEach((word) => {
+      word.incorrect = false;
     });
+  }
+
+  function getWordHelpRequest() {
+    if (!userInputWords[confirmedWordCount]) return undefined;
+    // Enter always means help, even when the unconfirmed draft already matches.
+    const prefix = userInputWords.slice(0, confirmedWordCount).map((word) => word.userInput);
+    return { input: [...prefix, ""].join(separator), lastWordIndex: confirmedWordCount };
   }
 
   function inputSyncUserInputWords() {
@@ -244,6 +299,7 @@ export function useInput({
   }
 
   function resetUserInputWords() {
+    confirmedWordCount = 0;
     inputValue.value = "";
     userInputWords.splice(0, userInputWords.length);
   }
@@ -256,5 +312,8 @@ export function useInput({
     clearInput,
     handleKeyboardInput,
     resetUserInputWords,
+    confirmCurrentWord,
+    clearWordFeedback,
+    getWordHelpRequest,
   };
 }

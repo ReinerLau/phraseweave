@@ -213,6 +213,7 @@ describe("question", () => {
     expect(userInputWords).toMatchInlineSnapshot(`
       [
         {
+          "confirmed": false,
           "end": 1,
           "id": 0,
           "incorrect": false,
@@ -223,6 +224,7 @@ describe("question", () => {
           "userInput": "i",
         },
         {
+          "confirmed": false,
           "end": 5,
           "id": 1,
           "incorrect": false,
