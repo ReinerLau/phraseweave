@@ -94,6 +94,21 @@ describe("answer availability", () => {
     return { store, wrapper };
   }
 
+  it("does not offer sentence audio while answering, including with an answer hint", async () => {
+    const { wrapper } = await setup();
+    const sentence = wrapper.get('[data-testid="cloze-sentence"]');
+    expect(sentence.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    useAnswerTip().showAnswerTip();
+    await wrapper.vm.$nextTick();
+    expect(sentence.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    expect(
+      wrapper
+        .get('[data-testid="practice-toolbar"]')
+        .find('[data-testid="sentence-audio-button"]')
+        .exists(),
+    ).toBe(false);
+  });
+
   it("updates a query read before course setup and after reloading the same current unit", async () => {
     const store = useExerciseStore();
     expect(store.canDecomposeCurrentUnit).toBe(false);

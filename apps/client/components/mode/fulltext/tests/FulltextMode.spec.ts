@@ -3,7 +3,10 @@ import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Contents from "~/components/main/Contents/Contents.vue";
+import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
+import ClozeMode from "~/components/mode/cloze/ClozeMode.vue";
 import { useGameMode } from "~/composables/main/game";
+import { useSummary } from "~/composables/main/summary";
 import { useExerciseStore } from "~/store/exercise";
 import { measureChineseMasks } from "../chineseMaskLayout";
 import FulltextMode from "../FulltextMode.vue";
@@ -19,6 +22,7 @@ enableAutoUnmount(afterEach);
 describe("FulltextMode", () => {
   beforeEach(() => {
     useGameMode().showQuestion();
+    useSummary().hideSummary();
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       queueMicrotask(() => callback(0));
@@ -100,6 +104,53 @@ describe("FulltextMode", () => {
     expect(wrapper.text()).not.toContain("第三句");
     expect(wrapper.findAll('[data-testid="fulltext-pending-sentence"]')).toHaveLength(1);
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
+  });
+
+  it("offers audio only after submitting a correct answer and on completed sentences", async () => {
+    const { pinia, store } = setup();
+    const wrapper = mount(FulltextMode, {
+      global: {
+        plugins: [pinia],
+        components: { ModeClozeMode: ClozeMode },
+        stubs: { MainQuestionInput: true },
+      },
+    });
+    await flushPromises();
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual([]);
+    for (const pending of wrapper.findAll('[data-testid="fulltext-pending-sentence"]')) {
+      expect(pending.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    }
+    store.passCurrentStatement();
+    useGameMode().showAnswer();
+    await flushPromises();
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First."]);
+    store.advanceAfterCorrect();
+    useGameMode().showQuestion();
+    await flushPromises();
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First."]);
+    expect(
+      wrapper
+        .get('[data-testid="fulltext-current"]')
+        .find('[data-testid="sentence-audio-button"]')
+        .exists(),
+    ).toBe(false);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.fulltextCompleted).toBe(true);
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First.", "Future.", "Last."]);
+    expect(wrapper.findAll('[data-testid="sentence-audio-button"]')).toHaveLength(3);
+    expect(wrapper.find('[data-testid="fulltext-pending-sentence"]').exists()).toBe(false);
   });
 
   it("lists every directory position without revealing future answers or allowing jumps", async () => {
