@@ -203,6 +203,45 @@ describe("learning direction", () => {
     expect(store.statementIndex).toBe(17);
   });
 
+  it.each(["progressive", "sentence-first"] as const)(
+    "skips correct branches and recomputes them on a failed retry in %s mode",
+    async (mode) => {
+      course.statementIndex = 8;
+      course.learningMode = mode;
+      const store = await setup();
+      store.failCurrentStatement("A B");
+      expect(store.currentStatement?.unitId).toBe("0:3");
+      expect(store.currentCourse?.passedUnitIds).toBeUndefined();
+      expect(store.statementIndex).toBe(8);
+      store.passCurrentStatement();
+      store.advanceAfterCorrect();
+      expect(store.currentStatement?.unitId).toBe("0:4");
+
+      store.failCurrentStatement("A X C");
+      expect(store.currentStatement?.unitId).toBe("0:1");
+      store.failCurrentStatement(""); // A leaf stays in place.
+      expect(store.currentStatement?.unitId).toBe("0:1");
+      for (const id of ["0:2", "0:4"]) {
+        store.passCurrentStatement();
+        store.advanceAfterCorrect();
+        expect(store.currentStatement?.unitId).toBe(id);
+        expect(store.statementIndex).toBe(8);
+      }
+      store.passCurrentStatement();
+      store.advanceAfterCorrect();
+      expect(store.statementIndex).toBe(mode === "progressive" ? 9 : 17);
+      expect(store.isRecovering).toBe(false);
+    },
+  );
+
+  it("still reviews a historically passed branch when it is wrong in this attempt", async () => {
+    course.statementIndex = 8;
+    course.passedUnitIds = ["unit:0:2", "unit:0:3"];
+    const store = await setup();
+    store.failCurrentStatement("A B X");
+    expect(store.currentStatement?.unitId).toBe("0:3");
+  });
+
   it("switches a nested review to its last occurrence before the original base anchor", async () => {
     const store = await setup();
     store.toSpecificStatement(8);

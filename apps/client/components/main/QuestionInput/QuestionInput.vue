@@ -285,11 +285,12 @@ function cancelErrorReset() {
 
 function handleAnswerError() {
   cancelErrorReset();
+  const submittedInput = inputValue.value;
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
     void showPhoneticHint();
     clearInput();
-    courseStore.failCurrentStatement();
+    courseStore.failCurrentStatement(submittedInput);
   }, ERROR_FEEDBACK_DURATION_MS);
 }
 
