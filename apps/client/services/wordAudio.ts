@@ -50,3 +50,28 @@ export async function deleteWordAudioCache() {
   }
   await checkResponse(response);
 }
+
+export interface TtsStatus {
+  state: "starting" | "downloading" | "loading" | "ready" | "error";
+  message: string;
+  error?: string;
+}
+
+async function requestTtsStatus(path: string, init?: RequestInit): Promise<TtsStatus> {
+  let response: Response;
+  try {
+    response = await localServiceFetch(path, init);
+  } catch {
+    throw new Error("无法连接朗读服务，请启动本机服务后重试。");
+  }
+  await checkResponse(response);
+  return response.json();
+}
+
+export function getTtsStatus(signal?: AbortSignal) {
+  return requestTtsStatus("/api/tts/status", { signal });
+}
+
+export function retryTts(signal?: AbortSignal) {
+  return requestTtsStatus("/api/tts/retry", { method: "POST", signal });
+}

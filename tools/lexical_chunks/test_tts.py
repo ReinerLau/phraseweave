@@ -1,4 +1,8 @@
+import contextlib
+import io
+import hashlib
 import json
+import time
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -11,7 +15,8 @@ from unittest import TestCase, main
 from unittest.mock import Mock, patch
 
 import local_service
-from tts import AudioCache, normalize_sentence, normalize_word, synthesize
+import tts_worker
+from tts import AudioCache, KokoroRuntime, normalize_sentence, normalize_word
 
 
 class AudioCacheTests(TestCase):
@@ -127,20 +132,129 @@ class AudioCacheTests(TestCase):
         self.assertEqual(normalize_word("  NASA  "), "NASA")
         self.assertEqual(normalize_word("don’t"), "don't")
 
-    def test_sentence_worker_gets_the_extended_timeout(self):
-        with patch("tts.subprocess.run", return_value=Mock(returncode=0, stdout=b"mp3")) as run:
-            self.assertEqual(synthesize("Hello, world!", Path(sys.executable), kind="sentence"), b"mp3")
-            self.assertEqual(run.call_args.kwargs["timeout"], 60)
-            self.assertEqual(json.loads(run.call_args.kwargs["input"])["text"], "Hello, world!")
+    def test_old_edge_audio_is_retained_but_not_reused(self):
+        self.directory.mkdir()
+        key = hashlib.sha256(json.dumps([1, "hello", "en-US-AriaNeural", "+0%"]).encode()).hexdigest()
+        old = self.directory / f"{key}.mp3"
+        old.write_bytes(b"old-edge")
+        generate = Mock(return_value=b"kokoro")
+        cache = AudioCache(self.directory, generate)
+        self.assertEqual(cache.get("hello"), b"kokoro")
+        generate.assert_called_once_with("hello")
+        self.assertTrue(old.exists())
+        cache.clear()
+        self.assertEqual(list(self.directory.iterdir()), [])
 
-    def test_worker_timeout_and_failure_are_not_audio(self):
-        with patch("tts.subprocess.run", side_effect=subprocess.TimeoutExpired("tts", 20)) as run:
-            with self.assertRaisesRegex(RuntimeError, "超时"):
-                synthesize("hello", Path(sys.executable))
-            self.assertEqual(run.call_args.kwargs["timeout"], 20)
-        with patch("tts.subprocess.run", return_value=Mock(returncode=1, stdout=b"partial")):
-            with self.assertRaisesRegex(RuntimeError, "失败"):
-                synthesize("hello", Path(sys.executable))
+
+class KokoroRuntimeTests(TestCase):
+    def setUp(self):
+        self.directory = Path(self.enterContext(TemporaryDirectory()))
+        self.worker = self.directory / "worker.py"
+        self.worker.write_text('''import sys, json, base64, time
+from pathlib import Path
+print(json.dumps({"state":"ready","message":"ready"}), flush=True)
+for line in sys.stdin:
+    text = json.loads(line)["text"]
+    if text == "crash": sys.exit(1)
+    if text == "slow":
+        Path(__file__).with_suffix(".started").touch()
+        time.sleep(1)
+    if text == "invalid":
+        print(json.dumps({"audio":"not-base64"}), flush=True)
+    else:
+        print(json.dumps({"audio":base64.b64encode(text.encode()).decode()}), flush=True)
+''')
+        self.runtime = KokoroRuntime(Path(sys.executable), worker=self.worker, setup_timeout=2)
+        self.addCleanup(self.runtime.close)
+
+    def wait_for(self, predicate):
+        deadline = time.monotonic() + 3
+        while not predicate():
+            if time.monotonic() > deadline:
+                self.fail(f"Worker did not reach expected state: {self.runtime.status()}")
+            time.sleep(.01)
+
+    def ready(self):
+        self.runtime.start()
+        self.wait_for(lambda: self.runtime.status()["state"] == "ready")
+
+    def test_process_is_reused_and_repeated_starts_are_idempotent(self):
+        with self.assertRaisesRegex(RuntimeError, "准备"):
+            self.runtime.synthesize("hello")
+        self.ready()
+        process = self.runtime.process
+        with ThreadPoolExecutor(4) as pool:
+            list(pool.map(lambda _: self.runtime.start(), range(8)))
+        self.assertIs(self.runtime.process, process)
+        self.assertEqual(self.runtime.synthesize("hello"), b"hello")
+        self.assertEqual(self.runtime.synthesize("don't"), b"don't")
+        self.assertEqual(self.runtime.synthesize("Hello, world!", kind="sentence"), b"Hello, world!")
+        self.assertIs(self.runtime.process, process)
+        self.runtime.close()
+        self.assertIsNotNone(process.poll())
+
+    def test_initialization_failure_can_be_retried(self):
+        self.worker.write_text('import json; print(json.dumps({"state":"error","message":"下载失败"}), flush=True)')
+        self.runtime.start()
+        self.wait_for(lambda: self.runtime.status()["state"] == "error")
+        self.wait_for(lambda: self.runtime.process.poll() is not None)
+        self.assertEqual(self.runtime.status()["message"], "下载失败")
+        self.worker.write_text('import json,sys; print(json.dumps({"state":"ready","message":"ready"}),flush=True); sys.stdin.read()')
+        self.ready()
+
+    def test_setup_timeout_and_exit_or_invalid_audio_fail_without_hanging(self):
+        self.ready()
+        for text in ("crash", "invalid"):
+            with self.assertRaisesRegex(RuntimeError, "朗读进程"):
+                self.runtime.synthesize(text)
+            self.wait_for(lambda: self.runtime.process.poll() is not None)
+            self.ready()
+        self.runtime.close()
+        self.worker.write_text('import time; time.sleep(5)')
+        other = KokoroRuntime(Path(sys.executable), worker=self.worker, setup_timeout=.05)
+        self.addCleanup(other.close)
+        other.start()
+        self.wait_for(lambda: other.status()["state"] == "error")
+        self.assertIn("准备超时", other.status()["message"])
+
+    def test_busy_inference_and_timeout_recovery(self):
+        self.ready()
+        with ThreadPoolExecutor(1) as pool:
+            first = pool.submit(self.runtime.synthesize, "slow")
+            self.wait_for(lambda: self.worker.with_suffix(".started").exists())
+            with self.assertRaisesRegex(RuntimeError, "繁忙"):
+                self.runtime.synthesize("hello")
+            self.assertEqual(first.result(2), b"slow")
+        with patch("tts.TIMEOUT", .02):
+            with self.assertRaisesRegex(RuntimeError, "生成超时"):
+                self.runtime.synthesize("slow")
+        self.wait_for(lambda: self.runtime.process.poll() is not None)
+        self.assertIn("生成超时", self.runtime.status()["message"])
+        self.ready()
+        self.assertEqual(self.runtime.synthesize("recovered"), b"recovered")
+
+    def test_sentence_uses_60_second_timeout(self):
+        self.ready()
+        with patch("tts.Future.result", autospec=True, return_value=b"audio") as result:
+            self.assertEqual(self.runtime.synthesize("hello", kind="sentence"), b"audio")
+            self.assertEqual(result.call_args.kwargs["timeout"], 60)
+
+
+class WorkerErrorTests(TestCase):
+    def test_download_and_loading_failures_keep_their_actual_stage(self):
+        for error, message in ((tts_worker.ModelDownloadError("upstream 403"), "下载失败"),
+                               (ImportError("missing dependency"), "加载失败")):
+            output = io.StringIO()
+            with patch("tts_worker.prepare", side_effect=error), \
+                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(tts_worker.main(), 1)
+            self.assertIn(message, json.loads(output.getvalue())["message"])
+            self.assertNotIn("网络", json.loads(output.getvalue())["message"])
+
+    def test_no_samples_cannot_be_encoded_as_successful_audio(self):
+        # Use the installed encoder/torch, but a pipeline that yields no audio.
+        with self.assertRaisesRegex(RuntimeError, "empty audio"):
+            tts_worker.encode(lambda *args, **kwargs: iter(()), None, "hello")
 
 
 class TtsEndpointTests(TestCase):
@@ -149,6 +263,10 @@ class TtsEndpointTests(TestCase):
         self.generate = Mock(return_value=b"\xff\xfb\x90\x00\x00\xffaudio")
         self.enterContext(patch("local_service.TTS_CACHE", AudioCache(directory / "tts", self.generate)))
         self.enterContext(patch("local_service.DESKTOP_TOKEN", ""))
+        self.runtime = Mock()
+        self.runtime.status.return_value = {"state": "downloading", "message": "正在下载朗读模型"}
+        self.runtime.start.return_value = {"state": "starting", "message": "正在启动"}
+        self.enterContext(patch("local_service.TTS_RUNTIME", self.runtime))
         self.enterContext(patch("local_service.INITIALIZATION", {"state": "starting"}))
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), local_service.Handler)
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
@@ -169,6 +287,17 @@ class TtsEndpointTests(TestCase):
             return response.status, response.getheader("Content-Type"), response.read()
         finally:
             connection.close()
+
+    def test_status_retry_and_environment_failure_are_independent_of_translation(self):
+        status, _, body = self.request("GET", path="/api/tts/status")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["state"], "downloading")
+        self.assertEqual(self.request(path="/api/tts/retry")[0], 503)
+        self.runtime.start.assert_not_called()
+        with patch("local_service.INITIALIZATION", {"state": "ready"}):
+            self.assertEqual(self.request(path="/api/tts/retry", origin="https://example.com")[0], 403)
+            self.assertEqual(self.request(path="/api/tts/retry")[0], 200)
+        self.runtime.start.assert_called_once()
 
     def test_binary_audio_cache_and_clear_without_translation_initialization(self):
         status, content_type, body = self.request()

@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR, TRANSLATION_PROVIDERS
-from tts import AudioCache, synthesize
+from tts import AudioCache, KokoroRuntime
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -42,10 +42,11 @@ DATA_DIR = Path(os.environ.get(
     str(Path.home() / "Library" / "Application Support" / "PhraseWeave"),
 ))
 DATABASE_PATH = DATA_DIR / "phraseweave.sqlite3"
+TTS_RUNTIME = KokoroRuntime(PYTHON)
 TTS_CACHE = AudioCache(
     DATA_DIR / "tts",
-    lambda word: synthesize(word, PYTHON),
-    lambda sentence: synthesize(sentence, PYTHON, kind="sentence"),
+    lambda word: TTS_RUNTIME.synthesize(word),
+    lambda sentence: TTS_RUNTIME.synthesize(sentence, kind="sentence"),
 )
 JOBS: dict[str, dict[str, Any]] = {}
 JOBS_LOCK = threading.Lock()
@@ -337,6 +338,9 @@ class Handler(BaseHTTPRequestHandler):
                 ).fetchone()
             self._json({"item": json.loads(row[0]) if row else None})
             return
+        if parsed.path == "/api/tts/status":
+            self._json(TTS_RUNTIME.status())
+            return
         if parsed.path == "/api/status":
             self._json({
                 "runtimeReady": getattr(sys, "frozen", False) or PYTHON.is_file(),
@@ -399,6 +403,12 @@ class Handler(BaseHTTPRequestHandler):
         global ACTIVE_JOB
         if not self._desktop_authorized() or (not DESKTOP_TOKEN and not self._valid_origin()):
             self._json({"error": "Origin is not allowed."}, 403)
+            return
+        if urlparse(self.path).path == "/api/tts/retry":
+            if INITIALIZATION["state"] != "ready":
+                self._json({"error": "朗读环境尚未就绪，请等待初始化完成；失败时请重启本机服务。"}, 503)
+                return
+            self._json(TTS_RUNTIME.start())
             return
         if urlparse(self.path).path == "/api/tts":
             try:
@@ -577,8 +587,10 @@ def _initialize_in_background() -> None:
         _set_initialization("downloading", "Preparing the local Python environment…")
         _initialize_runtime()
         _set_initialization("ready", "Local generator is ready")
+        TTS_RUNTIME.start()
     except Exception as error:
         _set_initialization("error", "Local generator setup failed", str(error))
+        TTS_RUNTIME.environment_failed()
 
 
 def run_desktop_service() -> None:
@@ -593,7 +605,11 @@ def run_desktop_service() -> None:
         server = ThreadingHTTPServer((HOST, 0), Handler)
     print(json.dumps({"type": "ready", "port": server.server_port}), flush=True)
     threading.Thread(target=_initialize_in_background, daemon=True).start()
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        TTS_RUNTIME.close()
+        server.server_close()
 
 
 if __name__ == "__main__":
@@ -605,4 +621,10 @@ if __name__ == "__main__":
     _set_initialization("ready", "Local generator is ready")
     print(f"PhraseWeave generator service: http://{HOST}:{PORT}", flush=True)
     print("Keep this terminal open while using the /generator route.", flush=True)
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    TTS_RUNTIME.start()
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    try:
+        server.serve_forever()
+    finally:
+        TTS_RUNTIME.close()
+        server.server_close()

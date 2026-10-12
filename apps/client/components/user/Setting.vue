@@ -54,6 +54,25 @@
             </td>
           </tr>
           <tr class="hover">
+            <td class="label-text">本地朗读（美式女声，正常语速）</td>
+            <td class="text-center">
+              <p
+                class="text-sm"
+                role="status"
+              >
+                {{ ttsStatus.error || ttsStatus.message }}
+              </p>
+              <button
+                v-if="ttsStatus.state === 'error'"
+                class="btn btn-outline btn-secondary btn-sm mt-2"
+                :disabled="retryingTts"
+                @click="retryLocalTts"
+              >
+                {{ retryingTts ? "正在重试…" : "重试朗读准备" }}
+              </button>
+            </td>
+          </tr>
+          <tr class="hover">
             <td class="label-text">朗读缓存（单词与整句，保留至手动清理）</td>
             <td class="text-center">
               <button
@@ -159,8 +178,11 @@ import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { useTtsStatus } from "~/composables/useTtsStatus";
 import { clearWordAudioCache } from "~/composables/useWordAudio";
 import { parseShortcutKeys } from "~/utils/keyboardShortcuts";
+
+const { status: ttsStatus, retrying: retryingTts, retry: retryLocalTts } = useTtsStatus();
 
 const clearingAudioCache = ref(false);
 const cacheMessage = ref("");

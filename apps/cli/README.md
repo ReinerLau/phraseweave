@@ -11,6 +11,7 @@ phraseweave
 ```
 
 Open the fixed local URL `http://127.0.0.1:3000/` printed by the command. If port 3000 is occupied, startup fails with an error; the CLI never switches to another port. The first start downloads Python dependencies.
+After dependency setup, the service prepares Kokoro v1.0 audio in the background (about 328 MB). The sound settings show preparation status and offer retry. The fixed `af_heart` American voice runs on the Mac CPU; once prepared, new words and sentences work offline. Phones share the generated MP3s. Clearing audio caches preserves model resources.
 Translation defaults to local Hy-MT2, downloaded on the first local generation. You can select Index-Translate in the generator instead; it sends English sentences to Bilibili's public API without downloading Hy-MT2. The page remembers the current browser's provider choice. Public requests time out after 30 seconds per sentence; failures are shown without automatic fallback.
 The server listens only on `127.0.0.1`; press Ctrl-C to stop it.
 Exercises, exercise catalogs, and progress are stored in

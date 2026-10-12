@@ -154,6 +154,8 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
           (request.method === "DELETE" && /^\/api\/local-exercises\/[^/]+$/.test(url.pathname));
         const valid =
           (request.method === "POST" && url.pathname === "/api/tts") ||
+          (request.method === "GET" && url.pathname === "/api/tts/status") ||
+          (request.method === "POST" && url.pathname === "/api/tts/retry") ||
           (request.method === "DELETE" && url.pathname === "/api/tts/cache") ||
           (request.method === "GET" && url.pathname === "/api/status") ||
           (request.method === "POST" && url.pathname === "/api/generate") ||
