@@ -213,6 +213,38 @@ describe("FulltextMode", () => {
     expect(fulltext.text()).not.toContain("第三句");
   });
 
+  it("marks and enables the unfinished return target without revealing its answer", async () => {
+    const { pinia, store } = setup();
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    const wrapper = mount(Contents, { global: { plugins: [pinia] } });
+    const fulltext = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    await wrapper.findAll("button")[0].trigger("click");
+    await flushPromises();
+    const buttons = wrapper.findAll("button");
+    expect(buttons[1].text()).toContain("继续练习");
+    expect(buttons[1].text()).toContain("____");
+    expect(buttons[1].text()).not.toContain("Future");
+    expect(buttons[1].attributes("disabled")).toBeUndefined();
+    expect(buttons[2].attributes("disabled")).toBeDefined();
+    expect(fulltext.text()).not.toContain("Future");
+    const scroll = fulltext.element as HTMLElement;
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 600 });
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(1000);
+    scroll.scrollTop = 420;
+    await buttons[1].trigger("click");
+    await flushPromises();
+    expect(store.statementIndex).toBe(1);
+    expect(scroll.scrollTop).toBe(904);
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.isStatementPassed(store.baseStatements[1])).toBe(false);
+    expect(buttons[1].attributes("disabled")).toBeDefined();
+    expect(fulltext.findAll('[data-testid="fulltext-pending-sentence"]')).toHaveLength(1);
+  });
+
   it("keeps single-view directory navigation available for unpassed questions", async () => {
     const { pinia, store } = setup();
     store.currentCourse!.practiceView = "single";

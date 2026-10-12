@@ -337,6 +337,16 @@ describe("QuestionInput", () => {
     await vi.advanceTimersByTimeAsync(300);
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
     expect(store.advanceAfterCorrect()).toBe(false);
+    await input.setValue("Birds");
+    useAnswerTip().showAnswerTip();
+    await contents.findAll("button")[0].trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(store.statementIndex).toBe(0);
+    expect(store.currentStatement?.english).toBe("I eat");
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    expect(document.activeElement).toBe(input.element);
+    expect(store.advanceAfterCorrect()).toBe(false);
   });
 
   it("keeps the original sentence punctuation visible before input, in tips, and after input", async () => {

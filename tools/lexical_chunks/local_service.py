@@ -214,10 +214,11 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
         if (
             previous.get("learningMode") in ("progressive", "sentence-first")
             or previous.get("practiceView") in ("single", "fulltext")
+            or "resumeStatementIndex" in previous
         ):
             # Full-pack writes (e.g. completion) must not restore a stale mode or cursor.
             course["statementIndex"] = previous.get("statementIndex", 0)
-            for key in ("learningMode", "sentenceFirstStartIndex", "practiceView"):
+            for key in ("learningMode", "sentenceFirstStartIndex", "practiceView", "resumeStatementIndex"):
                 course.pop(key, None)
                 if key in previous:
                     course[key] = previous[key]
@@ -540,6 +541,14 @@ class Handler(BaseHTTPRequestHandler):
                             if index >= len(course.get("statements", [])):
                                 raise ValueError("Statement index is invalid.")
                             course["practiceView"] = view
+                        if "resumeStatementIndex" in payload:
+                            resume_index = payload["resumeStatementIndex"]
+                            if resume_index is not None and (
+                                not isinstance(resume_index, int) or isinstance(resume_index, bool)
+                                or resume_index < 0 or resume_index >= len(course.get("statements", []))
+                            ):
+                                raise ValueError("Resume statement index is invalid.")
+                            course["resumeStatementIndex"] = resume_index
                     else:
                         unit_key = payload.get("unitKey")
                         if not isinstance(unit_key, str) or not unit_key:

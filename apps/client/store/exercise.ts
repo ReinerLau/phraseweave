@@ -50,6 +50,8 @@ export interface Course {
   completionCount: number;
   /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
+  /** Unfinished base question in the original statements; null after completing a run. */
+  resumeStatementIndex?: number | null;
   passedUnitIds?: string[];
   learningMode?: LearningMode;
   practiceView?: PracticeView;
@@ -122,6 +124,23 @@ export const useExerciseStore = defineStore("exercise", () => {
     questionIndices.value.map((index) => currentCourse.value!.statements[index]),
   );
   const questionIndex = computed(() => questionIndices.value.indexOf(statementIndex.value));
+  const resumeQuestionIndex = computed(() => {
+    const index = currentCourse.value?.resumeStatementIndex;
+    return index === null ? -1 : questionIndices.value.indexOf(index ?? statementIndex.value);
+  });
+
+  function normalizeResumeStatementIndex(fallback: number) {
+    const course = currentCourse.value;
+    if (!course || course.resumeStatementIndex === null) return;
+    const index = course.resumeStatementIndex;
+    course.resumeStatementIndex =
+      index !== undefined &&
+      Number.isInteger(index) &&
+      index >= 0 &&
+      index < course.statements.length
+        ? questionIndices.value.find((candidate) => candidate >= index) ?? fallback
+        : fallback;
+  }
 
   const { updateActiveCourseMap } = useActiveCourseMap();
 
@@ -152,40 +171,44 @@ export const useExerciseStore = defineStore("exercise", () => {
       Number.isInteger(index) &&
       statement !== undefined &&
       index !== questionIndex.value &&
-      (!isFulltext.value || isStatementPassed(statement))
+      (!isFulltext.value || isStatementPassed(statement) || index === resumeQuestionIndex.value)
     );
   }
 
   function toSpecificStatement(index: number) {
     if (isFulltext.value && !canJumpToStatement(index)) return false;
-    setQuestionIndex(index);
+    setQuestionIndex(index, !isFulltext.value);
     return true;
   }
 
   function toPreviousStatement() {
     if (isFulltext.value) return;
-    setQuestionIndex(questionIndex.value - 1);
+    setQuestionIndex(questionIndex.value - 1, true);
   }
 
   function toNextStatement() {
     if (isFulltext.value) return;
-    setQuestionIndex(questionIndex.value + 1);
+    setQuestionIndex(questionIndex.value + 1, true);
   }
 
   function resetStatementIndex() {
     if (isFulltext.value) return;
-    setQuestionIndex(0);
+    setQuestionIndex(0, true);
   }
 
-  function setQuestionIndex(index: number) {
+  function setQuestionIndex(index: number, updateResume = false) {
     const lastIndex = Math.max(0, totalQuestionsCount.value - 1);
     const nextIndex = Number.isFinite(index)
       ? Math.min(Math.max(0, Math.trunc(index)), lastIndex)
       : 0;
-    setStatementIndex(questionIndices.value[nextIndex] ?? 0);
+    const originalIndex = questionIndices.value[nextIndex] ?? 0;
+    if (updateResume && currentCourse.value)
+      currentCourse.value.resumeStatementIndex = originalIndex;
+    setStatementIndex(originalIndex);
   }
 
   function setStatementIndex(index: number) {
+    normalizeResumeStatementIndex(statementIndex.value);
     cancelRecovery();
     fulltextCompleted.value = false;
     statementIndex.value = index;
@@ -201,11 +224,13 @@ export const useExerciseStore = defineStore("exercise", () => {
   function persistProgress() {
     const course = currentCourse.value;
     if (!course) return;
+    normalizeResumeStatementIndex(statementIndex.value);
     const index = statementIndex.value;
     const state = {
       learningMode: learningMode.value,
       sentenceFirstStartIndex: course.sentenceFirstStartIndex ?? null,
       practiceView: practiceView.value,
+      resumeStatementIndex: course.resumeStatementIndex ?? null,
     };
     pendingProgressWrite = pendingProgressWrite
       .then(() => saveLocalExerciseProgress(course.coursePackId, course.id, index, state))
@@ -237,8 +262,10 @@ export const useExerciseStore = defineStore("exercise", () => {
       if (occurrence === undefined) return false;
       index = occurrence;
     }
+    normalizeResumeStatementIndex(statementIndex.value);
     course.learningMode = mode;
     course.sentenceFirstStartIndex = mode === "sentence-first" ? index : undefined;
+    normalizeResumeStatementIndex(index);
     setStatementIndex(index);
     return true;
   }
@@ -271,9 +298,18 @@ export const useExerciseStore = defineStore("exercise", () => {
       return false;
     }
     refreshCurrentStatement();
+    const course = currentCourse.value;
+    normalizeResumeStatementIndex(statementIndex.value);
     if (questionIndex.value >= totalQuestionsCount.value - 1) {
       fulltextCompleted.value = isFulltext.value;
+      if (course) {
+        course.resumeStatementIndex = null;
+        persistProgress();
+      }
       return true;
+    }
+    if (course?.resumeStatementIndex === statementIndex.value) {
+      course.resumeStatementIndex = questionIndices.value[questionIndex.value + 1];
     }
     setQuestionIndex(questionIndex.value + 1);
     return false;
@@ -286,7 +322,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function doAgain() {
     if (currentCourse.value) currentCourse.value.sentenceFirstStartIndex = undefined;
-    setQuestionIndex(0);
+    setQuestionIndex(0, true);
     updateActiveCourseMap(currentCourse.value?.coursePackId!, currentCourse.value?.id!);
   }
 
@@ -320,6 +356,11 @@ export const useExerciseStore = defineStore("exercise", () => {
     const course = currentCourse.value;
     if (!course) return { nextCourse: undefined };
     if (isFulltext.value && !fulltextCompleted.value) return { nextCourse: undefined };
+
+    if (course.resumeStatementIndex !== null) {
+      course.resumeStatementIndex = null;
+      persistProgress();
+    }
 
     await pendingPassedWrite;
     await pendingProgressWrite;
@@ -370,6 +411,7 @@ export const useExerciseStore = defineStore("exercise", () => {
           questionIndices.value[0];
       }
     }
+    normalizeResumeStatementIndex(course.statementIndex);
     unitStatements.clear();
     sourcesByUnitId.clear();
     const firstUnitOrder = new Map<string, number>();
@@ -412,6 +454,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     switchPracticeView,
     baseStatements,
     questionIndex,
+    resumeQuestionIndex,
     switchLearningMode,
     isRecovering,
     canDecomposeCurrentUnit,

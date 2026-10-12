@@ -197,6 +197,7 @@ describe("fulltext practice", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: null,
       practiceView: "fulltext",
+      resumeStatementIndex: 8,
     });
     setActivePinia(createPinia());
     store = await setup();
@@ -224,6 +225,135 @@ describe("fulltext practice", () => {
     expect(store.statementIndex).toBe(2);
     correct(store);
     expect(store.statementIndex).toBe(3);
+  });
+
+  it.each(["sentence-first", "progressive"] as const)(
+    "retains the unfinished position while reviewing multiple questions in %s mode",
+    async (mode) => {
+      course.learningMode = mode;
+      course.statementIndex = 17;
+      course.passedUnitIds = ["unit:0:A", "unit:0:B", "unit:0:ABC"];
+      let store = await setup();
+      const review = mode === "sentence-first" ? 0 : 2;
+      const resume = mode === "sentence-first" ? 1 : 17;
+      expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+      expect(store.toSpecificStatement(review)).toBe(true);
+      expect(store.canJumpToStatement(resume)).toBe(true);
+      correct(store);
+      expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+      if (mode === "progressive") {
+        correct(store);
+        expect(store.toSpecificStatement(8)).toBe(true);
+      }
+      expect(store.toSpecificStatement(review)).toBe(true);
+      await flushPromises();
+      expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith(
+        "pack",
+        "course",
+        mode === "sentence-first" ? 8 : 2,
+        {
+          learningMode: mode,
+          sentenceFirstStartIndex: null,
+          practiceView: "fulltext",
+          resumeStatementIndex: 17,
+        },
+      );
+      setActivePinia(createPinia());
+      store = await setup();
+      expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+      expect(store.canJumpToStatement(resume)).toBe(true);
+      expect(store.toSpecificStatement(resume)).toBe(true);
+      expect(store.currentStatement?.id).toBe("1-row-8");
+      expect(store.advanceAfterCorrect()).toBe(false);
+      expect(course.passedUnitIds).not.toContain("unit:1:ABC");
+      expect(store.canJumpToStatement(mode === "sentence-first" ? 2 : 18)).toBe(false);
+      store.failCurrentStatement();
+      expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+      while (store.isRecovering) {
+        correct(store);
+        if (store.isRecovering) expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+      }
+      expect(store.statementIndex).toBe(mode === "sentence-first" ? 26 : 18);
+      expect(store.currentCourse?.resumeStatementIndex).toBe(store.statementIndex);
+    },
+  );
+
+  it("returns to an unfinished final question, clears the marker on completion and resets it on restart", async () => {
+    course.statementIndex = 26;
+    course.passedUnitIds = ["unit:0:ABC"];
+    const store = await setup();
+    store.toSpecificStatement(0);
+    expect(store.toSpecificStatement(2)).toBe(true);
+    expect(store.advanceAfterCorrect()).toBe(false);
+    await store.completeCourse();
+    expect(saveLocalExercise).not.toHaveBeenCalled();
+    expect(correct(store)).toBe(true);
+    expect(store.currentCourse?.resumeStatementIndex).toBeNull();
+    expect(store.resumeQuestionIndex).toBe(-1);
+    await flushPromises();
+    expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith(
+      "pack",
+      "course",
+      26,
+      expect.objectContaining({ resumeStatementIndex: null }),
+    );
+    await store.completeCourse();
+    expect(saveLocalExercise).toHaveBeenCalledOnce();
+    store.doAgain();
+    expect(store.currentCourse?.resumeStatementIndex).toBe(8);
+    expect(store.resumeQuestionIndex).toBe(0);
+  });
+
+  it("keeps the return position on view switches and maps a removed chunk to its whole sentence", async () => {
+    course.learningMode = "progressive";
+    course.statementIndex = 12;
+    course.passedUnitIds = ["unit:0:A"];
+    const store = await setup();
+    store.toSpecificStatement(0);
+    store.switchPracticeView("single");
+    store.switchPracticeView("fulltext");
+    expect(store.currentCourse?.resumeStatementIndex).toBe(12);
+    store.switchLearningMode("sentence-first");
+    expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+    expect(store.resumeQuestionIndex).toBe(2); // Starting A, first whole, second whole.
+    expect(store.canJumpToStatement(2)).toBe(true);
+    store.switchLearningMode("progressive");
+    expect(store.currentCourse?.resumeStatementIndex).toBe(17);
+    expect(store.toSpecificStatement(17)).toBe(true);
+  });
+
+  it("updates the return position on every manual single-view navigation", async () => {
+    course.practiceView = "single";
+    course.learningMode = "progressive";
+    const store = await setup();
+    store.toSpecificStatement(12);
+    expect(course.resumeStatementIndex).toBe(12);
+    store.toPreviousStatement();
+    expect(course.resumeStatementIndex).toBe(11);
+    store.toNextStatement();
+    expect(course.resumeStatementIndex).toBe(12);
+    store.resetStatementIndex();
+    expect(course.resumeStatementIndex).toBe(0);
+  });
+
+  it.each([undefined, -1, 100, 1.5, NaN, Infinity])(
+    "initializes a missing or invalid return position (%s) from the normalized current question",
+    async (resume) => {
+      course.statementIndex = 12;
+      course.resumeStatementIndex = resume;
+      const store = await setup();
+      expect(store.statementIndex).toBe(17);
+      expect(course.resumeStatementIndex).toBe(17);
+    },
+  );
+
+  it("preserves an explicitly completed run on reload", async () => {
+    course.resumeStatementIndex = null;
+    course.statementIndex = 8;
+    const store = await setup();
+    expect(store.resumeQuestionIndex).toBe(-1);
+    expect(course.resumeStatementIndex).toBeNull();
+    expect(store.canJumpToStatement(1)).toBe(false);
   });
 
   it("preserves nested recovery and the original anchor when switching only the view", async () => {
@@ -300,6 +430,7 @@ describe("fulltext practice", () => {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
       practiceView: "fulltext",
+      resumeStatementIndex: 12,
     });
   });
 
@@ -329,6 +460,7 @@ describe("fulltext practice", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: null,
       practiceView: "fulltext",
+      resumeStatementIndex: 8,
     });
   });
 

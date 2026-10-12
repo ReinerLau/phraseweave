@@ -240,6 +240,55 @@ class ExerciseProgressEndpointTests(TestCase):
         self.assertEqual(self.stored_course()["practiceView"], "fulltext")
         self.assertEqual(self.stored_course()["statementIndex"], 0)
 
+    def test_return_position_survives_review_stale_writes_and_export(self):
+        status, _ = self.request("PUT", "/api/local-exercises/pack/progress", {
+            "courseId": "course", "statementIndex": 2, "learningMode": "progressive",
+            "practiceView": "fulltext", "resumeStatementIndex": 8,
+        })
+        self.assertEqual(status, 200)
+        self.pack["courses"][0]["resumeStatementIndex"] = 3
+        self.pack["courses"][0]["completionCount"] = 1
+        self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+        self.request("PUT", "/api/local-exercises/pack/passed-units", {
+            "courseId": "course", "unitKey": "unit:new",
+        })
+        self.assertEqual(self.progress(0, "sentence-first")[0], 200)
+        status, body = self.request("GET", "/api/local-exercises")
+        self.assertEqual(status, 200)
+        saved = body["items"][0]["courses"][0]
+        self.assertEqual(saved["statementIndex"], 0)
+        self.assertEqual(saved["resumeStatementIndex"], 8)
+        self.assertEqual(saved["completionCount"], 1)
+        self.assertEqual(saved["passedUnitIds"], ["unit:old", "unit:new"])
+
+    def test_return_position_can_be_cleared_and_restarted_without_stale_restoration(self):
+        for cursor, resume in ((8, None), (0, 0)):
+            with self.subTest(resume=resume):
+                status, _ = self.request("PUT", "/api/local-exercises/pack/progress", {
+                    "courseId": "course", "statementIndex": cursor,
+                    "resumeStatementIndex": resume,
+                })
+                self.assertEqual(status, 200)
+                self.pack["courses"][0]["resumeStatementIndex"] = 3
+                self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+                self.assertEqual(self.stored_course()["resumeStatementIndex"], resume)
+                self.assertEqual(self.stored_course()["statementIndex"], cursor)
+
+    def test_invalid_return_position_is_atomic(self):
+        for resume in (-1, 9, 1.5, True, "3"):
+            with self.subTest(resume=resume):
+                status, _ = self.request("PUT", "/api/local-exercises/pack/progress", {
+                    "courseId": "course", "statementIndex": 0,
+                    "learningMode": "progressive", "practiceView": "fulltext",
+                    "resumeStatementIndex": resume,
+                })
+                self.assertEqual(status, 400)
+                saved = self.stored_course()
+                self.assertEqual(saved["statementIndex"], 8)
+                self.assertNotIn("resumeStatementIndex", saved)
+                self.assertNotIn("learningMode", saved)
+                self.assertNotIn("practiceView", saved)
+
     def test_invalid_practice_view_is_atomic(self):
         for view in ("unknown", None, True):
             with self.subTest(view=view):

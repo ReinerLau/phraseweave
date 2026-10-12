@@ -27,6 +27,12 @@
             <div class="truncate">
               {{ coursesStore.isStatementPassed(item.data) ? item.data.english : "____" }}
             </div>
+            <span
+              v-if="coursesStore.isFulltext && item.index === coursesStore.resumeQuestionIndex"
+              class="text-xs text-fuchsia-500"
+            >
+              继续练习
+            </span>
           </div>
         </div>
       </button>
