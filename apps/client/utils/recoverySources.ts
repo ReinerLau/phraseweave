@@ -1,13 +1,27 @@
 import type { Statement } from "~/store/exercise";
 import type { RecoverySources } from "~/store/reviewRecovery";
-import { normalizeClozeInput, normalizeClozeWord, tokenizeClozeText } from "./clozeText";
+import {
+  getClozeWords,
+  normalizeClozeInput,
+  normalizeClozeWord,
+  tokenizeClozeText,
+} from "./clozeText";
 
 function wordSpans(statement: Statement) {
   let offset = statement.contextBefore!.length;
   return tokenizeClozeText(statement.english).flatMap((token) => {
     const start = offset;
     offset += token.text.length;
-    return token.kind === "word" ? [{ text: token.text, start, end: offset }] : [];
+    if (token.kind !== "word") return [];
+    // The generator can split woman's into woman + 's. Keep cloze answer indices,
+    // but position each apostrophe-separated part so both source units can match.
+    return [...token.text.matchAll(/[^'‘’]+/gu)].map((part, partIndex) => ({
+      text: part[0],
+      start: start + part.index!,
+      end: start + part.index! + part[0].length,
+      wordIndex: token.wordIndex,
+      partIndex,
+    }));
   });
 }
 
@@ -30,13 +44,17 @@ export function buildRecoverySteps(
     return undefined;
 
   const words = wordSpans(statement);
-  const answer = normalizeClozeInput(
-    input,
-    words.map((word) => word.text),
-  ).split(" ");
-  const errors = words.filter(
-    (word, index) => normalizeClozeWord(word.text) !== normalizeClozeWord(answer[index] ?? ""),
-  );
+  const targetWords = getClozeWords(statement.english);
+  const answer = normalizeClozeInput(input, targetWords).split(" ");
+  const errors = words.filter((word) => {
+    const expectedParts = normalizeClozeWord(targetWords[word.wordIndex]).split("'");
+    const answerParts = normalizeClozeWord(answer[word.wordIndex] ?? "").split("'");
+    // A missing/extra apostrophe cannot reliably identify just one part.
+    return (
+      expectedParts.length !== answerParts.length ||
+      normalizeClozeWord(word.text) !== answerParts[word.partIndex]
+    );
+  });
   if (!errors.length) return undefined;
 
   const start = statement.contextBefore!.length;
@@ -55,7 +73,7 @@ export function buildRecoverySteps(
     const sourceEnd = sourceStart + source.english.length;
     if (sourceStart < parentStart || sourceEnd > parentEnd) return undefined;
     const spans = wordSpans(source);
-    // Sources must cover complete answer tokens, including internal apostrophes.
+    // Sources must cover complete words or their apostrophe-separated parts.
     if (!spans.length || spans.some((span) => !targetSpans.has(spanKey(span)))) return undefined;
     return { id, source, start: sourceStart, end: sourceEnd, spans };
   }
