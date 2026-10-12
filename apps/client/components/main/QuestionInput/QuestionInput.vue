@@ -12,54 +12,33 @@
     >
       <ClozeText :tokens="courseStore.clozeTokens">
         <template #word="{ token }">
-          <span class="question-word-frame">
-            <span
-              v-if="phoneticSyllables && token.wordIndex === 0"
-              class="phonetic-hint text-slate-500 dark:text-slate-300"
-              data-testid="phonetic-hint"
-              role="status"
-              aria-label="音标提示"
-            >
-              <span
-                v-for="(syllable, index) in phoneticSyllables"
-                :key="index"
-                class="phonetic-syllable"
-              >
-                <span
-                  v-if="index > 0"
-                  aria-hidden="true"
-                  >· </span
-                >/{{ syllable }}/
-              </span>
-            </span>
-            <span
-              class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
-              :class="[
-                getWordsClassNames(token.wordIndex),
-                {
-                  'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
-                  'speech-hover': hoveredWordIndex === token.wordIndex,
-                  'speech-loading':
-                    loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
-                    questionInputWordsEl?.contains(loadingElement),
-                },
-              ]"
-              :data-word-index="token.wordIndex"
-              :data-speech-text="displayedWord(token.wordIndex, token.text)"
-              :title="
-                isSpeakableWord(displayedWord(token.wordIndex, token.text))
-                  ? `朗读 ${displayedWord(token.wordIndex, token.text)}`
-                  : undefined
-              "
-              :aria-busy="
-                (loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
-                  questionInputWordsEl?.contains(loadingElement)) ||
-                undefined
-              "
-              :style="{ width: `${inputWidth(token.wordIndex)}em` }"
-            >
-              {{ displayedWord(token.wordIndex, token.text) }}
-            </span>
+          <span
+            class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
+            :class="[
+              getWordsClassNames(token.wordIndex),
+              {
+                'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
+                'speech-hover': hoveredWordIndex === token.wordIndex,
+                'speech-loading':
+                  loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                  questionInputWordsEl?.contains(loadingElement),
+              },
+            ]"
+            :data-word-index="token.wordIndex"
+            :data-speech-text="displayedWord(token.wordIndex, token.text)"
+            :title="
+              isSpeakableWord(displayedWord(token.wordIndex, token.text))
+                ? `朗读 ${displayedWord(token.wordIndex, token.text)}`
+                : undefined
+            "
+            :aria-busy="
+              (loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                questionInputWordsEl?.contains(loadingElement)) ||
+              undefined
+            "
+            :style="{ width: `${inputWidth(token.wordIndex)}em` }"
+          >
+            {{ displayedWord(token.wordIndex, token.text) }}
           </span>
         </template>
       </ClozeText>
@@ -120,8 +99,7 @@ import {
 import { useTypingSound } from "./useTypingSound";
 
 defineProps<{ inline?: boolean }>();
-const emit = defineEmits<{ "hint-change": [] }>();
-const phoneticSyllables = ref<string[]>();
+const emit = defineEmits<{ "hint-change": [syllables: string[] | undefined] }>();
 let hintSequence = 0;
 
 const courseStore = useExerciseStore();
@@ -184,8 +162,7 @@ onUnmounted(() => {
 
 function clearPhoneticHint() {
   hintSequence++;
-  phoneticSyllables.value = undefined;
-  emit("hint-change");
+  emit("hint-change", undefined);
 }
 
 async function showPhoneticHint() {
@@ -196,8 +173,7 @@ async function showPhoneticHint() {
   try {
     const syllables = await lookupPronunciation(word);
     if (request !== hintSequence) return;
-    phoneticSyllables.value = syllables;
-    emit("hint-change");
+    emit("hint-change", syllables);
   } catch {
     // A missing resource never interrupts answering or error recovery.
   }
@@ -439,29 +415,5 @@ function preventCursorMove(event: MouseEvent) {
   display: inline-flex;
   width: fit-content;
   vertical-align: bottom;
-}
-
-.question-word-frame {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  min-width: 0;
-  max-width: 100%;
-}
-.phonetic-hint {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.12em 0.3em;
-  max-width: 100%;
-  margin-bottom: 0.35em;
-  font-family: "Arial", "Helvetica", sans-serif;
-  font-size: 0.48em;
-  line-height: 1.35;
-}
-.phonetic-syllable {
-  white-space: nowrap;
 }
 </style>

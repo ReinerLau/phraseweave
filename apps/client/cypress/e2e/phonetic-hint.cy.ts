@@ -77,15 +77,23 @@ function seed(word: string, fulltext: boolean, dark: boolean) {
 function assertLayout() {
   cy.get('[data-testid="phonetic-hint"]')
     .should("be.visible")
-    .then(($hint) => {
+    .should(($hint) => {
       const hint = $hint[0].getBoundingClientRect();
-      cy.get(".question-input-word").then(($word) => {
-        const word = $word[0].getBoundingClientRect();
-        expect(hint.bottom).to.be.at.most(word.top + 1);
-        expect(
-          Math.abs((hint.left + hint.right) / 2 - (word.left + word.right) / 2),
-        ).to.be.lessThan(2);
-      });
+      const root = $hint[0].closest(".question-content-flow")!;
+      const prompt = root.querySelector('[data-testid="question-prompt"]')!;
+      const sentence = root.querySelector('[data-testid="cloze-sentence"]')!;
+      const word = root.querySelector(".question-input-word")!;
+      const styles = window.getComputedStyle($hint[0]);
+      expect(hint.top).to.be.at.least(prompt.getBoundingClientRect().bottom - 1);
+      expect(hint.bottom).to.be.at.most(sentence.getBoundingClientRect().top + 1);
+      expect(Math.abs(hint.left - root.getBoundingClientRect().left)).to.be.lessThan(1);
+      expect(Math.abs(hint.width - root.getBoundingClientRect().width)).to.be.lessThan(1);
+      expect(parseFloat(styles.fontSize)).to.be.at.least(20);
+      expect(parseFloat(styles.fontSize)).to.be.at.least(
+        parseFloat(window.getComputedStyle(word).fontSize),
+      );
+      expect($hint[0].closest(".question-input-shell")).to.equal(null);
+      expect($hint[0].scrollWidth).to.be.at.most($hint[0].clientWidth + 1);
     });
   cy.get('[data-testid="cloze-sentence"]').should(($sentence) => {
     expect($sentence[0].scrollWidth).to.be.at.most($sentence[0].clientWidth + 1);
@@ -104,7 +112,7 @@ describe("phonetic spelling hint and original sentence audio", () => {
     [320, true, false],
     [1440, true, true],
   ] as const) {
-    it(`places syllables above the word (${width}px, fulltext=${fulltext}, dark=${dark})`, () => {
+    it(`places a large independent pronunciation row (${width}px, fulltext=${fulltext}, dark=${dark})`, () => {
       cy.viewport(width, 800);
       seed("computer", fulltext, dark);
       cy.get('[data-testid="phonetic-hint"]').should("not.exist");

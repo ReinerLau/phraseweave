@@ -58,23 +58,20 @@ describe("QuestionInput", () => {
   it("reveals syllables after the error delay, keeps them on retry, and clears on success", async () => {
     const { input, wrapper } = mountQuestionInput("computer");
     const width = wrapper.get(".question-input-word").attributes("style");
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
     await submitAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(299);
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
-    expect(wrapper.findAll(".phonetic-syllable").map((part) => part.text())).toEqual([
-      "/kəm/",
-      "· /ˈpjuː/",
-      "· /tər/",
-    ]);
+    expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
+    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
     expect((input.element as HTMLInputElement).value).toBe("");
     expect(wrapper.get(".question-input-word").attributes("style")).toBe(width);
     await submitAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(300);
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(true);
+    expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
     await submitAnswer(input, "computer");
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
   });
 
   it("does not hint phrases, decomposable words, or unknown words", async () => {
@@ -94,7 +91,7 @@ describe("QuestionInput", () => {
     const unknown = mountQuestionInput("xyzxyzunknown");
     await submitAnswer(unknown.input, "x");
     await vi.advanceTimersByTimeAsync(300);
-    expect(unknown.wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(unknown.wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
   });
 
   it("discards late lookups after a new question or a correct answer", async () => {
@@ -111,7 +108,7 @@ describe("QuestionInput", () => {
     await wrapper.vm.$nextTick();
     resolve(["old"]);
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
     vi.mocked(lookupPronunciation).mockReturnValueOnce(
       new Promise((done) => {
         resolve = done;
@@ -122,7 +119,7 @@ describe("QuestionInput", () => {
     await submitAnswer(input, "night");
     resolve(["old"]);
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
   });
 
   it("clears a visible hint when changing the view on the same word", async () => {
@@ -138,10 +135,10 @@ describe("QuestionInput", () => {
     };
     await submitAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(300);
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(true);
+    expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
     store.currentCourse.practiceView = "fulltext";
     await wrapper.vm.$nextTick();
-    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
   });
 
   it("shows an incorrect answer briefly before resetting the input", async () => {
