@@ -24,7 +24,7 @@ function select(target: Statement, input: string | undefined, sources: Statement
   );
 }
 
-describe("postorder recovery planning", () => {
+describe("leaf and direct-source recovery planning", () => {
   const sentence = "Local reports say she may have broken a test tube of pneumonic plague bacteria";
   const split = sentence.indexOf("pneumonic");
   const whole = unit(sentence, "whole", 0, sentence.length);
@@ -154,6 +154,82 @@ describe("postorder recovery planning", () => {
       "BC",
       "whole",
     ]);
+  });
+
+  function deepGraph() {
+    const text = "I want to buy a new computer";
+    const rows = [
+      unit(text, "prefix", 0, text.indexOf("buy") - 1),
+      ...["buy", "a", "new", "computer"].map((word) =>
+        unit(text, word, text.indexOf(` ${word}`) + 1, text.indexOf(` ${word}`) + 1 + word.length),
+      ),
+      unit(text, "new-computer", text.indexOf("new"), text.length),
+      unit(text, "a-new-computer", text.indexOf("a new"), text.length),
+      unit(text, "buy-a-new-computer", text.indexOf("buy"), text.length),
+      unit(text, "whole", 0, text.length),
+    ];
+    const graph = new Map<string, RecoverySources>([
+      ["new-computer", ["new", "computer"]],
+      ["a-new-computer", ["a", "new-computer"]],
+      ["buy-a-new-computer", ["buy", "a-new-computer"]],
+      ["whole", ["prefix", "buy-a-new-computer"]],
+    ]);
+    return {
+      text,
+      target: rows.at(-1)!,
+      units: new Map(rows.map((row) => [row.unitId!, row])),
+      graph,
+    };
+  }
+
+  it("skips deeper combinations between the error leaf and the direct source", () => {
+    const { text, target, units, graph } = deepGraph();
+    expect(buildRecoverySteps(target, text.replace("computer", "x"), units, graph)).toEqual([
+      "computer",
+      "buy-a-new-computer",
+      "whole",
+    ]);
+  });
+
+  it("reviews multiple errors within a branch before its direct source", () => {
+    const { text, target, units, graph } = deepGraph();
+    expect(buildRecoverySteps(target, text.replace("new computer", "x y"), units, graph)).toEqual([
+      "new",
+      "computer",
+      "buy-a-new-computer",
+      "whole",
+    ]);
+  });
+
+  it("completes each affected branch before moving to the next one", () => {
+    const { text, target, units, graph } = deepGraph();
+    units.set("I", unit(text, "I", 0, 1));
+    units.set("want", unit(text, "want", 2, 6));
+    units.set("to", unit(text, "to", 7, 9));
+    units.set("want-to", unit(text, "want-to", 2, 9));
+    graph.set("want-to", ["want", "to"]);
+    graph.set("prefix", ["I", "want-to"]);
+    expect(
+      buildRecoverySteps(target, text.replace("want", "x").replace("computer", "y"), units, graph),
+    ).toEqual(["want", "prefix", "computer", "buy-a-new-computer", "whole"]);
+  });
+
+  it("uses the smallest available unit when a branch has no word-level sources", () => {
+    const { text, target, units, graph } = deepGraph();
+    graph.delete("new-computer");
+    expect(buildRecoverySteps(target, text.replace("computer", "x"), units, graph)).toEqual([
+      "new-computer",
+      "buy-a-new-computer",
+      "whole",
+    ]);
+  });
+
+  it("retains a direct source already visited as a deeper combination", () => {
+    const { target, units, graph } = overlappingGraph();
+    units.set("ABC", unit("A B C.", "ABC", 0, 5));
+    graph.set("ABC", ["A", "BC"]);
+    graph.set("whole", ["ABC", "BC"]);
+    expect(buildRecoverySteps(target, "A X C", units, graph)).toEqual(["B", "ABC", "BC", "whole"]);
   });
 
   it("falls back when a deeper relationship does not cover an error", () => {

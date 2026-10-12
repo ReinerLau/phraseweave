@@ -64,7 +64,14 @@ export function buildRecoverySteps(
   const errorSpans = new Set(errors.map(spanKey));
   const visited = new Set<string>();
   const visiting = new Set<string>();
+  const scheduled = new Set<string>();
   const steps: string[] = [];
+
+  function schedule(id: string) {
+    if (scheduled.has(id)) return;
+    scheduled.add(id);
+    steps.push(id);
+  }
 
   function positionedUnit(id: string, parentStart: number, parentEnd: number) {
     const source = units.get(id);
@@ -78,9 +85,14 @@ export function buildRecoverySteps(
     return { id, source, start: sourceStart, end: sourceEnd, spans };
   }
 
-  function visit(unit: NonNullable<ReturnType<typeof positionedUnit>>): boolean {
+  function visit(unit: NonNullable<ReturnType<typeof positionedUnit>>, depth = 0): boolean {
     const affected = unit.spans.filter((span) => errorSpans.has(spanKey(span)));
-    if (!affected.length || visited.has(unit.id)) return true;
+    if (!affected.length) return true;
+    if (visited.has(unit.id)) {
+      // A direct source may already have been visited deeper in another branch.
+      if (depth <= 1) schedule(unit.id);
+      return true;
+    }
     if (visiting.has(unit.id)) return false;
     visiting.add(unit.id);
 
@@ -95,7 +107,7 @@ export function buildRecoverySteps(
       const covered = new Set(children.flatMap((child) => child.spans.map(spanKey)));
       if (affected.some((span) => !covered.has(spanKey(span)))) return false;
       for (const child of children) {
-        if (!visit(child)) return false;
+        if (!visit(child, depth + 1)) return false;
       }
     } else if (unit.source.sourceUnitIds?.length) {
       // An unvalidated relationship is not evidence that this is a leaf.
@@ -104,7 +116,9 @@ export function buildRecoverySteps(
 
     visiting.delete(unit.id);
     visited.add(unit.id);
-    steps.push(unit.id);
+    // Descend through every relevant relationship, but only practice leaves,
+    // the failed target's direct sources, and the failed target itself.
+    if (!sources || depth <= 1) schedule(unit.id);
     return true;
   }
 
