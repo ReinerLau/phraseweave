@@ -37,7 +37,7 @@ export function isLocalPackage() {
   );
 }
 
-async function localRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function localServiceFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const packagePage = isLocalPackage();
   const options: LocalFetchInit = packagePage
     ? { ...init }
@@ -47,6 +47,11 @@ async function localRequest<T>(path: string, init: RequestInit = {}): Promise<T>
     options,
   );
   await handleRemoteAuth(response);
+  return response;
+}
+
+async function localRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await localServiceFetch(path, init);
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `本地服务返回错误（${response.status}）。`);
   return body as T;

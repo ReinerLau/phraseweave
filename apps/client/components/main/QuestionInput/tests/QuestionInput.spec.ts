@@ -5,14 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
+import { lookupPronunciation } from "~/services/pronunciation";
 import { useExerciseStore } from "~/store/exercise";
 import QuestionInput from "../QuestionInput.vue";
+
+vi.mock("~/services/pronunciation", () => ({ lookupPronunciation: vi.fn() }));
 
 enableAutoUnmount(afterEach);
 
 describe("QuestionInput", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.mocked(lookupPronunciation).mockReset().mockResolvedValue(["kəm", "ˈpjuː", "tər"]);
     useAnswerTip().hiddenAnswerTip();
   });
 
@@ -39,7 +43,7 @@ describe("QuestionInput", () => {
       },
     });
 
-    return { input: wrapper.get('input[type="text"]'), wrapper };
+    return { input: wrapper.get('input[type="text"]'), wrapper, store: courseStore };
   }
 
   async function submitAnswer(
@@ -50,6 +54,92 @@ describe("QuestionInput", () => {
     await input.setValue(value);
     await input.trigger("keydown", { code: "Enter", key: "Enter" });
   }
+
+  it("reveals syllables after the error delay, keeps them on retry, and clears on success", async () => {
+    const { input, wrapper } = mountQuestionInput("computer");
+    const width = wrapper.get(".question-input-word").attributes("style");
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+    await submitAnswer(input, "x");
+    await vi.advanceTimersByTimeAsync(299);
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
+    expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(wrapper.get(".question-input-word").attributes("style")).toBe(width);
+    await submitAnswer(input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
+    await submitAnswer(input, "computer");
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+  });
+
+  it("does not hint phrases, decomposable words, or unknown words", async () => {
+    const phrase = mountQuestionInput("two words");
+    await submitAnswer(phrase.input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(lookupPronunciation).not.toHaveBeenCalled();
+    phrase.wrapper.unmount();
+    const word = mountQuestionInput("computer");
+    const store = useExerciseStore();
+    Object.defineProperty(store, "canDecomposeCurrentUnit", { configurable: true, value: true });
+    await submitAnswer(word.input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(lookupPronunciation).not.toHaveBeenCalled();
+    word.wrapper.unmount();
+    vi.mocked(lookupPronunciation).mockResolvedValueOnce(undefined);
+    const unknown = mountQuestionInput("xyzxyzunknown");
+    await submitAnswer(unknown.input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(unknown.wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+  });
+
+  it("discards late lookups after a new question or a correct answer", async () => {
+    let resolve!: (value: string[]) => void;
+    vi.mocked(lookupPronunciation).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const { input, wrapper } = mountQuestionInput("computer");
+    await submitAnswer(input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    useExerciseStore().currentStatement = { id: "next", order: 2, english: "night" };
+    await wrapper.vm.$nextTick();
+    resolve(["old"]);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+    vi.mocked(lookupPronunciation).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    await submitAnswer(input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    await submitAnswer(input, "night");
+    resolve(["old"]);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+  });
+
+  it("clears a visible hint when changing the view on the same word", async () => {
+    const { input, wrapper, store } = mountQuestionInput("computer");
+    store.currentCourse = {
+      id: "course",
+      title: "练习",
+      order: 1,
+      coursePackId: "pack",
+      completionCount: 0,
+      statementIndex: 0,
+      statements: [store.currentStatement!],
+    };
+    await submitAnswer(input, "x");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
+    store.currentCourse.practiceView = "fulltext";
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
+  });
 
   it("shows an incorrect answer briefly before resetting the input", async () => {
     const { input, wrapper } = mountQuestionInput();

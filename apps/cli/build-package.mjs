@@ -51,6 +51,8 @@ cpSync(path.join(root, "apps/client/.output/public"), path.join(runtime, "client
 for (const name of [
   "desktop_runtime.py",
   "local_service.py",
+  "tts.py",
+  "tts_worker.py",
   "model_runtime.py",
   "split_lexical_chunks.py",
   "worker.py",

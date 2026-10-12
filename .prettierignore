@@ -7,3 +7,8 @@ pnpm-workspace.yaml
 CHANGELOG.md
 packages/xingrong-courses/data
 packages/db/drizzle
+
+# Pinned upstream data and generated pronunciation resource
+tools/pronunciation/sources
+apps/client/assets/pronunciation
+apps/client/public/pronunciation-LICENSE.txt

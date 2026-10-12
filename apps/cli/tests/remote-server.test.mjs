@@ -52,6 +52,11 @@ before(async () => {
     runtime: {
       request: async (...args) => {
         calls.push(args);
+        if (args[0] === "/api/tts") {
+          return new Response(new Uint8Array([255, 251, 0, 128]), {
+            headers: { "Content-Type": "audio/mpeg" },
+          });
+        }
         return new Response(JSON.stringify({ ok: true }));
       },
     },
@@ -123,6 +128,37 @@ test("login issues a session cookie and proxies routes, audio, and shared data t
   });
   assert.equal(progress.status, 200);
   assert.equal(calls.at(-1)[0], "/api/local-exercises/pack/progress");
+});
+
+test("protects word synthesis and cache clearing and preserves authenticated audio", async () => {
+  const audioInit = {
+    method: "POST",
+    headers: { Origin: config.origin, "Content-Type": "application/json" },
+    body: '{"text":"hello"}',
+  };
+  for (const [resource, method] of [
+    ["/api/tts", "POST"],
+    ["/api/tts/cache", "DELETE"],
+  ]) {
+    const response = await get(resource, { ...audioInit, method });
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).code, "REMOTE_AUTH_REQUIRED");
+  }
+  assert.equal(calls.length, 0);
+  const headers = { ...audioInit.headers, Cookie: sessionCookie(await login()) };
+  const audio = await get("/api/tts", { ...audioInit, headers });
+  assert.equal(audio.status, 200);
+  assert.equal(audio.headers.get("content-type"), "audio/mpeg");
+  assert.deepEqual([...new Uint8Array(await audio.arrayBuffer())], [255, 251, 0, 128]);
+  assert.deepEqual(calls.at(-1), ["/api/tts", "POST", '{"text":"hello"}']);
+  const cleared = await get("/api/tts/cache", { method: "DELETE", headers });
+  assert.equal(cleared.status, 200);
+  assert.deepEqual(calls.at(-1), ["/api/tts/cache", "DELETE", undefined]);
+  const forged = await get("/api/tts", {
+    ...audioInit,
+    headers: { ...headers, Origin: "https://evil.example" },
+  });
+  assert.equal(forged.status, 403);
 });
 
 test("rejects forged Hosts and cross-origin login, logout, and API requests", async () => {

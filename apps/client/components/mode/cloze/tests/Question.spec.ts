@@ -111,21 +111,29 @@ describe("answer availability", () => {
       course.learningMode = "progressive";
       course.statementIndex = 0;
       const { store, wrapper } = await setup();
-      expect(wrapper.findComponent(Question).find("button").exists()).toBe(false);
+      expect(
+        wrapper.findComponent(Question).find('[data-testid="show-answer-button"]').exists(),
+      ).toBe(false);
       expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
       expect(wrapper.findAll('[data-testid="show-answer-button"]')).toHaveLength(1);
       useGameMode().showAnswer();
       await flushPromises();
-      expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+      expect(wrapper.findComponent(Tool).find('[data-testid="show-answer-button"]').exists()).toBe(
+        false,
+      );
       useGameMode().showQuestion();
       useSummary().showSummary();
       await flushPromises();
-      expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+      expect(wrapper.findComponent(Tool).find('[data-testid="show-answer-button"]').exists()).toBe(
+        false,
+      );
       useSummary().hideSummary();
       store.switchPracticeView(view === "single" ? "fulltext" : "single");
       await flushPromises();
       expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
-      expect(wrapper.findComponent(Question).find("button").exists()).toBe(false);
+      expect(
+        wrapper.findComponent(Question).find('[data-testid="show-answer-button"]').exists(),
+      ).toBe(false);
       expect(wrapper.findAll('[data-testid="show-answer-button"]')).toHaveLength(1);
     },
   );
@@ -140,7 +148,9 @@ describe("answer availability", () => {
     expect(store.advanceAfterCorrect()).toBe(true);
     await flushPromises();
     expect(store.fulltextCompleted).toBe(true);
-    expect(wrapper.findComponent(Tool).find("button").exists()).toBe(false);
+    expect(wrapper.findComponent(Tool).find('[data-testid="show-answer-button"]').exists()).toBe(
+      false,
+    );
   });
 
   async function correct(store: ReturnType<typeof useExerciseStore>) {
@@ -206,13 +216,13 @@ describe("answer availability", () => {
     course.statements[4].sourceUnitIds = ["unit-3"];
     const { store, wrapper } = await setup();
     expect(store.canDecomposeCurrentUnit).toBe(true);
-    expect(wrapper.find("button").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
     store.failCurrentStatement();
     await flushPromises();
     expect(store.currentStatement?.unitId).toBe("unit-3");
-    expect(wrapper.find("button").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(true);
     await correct(store);
-    expect(wrapper.find("button").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
   });
 
   it.each([
@@ -248,25 +258,25 @@ describe("answer availability", () => {
     store.failCurrentStatement();
     store.switchPracticeView("fulltext");
     await flushPromises();
-    expect(wrapper.find("button").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(true);
     store.switchLearningMode("progressive");
     expect(store.canDecomposeCurrentUnit).toBe(false);
     store.switchLearningMode("sentence-first");
     await correct(store); // Initial leaf -> whole sentence.
-    expect(wrapper.find("button").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
     store.failCurrentStatement();
     store.failCurrentStatement();
     setActivePinia(createPinia());
     const { store: refreshed, wrapper: restored } = await setup();
     expect(refreshed.currentStatement?.unitId).toBe("unit-4");
-    expect(restored.find("button").exists()).toBe(false);
+    expect(restored.find('[data-testid="show-answer-button"]').exists()).toBe(false);
     refreshed.doAgain();
     await flushPromises();
-    expect(restored.find("button").exists()).toBe(false);
+    expect(restored.find('[data-testid="show-answer-button"]').exists()).toBe(false);
     refreshed.switchLearningMode("progressive");
     refreshed.doAgain();
     await flushPromises();
     expect(refreshed.currentStatement?.unitId).toBe("unit-0");
-    expect(restored.find("button").exists()).toBe(true);
+    expect(restored.find('[data-testid="show-answer-button"]').exists()).toBe(true);
   });
 });

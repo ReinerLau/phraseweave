@@ -13,13 +13,38 @@
         {{ courseStore.currentStatement?.sentenceChinese }}
       </div>
       <div
+        v-if="phoneticSyllables"
+        class="phonetic-hint text-slate-500 dark:text-slate-300"
+        data-testid="phonetic-hint"
+        role="status"
+        aria-label="音标提示"
+      >
+        <span
+          v-for="(syllable, index) in phoneticSyllables"
+          :key="index"
+          class="phonetic-syllable"
+        >
+          <span
+            v-if="index > 0"
+            aria-hidden="true"
+            >· </span
+          >/{{ syllable }}/
+        </span>
+      </div>
+      <div
         class="question-sentence dark:text-gray-50"
         data-testid="cloze-sentence"
       >
-        <span class="cloze-context">{{ courseStore.currentStatement?.contextBefore }}</span
-        ><MainQuestionInput inline /><span class="cloze-context">{{
-          courseStore.currentStatement?.contextAfter
-        }}</span>
+        <SpeakableText
+          class="cloze-context"
+          :text="courseStore.currentStatement?.contextBefore"
+        /><MainQuestionInput
+          inline
+          @hint-change="updatePhoneticHint"
+        /><SpeakableText
+          class="cloze-context"
+          :text="courseStore.currentStatement?.contextAfter"
+        />
       </div>
     </div>
   </div>
@@ -28,12 +53,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
+import SpeakableText from "~/components/SpeakableText.vue";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useExerciseStore } from "~/store/exercise";
 import { findLargestFittingFontSize, QUESTION_FONT_MAX_SIZE_PX } from "./questionLayoutHelper";
 
 const courseStore = useExerciseStore();
 const questionRootEl = ref<HTMLElement>();
+const phoneticSyllables = ref<string[]>();
 const { questionFontSize } = useQuestionFontSize();
 const questionStyle = computed(() =>
   courseStore.isFulltext
@@ -52,6 +79,11 @@ watch(
     scheduleQuestionFontSize();
   },
 );
+
+function updatePhoneticHint(syllables: string[] | undefined) {
+  phoneticSyllables.value = syllables;
+  scheduleQuestionFontSize();
+}
 
 function contentFits() {
   const root = questionRootEl.value;
@@ -139,6 +171,23 @@ onUnmounted(() => {
   font-size: inherit;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.phonetic-hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.12em 0.3em;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 0.5em;
+  font-family: "Arial", "Helvetica", sans-serif;
+  font-size: max(1em, 20px);
+  line-height: 1.35;
+}
+
+.phonetic-syllable {
+  white-space: nowrap;
 }
 
 .question-sentence {

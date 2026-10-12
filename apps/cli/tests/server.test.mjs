@@ -22,6 +22,11 @@ before(async () => {
     request: async (...args) => {
       if (runtimeFails) throw new Error("Generator exited.");
       requests.push(args);
+      if (args[0] === "/api/tts") {
+        return new Response(new Uint8Array([255, 251, 144, 0, 255, 0, 128]), {
+          headers: { "Content-Type": "audio/mpeg" },
+        });
+      }
       return new Response(JSON.stringify({ runtimeReady: true }), {
         headers: { "Content-Type": "application/json" },
       });
@@ -49,6 +54,43 @@ test("proxies generator requests from the local page", async () => {
   });
   assert.equal(response.status, 200);
   assert.deepEqual(requests.at(-1), ["/api/generate", "POST", '{"text":"Example"}']);
+});
+
+test("preserves binary word audio and accepts cache deletion", async () => {
+  const headers = { Origin: new URL(url).origin, "Content-Type": "application/json" };
+  const response = await fetch(new URL("/api/tts", url), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text: "hello" }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "audio/mpeg");
+  assert.deepEqual(
+    [...new Uint8Array(await response.arrayBuffer())],
+    [255, 251, 144, 0, 255, 0, 128],
+  );
+  assert.deepEqual(requests.at(-1), ["/api/tts", "POST", '{"text":"hello"}']);
+  const clear = await fetch(new URL("/api/tts/cache", url), { method: "DELETE", headers });
+  assert.equal(clear.status, 200);
+  assert.deepEqual(requests.at(-1), ["/api/tts/cache", "DELETE", undefined]);
+  const rejected = await fetch(new URL("/api/tts", url), {
+    method: "POST",
+    headers: { Origin: "https://example.com" },
+    body: "{}",
+  });
+  assert.equal(rejected.status, 403);
+});
+
+test("proxies sentence audio with its kind and full source text", async () => {
+  const payload = JSON.stringify({ text: "I use a computer every day.", kind: "sentence" });
+  const response = await fetch(new URL("/api/tts", url), {
+    method: "POST",
+    headers: { Origin: new URL(url).origin, "Content-Type": "application/json" },
+    body: payload,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Content-Type"), "audio/mpeg");
+  assert.deepEqual(requests.at(-1), ["/api/tts", "POST", payload]);
 });
 
 test("rejects cross-origin mutation and DNS rebinding hosts", async () => {

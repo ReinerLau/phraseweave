@@ -130,6 +130,12 @@ export const useExerciseStore = defineStore("exercise", () => {
       : currentCourse.value?.statements[statementIndex.value];
   }
 
+  const originalSentence = computed(() => {
+    const statement = currentStatement.value;
+    if (!statement) return "";
+    return (statement.contextBefore ?? "") + statement.english + (statement.contextAfter ?? "");
+  });
+
   const clozeTokens = computed(() => tokenizeClozeText(currentStatement.value?.english ?? ""));
   const words = computed(() =>
     clozeTokens.value.filter((token) => token.kind === "word").map((token) => token.text),
@@ -401,6 +407,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     canDecomposeCurrentUnit,
     isAnsweringBaseUnit,
     words,
+    originalSentence,
     clozeTokens,
     totalQuestionsCount,
     setup,

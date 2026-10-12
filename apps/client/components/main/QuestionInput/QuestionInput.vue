@@ -7,21 +7,45 @@
       ref="questionInputWordsEl"
       class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       :class="inline ? 'w-fit' : 'w-full'"
+      @pointermove="handleWordHover"
+      @pointerleave="clearWordHover"
     >
       <ClozeText :tokens="courseStore.clozeTokens">
         <template #word="{ token }">
           <span
             class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
-            :class="getWordsClassNames(token.wordIndex)"
+            :class="[
+              getWordsClassNames(token.wordIndex),
+              {
+                'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
+                'speech-hover': hoveredWordIndex === token.wordIndex,
+                'speech-loading':
+                  loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                  questionInputWordsEl?.contains(loadingElement),
+              },
+            ]"
+            :data-word-index="token.wordIndex"
+            :data-speech-text="displayedWord(token.wordIndex, token.text)"
+            :title="
+              isSpeakableWord(displayedWord(token.wordIndex, token.text))
+                ? `朗读 ${displayedWord(token.wordIndex, token.text)}`
+                : undefined
+            "
+            :aria-busy="
+              (loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                questionInputWordsEl?.contains(loadingElement)) ||
+              undefined
+            "
             :style="{ width: `${inputWidth(token.wordIndex)}em` }"
           >
-            {{ isAnswerTip() ? token.text : userInputWords[token.wordIndex]?.userInput }}
+            {{ displayedWord(token.wordIndex, token.text) }}
           </span>
         </template>
       </ClozeText>
       <input
         ref="inputEl"
         class="absolute h-full w-full opacity-0"
+        :class="{ 'cursor-pointer': hoveredWordIndex !== undefined }"
         type="text"
         aria-label="填写当前英文单元"
         v-model="inputValue"
@@ -30,6 +54,7 @@
         @blur="handleInputBlur"
         @dblclick.prevent
         @mousedown="preventCursorMove"
+        @click="handleWordClick"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         autoFocus
@@ -59,6 +84,9 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
+import { lookupPronunciation } from "~/services/pronunciation";
+import { isSpeakableWord } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
 import ClozeText from "./ClozeText.vue";
 import {
@@ -71,8 +99,11 @@ import {
 import { useTypingSound } from "./useTypingSound";
 
 defineProps<{ inline?: boolean }>();
+const emit = defineEmits<{ "hint-change": [syllables: string[] | undefined] }>();
+let hintSequence = 0;
 
 const courseStore = useExerciseStore();
+const { loadingElement } = useWordAudio();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
@@ -83,6 +114,8 @@ const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
+const hoveredWordIndex = ref<number>();
+let hoverPoint: Pick<MouseEvent, "clientX" | "clientY"> | undefined;
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
 const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInputWordsEl);
 
@@ -99,6 +132,9 @@ const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, han
     getInputWordCapacity,
   });
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+
+// Re-check after visible text changes, even when the pointer stays still.
+watch(() => [inputValue.value, isAnswerTip()], refreshWordHover, { flush: "post" });
 
 function inputChangedCallback(event: KeyboardEvent) {
   if (isKeyboardSoundEnabled() && checkPlayTypingSound(event)) {
@@ -119,7 +155,29 @@ onMounted(() => {
 });
 
 focusInputWhenWIndowFocus();
-onUnmounted(cancelErrorReset);
+onUnmounted(() => {
+  cancelErrorReset();
+  clearPhoneticHint();
+});
+
+function clearPhoneticHint() {
+  hintSequence++;
+  emit("hint-change", undefined);
+}
+
+async function showPhoneticHint() {
+  if (courseStore.canDecomposeCurrentUnit || courseStore.words.length !== 1) return;
+  const word = courseStore.words[0];
+  if (!isSpeakableWord(word)) return;
+  const request = ++hintSequence;
+  try {
+    const syllables = await lookupPronunciation(word);
+    if (request !== hintSequence) return;
+    emit("hint-change", syllables);
+  } catch {
+    // A missing resource never interrupts answering or error recovery.
+  }
+}
 
 watch(
   () => inputValue.value,
@@ -143,9 +201,17 @@ watch(isAnswerTip, (isVisible) => {
 });
 
 watch(
-  () => [courseStore.currentStatement?.id, courseStore.learningMode, courseStore.practiceView],
+  () => [
+    courseStore.currentStatement?.id,
+    courseStore.statementIndex,
+    courseStore.currentCourse?.id,
+    courseStore.learningMode,
+    courseStore.practiceView,
+  ],
   () => {
     cancelErrorReset();
+    clearPhoneticHint();
+    clearWordHover();
     clearInput();
     focusInput();
   },
@@ -222,6 +288,7 @@ function handleAnswerError() {
   const submittedInput = inputValue.value;
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
+    void showPhoneticHint();
     clearInput();
     courseStore.failCurrentStatement(submittedInput);
   }, ERROR_FEEDBACK_DURATION_MS);
@@ -229,6 +296,7 @@ function handleAnswerError() {
 
 function handleAnswerRight() {
   cancelErrorReset();
+  clearPhoneticHint();
   courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
     courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时
@@ -293,6 +361,36 @@ function handleKeydown(e: KeyboardEvent) {
       errorCallback: handleAnswerError,
     },
   });
+}
+
+function displayedWord(index: number, target: string) {
+  return isAnswerTip() ? target : userInputWords[index]?.userInput ?? "";
+}
+
+function handleWordClick(event: MouseEvent) {
+  if (questionInputWordsEl.value) playWordUnderInput(event, questionInputWordsEl.value);
+}
+
+function refreshWordHover() {
+  const word =
+    hoverPoint && questionInputWordsEl.value
+      ? findWordUnderInput(hoverPoint, questionInputWordsEl.value)
+      : undefined;
+  hoveredWordIndex.value = word ? Number(word.dataset.wordIndex) : undefined;
+}
+
+function handleWordHover(event: PointerEvent) {
+  if (event.pointerType === "touch") {
+    clearWordHover();
+    return;
+  }
+  hoverPoint = { clientX: event.clientX, clientY: event.clientY };
+  refreshWordHover();
+}
+
+function clearWordHover() {
+  hoverPoint = undefined;
+  hoveredWordIndex.value = undefined;
 }
 
 function preventCursorMove(event: MouseEvent) {
