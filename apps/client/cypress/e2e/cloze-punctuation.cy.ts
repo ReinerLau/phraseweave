@@ -222,15 +222,17 @@ function letterUnderlineGapEm(word: HTMLElement) {
 }
 
 function assertFulltextWordGap(singleGap: number) {
-  cy.get('.fulltext-body [data-testid="sentence-audio-button"]')
-    .should("have.length", 1)
-    .and("be.visible")
-    .should(($button) => {
-      const rect = $button[0].getBoundingClientRect();
-      const container = $button[0].closest(".fulltext-body")!.getBoundingClientRect();
+  cy.get(".fulltext-body").should(($body) => {
+    const buttons = $body.find('[data-testid="sentence-audio-button"]');
+    const completed = $body.find(".answer-content").length > 0;
+    expect(buttons).to.have.length(completed ? 1 : 0);
+    if (completed) {
+      const rect = buttons[0].getBoundingClientRect();
+      const container = $body[0].getBoundingClientRect();
       expect(rect.left).to.be.at.least(container.left);
       expect(rect.right).to.be.at.most(container.right + 1);
-    });
+    }
+  });
   cy.get(".fulltext-body .question-input-words").should(($words) => {
     const words = $words[0];
     const styles = words.ownerDocument.defaultView!.getComputedStyle(words);

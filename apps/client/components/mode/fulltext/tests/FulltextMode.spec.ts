@@ -106,7 +106,7 @@ describe("FulltextMode", () => {
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
   });
 
-  it("offers audio on current and completed sentences, including after fulltext completion", async () => {
+  it("offers audio only after submitting a correct answer and on completed sentences", async () => {
     const { pinia, store } = setup();
     const wrapper = mount(FulltextMode, {
       global: {
@@ -118,16 +118,28 @@ describe("FulltextMode", () => {
     await flushPromises();
     expect(
       wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
-    ).toEqual(["First."]);
+    ).toEqual([]);
     for (const pending of wrapper.findAll('[data-testid="fulltext-pending-sentence"]')) {
       expect(pending.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
     }
     store.passCurrentStatement();
-    store.advanceAfterCorrect();
+    useGameMode().showAnswer();
     await flushPromises();
     expect(
       wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
-    ).toEqual(["First.", "Future."]);
+    ).toEqual(["First."]);
+    store.advanceAfterCorrect();
+    useGameMode().showQuestion();
+    await flushPromises();
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First."]);
+    expect(
+      wrapper
+        .get('[data-testid="fulltext-current"]')
+        .find('[data-testid="sentence-audio-button"]')
+        .exists(),
+    ).toBe(false);
     store.passCurrentStatement();
     store.advanceAfterCorrect();
     store.passCurrentStatement();

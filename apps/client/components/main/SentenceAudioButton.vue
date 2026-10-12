@@ -2,7 +2,7 @@
   <button
     v-if="visible"
     ref="buttonEl"
-    class="ml-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded p-0 align-middle text-gray-500 hover:text-fuchsia-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fuchsia-500 dark:text-gray-300"
+    class="ml-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded p-0 align-middle text-gray-500 hover:text-fuchsia-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fuchsia-500 dark:text-gray-300"
     type="button"
     data-testid="sentence-audio-button"
     :aria-label="label"

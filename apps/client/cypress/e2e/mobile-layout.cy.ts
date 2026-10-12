@@ -346,7 +346,7 @@ describe("mobile practice layout", () => {
     assertNoVerticalOverflow();
   });
 
-  it("plays from the sentence end without moving the caret or advancing on keyboard activation", () => {
+  it("offers sentence playback only after correct submission without advancing on keyboard activation", () => {
     cy.intercept("POST", "**/api/tts", {
       statusCode: 200,
       headers: { "Content-Type": "audio/mpeg" },
@@ -366,37 +366,24 @@ describe("mobile practice layout", () => {
     cy.get('[data-testid="practice-toolbar"] [data-testid="sentence-audio-button"]').should(
       "not.exist",
     );
-    cy.get('input[type="text"]')
-      .type("this", { force: true })
-      .then(($input) => {
-        ($input[0] as HTMLInputElement).setSelectionRange(2, 2);
-      });
-    cy.get('[data-testid="cloze-sentence"] [data-testid="sentence-audio-button"]').click();
+    cy.get('input[type="text"]').type("this", { force: true });
+    cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
+    cy.get('[data-testid="show-answer-button"]').click();
+    cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
+    cy.get('input[type="text"]').clear({ force: true }).type(englishSentence, { force: true });
+    cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
+    cy.get('input[type="text"]').type("{enter}", { force: true });
+    cy.get('[data-testid="answer-sentence"] [data-testid="sentence-audio-button"]')
+      .scrollIntoView()
+      .should("be.visible")
+      .focus()
+      .type("{enter}");
     cy.wait("@sentenceAudio")
       .its("request.body")
       .should("deep.equal", {
         text: `${englishSentence}.`,
         kind: "sentence",
       });
-    cy.get('input[type="text"]')
-      .should("be.focused")
-      .and("have.value", "this")
-      .should(($input) => {
-        expect(($input[0] as HTMLInputElement).selectionStart).to.equal(2);
-      });
-    cy.get('[data-testid="sentence-audio-button"]')
-      .should("have.attr", "aria-label", "停止朗读")
-      .click();
-    cy.get('[data-testid="sentence-audio-button"]').should("have.attr", "aria-label", "朗读原句");
-    cy.get('input[type="text"]')
-      .clear({ force: true })
-      .type(`${englishSentence}{enter}`, { force: true });
-    cy.get('[data-testid="answer-sentence"] [data-testid="sentence-audio-button"]')
-      .scrollIntoView()
-      .should("be.visible")
-      .focus()
-      .type("{enter}");
-    cy.wait("@sentenceAudio");
     cy.get(".answer-content").should("exist");
     cy.get('[data-testid="sentence-audio-button"]')
       .should("have.attr", "aria-pressed", "true")
@@ -424,7 +411,7 @@ describe("mobile practice layout", () => {
 
       root.scrollTop = root.scrollHeight;
     });
-    cy.get('.question-content [data-testid="sentence-audio-button"]').should("be.visible");
+    cy.get('.question-content [data-testid="sentence-audio-button"]').should("not.exist");
     cy.get('.question-content [data-testid="show-answer-button"]').should("not.exist");
     cy.get('[data-testid="practice-toolbar"] [data-testid="show-answer-button"]').should(
       "be.visible",

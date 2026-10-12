@@ -44,7 +44,7 @@
         /><SpeakableText
           class="cloze-context"
           :text="courseStore.currentStatement?.contextAfter"
-        /><SentenceAudioButton :text="courseStore.originalSentence" />
+        />
       </div>
     </div>
   </div>
@@ -53,7 +53,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
 import SpeakableText from "~/components/SpeakableText.vue";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useExerciseStore } from "~/store/exercise";

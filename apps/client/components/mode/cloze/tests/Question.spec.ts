@@ -94,14 +94,13 @@ describe("answer availability", () => {
     return { store, wrapper };
   }
 
-  it("places the original sentence audio after the cloze text instead of in the toolbar", async () => {
+  it("does not offer sentence audio while answering, including with an answer hint", async () => {
     const { wrapper } = await setup();
     const sentence = wrapper.get('[data-testid="cloze-sentence"]');
-    const button = sentence.get('[data-testid="sentence-audio-button"]');
-    expect(button.element).toBe(sentence.element.lastElementChild);
-    expect(sentence.findComponent({ name: "SentenceAudioButton" }).props("text")).toBe(
-      "Cats sleep quietly.",
-    );
+    expect(sentence.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    useAnswerTip().showAnswerTip();
+    await wrapper.vm.$nextTick();
+    expect(sentence.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
     expect(
       wrapper
         .get('[data-testid="practice-toolbar"]')
