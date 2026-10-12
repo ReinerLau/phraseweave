@@ -8,6 +8,10 @@ import sys
 
 def main() -> int:
     multiprocessing.freeze_support()
+    if sys.argv[1:] == ["--tts"]:
+        from tts_worker import main as tts_main
+
+        return tts_main()
     if sys.argv[1:] == ["--worker"]:
         from worker import main as worker_main
 

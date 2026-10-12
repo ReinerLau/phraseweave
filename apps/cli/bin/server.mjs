@@ -153,6 +153,8 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
           (request.method === "POST" && url.pathname === "/api/local-exercises/migrate") ||
           (request.method === "DELETE" && /^\/api\/local-exercises\/[^/]+$/.test(url.pathname));
         const valid =
+          (request.method === "POST" && url.pathname === "/api/tts") ||
+          (request.method === "DELETE" && url.pathname === "/api/tts/cache") ||
           (request.method === "GET" && url.pathname === "/api/status") ||
           (request.method === "POST" && url.pathname === "/api/generate") ||
           ((request.method === "GET" || request.method === "DELETE") &&
@@ -183,11 +185,11 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
           throw error;
         }
         response.writeHead(upstream.status, {
-          "Content-Type": "application/json; charset=utf-8",
+          "Content-Type": upstream.headers.get("Content-Type") || "application/json; charset=utf-8",
           "Cache-Control": "no-store",
           "X-Content-Type-Options": "nosniff",
         });
-        response.end(await upstream.text());
+        response.end(Buffer.from(await upstream.arrayBuffer()));
         return;
       }
       if (request.method !== "GET" && request.method !== "HEAD") {

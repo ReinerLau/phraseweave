@@ -16,10 +16,13 @@
         class="question-sentence dark:text-gray-50"
         data-testid="cloze-sentence"
       >
-        <span class="cloze-context">{{ courseStore.currentStatement?.contextBefore }}</span
-        ><MainQuestionInput inline /><span class="cloze-context">{{
-          courseStore.currentStatement?.contextAfter
-        }}</span>
+        <SpeakableText
+          class="cloze-context"
+          :text="courseStore.currentStatement?.contextBefore"
+        /><MainQuestionInput inline /><SpeakableText
+          class="cloze-context"
+          :text="courseStore.currentStatement?.contextAfter"
+        />
       </div>
     </div>
   </div>
@@ -28,6 +31,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
+import SpeakableText from "~/components/SpeakableText.vue";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useExerciseStore } from "~/store/exercise";
 import { findLargestFittingFontSize, QUESTION_FONT_MAX_SIZE_PX } from "./questionLayoutHelper";

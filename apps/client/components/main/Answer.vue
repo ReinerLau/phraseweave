@@ -15,18 +15,21 @@
       class="answer-sentence dark:text-gray-50"
       data-testid="answer-sentence"
     >
-      <span class="cloze-context">{{ courseStore.currentStatement?.contextBefore }}</span>
+      <SpeakableText
+        class="cloze-context"
+        :text="courseStore.currentStatement?.contextBefore"
+      />
       <div
         ref="answerWordsEl"
         class="answer-words question-input-words relative inline-flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       >
         <ClozeText :tokens="courseStore.clozeTokens">
           <template #word="{ token }">
-            <span
+            <SpeakableWord
+              :text="token.text"
               class="question-input-word min-w-0 max-w-full rounded-[2px] leading-none text-[#20202099] dark:text-gray-300"
               :style="{ width: `${wordWidth(token.text)}em` }"
-              >{{ token.text }}</span
-            >
+            />
           </template>
         </ClozeText>
         <span
@@ -35,7 +38,10 @@
           aria-hidden="true"
         ></span>
       </div>
-      <span class="cloze-context">{{ courseStore.currentStatement?.contextAfter }}</span>
+      <SpeakableText
+        class="cloze-context"
+        :text="courseStore.currentStatement?.contextAfter"
+      />
     </div>
     <div
       v-if="courseStore.currentStatement?.soundmark"
@@ -51,6 +57,8 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import ClozeText from "~/components/main/QuestionInput/ClozeText.vue";
 import { useWordWidths } from "~/components/main/QuestionInput/questionInputHelper";
+import SpeakableText from "~/components/SpeakableText.vue";
+import SpeakableWord from "~/components/SpeakableWord.vue";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useQuestionFontSize } from "~/composables/main/questionFontSize";
 import { useExerciseStore } from "~/store/exercise";

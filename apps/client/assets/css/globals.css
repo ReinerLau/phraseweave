@@ -174,3 +174,19 @@ body {
   white-space: pre-wrap;
   color: inherit;
 }
+
+/* Inline pronunciation preserves the existing word geometry. */
+.speech-word {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+/* Override normal and dark text utilities without changing the resting color. */
+:root .speech-word:hover,
+:root .speech-word:focus-visible,
+:root .speech-word.speech-hover,
+:root .speech-word.speech-loading {
+  @apply text-fuchsia-500;
+}
+.speech-loading {
+  cursor: progress;
+}
