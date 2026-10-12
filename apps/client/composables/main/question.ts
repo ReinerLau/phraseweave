@@ -181,7 +181,7 @@ export function useInput({
 
   function getWordHelpRequest() {
     if (!userInputWords[confirmedWordCount]) return undefined;
-    // Enter always means help, even when the unconfirmed draft already matches.
+    // Recovery targets the unconfirmed token while preserving the accepted prefix.
     const prefix = userInputWords.slice(0, confirmedWordCount).map((word) => word.userInput);
     return { input: [...prefix, ""].join(separator), lastWordIndex: confirmedWordCount };
   }

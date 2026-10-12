@@ -72,12 +72,13 @@ describe("word space checking", () => {
     });
   });
 
-  it("treats even a matching unconfirmed draft as a help request", () => {
+  it("builds recovery evidence for an unconfirmed token with its accepted prefix", () => {
     const input = createInput();
-    input.setInputValue("I");
+    input.setInputValue("x");
     expect(input.getWordHelpRequest()).toEqual({ input: "", lastWordIndex: 0 });
+    input.setInputValue("I");
     input.confirmCurrentWord();
-    input.setInputValue("eat");
+    input.setInputValue("ea");
     expect(input.getWordHelpRequest()).toEqual({ input: "I ", lastWordIndex: 1 });
   });
 

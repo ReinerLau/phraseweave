@@ -73,7 +73,7 @@ describe("word space checking", () => {
     cy.contains("a", "设置").should("be.visible").click();
     cy.location("pathname").should("equal", "/user/info");
     cy.get("#word-space-check").should("not.be.checked").check();
-    cy.contains("空格确认当前词元，回车表示不会并回退").should("be.visible");
+    cy.contains("空格确认当前词元；回车在匹配时确认，未匹配时回退").should("be.visible");
     cy.reload();
     cy.get("#word-space-check").should("be.checked");
     cy.contains("a", "返回练习清单").click();
@@ -83,52 +83,54 @@ describe("word space checking", () => {
     cy.get(".question-input-word").eq(0).should("have.class", "border-b-transparent");
   });
 
-  for (const [width, height] of [
-    [1280, 800],
-    [320, 568],
-  ]) {
-    it(`locks confirmed words without shifting their geometry at ${width}x${height}`, () => {
-      cy.viewport(width, height);
-      cy.intercept("GET", "**/right.mp3").as("correctSound");
-      cy.visit("/course-pack");
-      seedWordSpaceExercise();
-      cy.window().then((window) => {
-        window.localStorage.setItem("wordSpaceCheck", "true");
-        window.localStorage.setItem("keyboardSoundEnabled", "false");
-        window.localStorage.setItem("autoNextQuestion", "false");
-      });
-      cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
-      const input = 'input[aria-label="填写当前英文单元"]';
-      cy.get(input).type("don'tx ", { force: true });
-      cy.get(input).should("have.value", "don'tx");
-      cy.get(".question-input-word").eq(0).should("not.have.class", "border-b-transparent");
-      cy.get(input).type("{backspace}", { force: true });
-      cy.get(input).should("have.value", "don't");
-      cy.document().then((document) => document.fonts.ready);
-      cy.get(".question-input-word").then(($words) => {
-        const before = Array.from($words).map((word) => word.getBoundingClientRect());
-        cy.get(input).type(" ", { force: true }).should("have.value", "");
-        cy.wait("@correctSound").its("response.statusCode").should("be.oneOf", [200, 304]);
-        cy.get(".question-input-word").should(($confirmed) => {
-          Array.from($confirmed).forEach((word, index) => {
-            const after = word.getBoundingClientRect();
-            for (const property of ["left", "top", "width", "height"] as const) {
-              expect(
-                Math.abs(after[property] - before[index][property]),
-                `${property} of word ${index}`,
-              ).to.be.at.most(1);
-            }
-          });
-          expect(getComputedStyle($confirmed[0]).borderBottomColor).to.equal("rgba(0, 0, 0, 0)");
+  for (const confirmationKey of [" ", "{enter}"]) {
+    for (const [width, height] of [
+      [1280, 800],
+      [320, 568],
+    ]) {
+      it(`locks confirmed words without shifting their geometry at ${width}x${height} using ${confirmationKey === " " ? "Space" : "Enter"}`, () => {
+        cy.viewport(width, height);
+        cy.intercept("GET", "**/right.mp3").as("correctSound");
+        cy.visit("/course-pack");
+        seedWordSpaceExercise();
+        cy.window().then((window) => {
+          window.localStorage.setItem("wordSpaceCheck", "true");
+          window.localStorage.setItem("keyboardSoundEnabled", "false");
+          window.localStorage.setItem("autoNextQuestion", "false");
         });
+        cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+        const input = 'input[aria-label="填写当前英文单元"]';
+        cy.get(input).type("don'tx ", { force: true });
+        cy.get(input).should("have.value", "don'tx");
+        cy.get(".question-input-word").eq(0).should("not.have.class", "border-b-transparent");
+        cy.get(input).type("{backspace}", { force: true });
+        cy.get(input).should("have.value", "don't");
+        cy.document().then((document) => document.fonts.ready);
+        cy.get(".question-input-word").then(($words) => {
+          const before = Array.from($words).map((word) => word.getBoundingClientRect());
+          cy.get(input).type(confirmationKey, { force: true }).should("have.value", "");
+          cy.wait("@correctSound").its("response.statusCode").should("be.oneOf", [200, 304]);
+          cy.get(".question-input-word").should(($confirmed) => {
+            Array.from($confirmed).forEach((word, index) => {
+              const after = word.getBoundingClientRect();
+              for (const property of ["left", "top", "width", "height"] as const) {
+                expect(
+                  Math.abs(after[property] - before[index][property]),
+                  `${property} of word ${index}`,
+                ).to.be.at.most(1);
+              }
+            });
+            expect(getComputedStyle($confirmed[0]).borderBottomColor).to.equal("rgba(0, 0, 0, 0)");
+          });
+        });
+        cy.get(input).type("{backspace}", { force: true });
+        cy.get(".question-input-word").eq(0).should("have.text", "don't");
+        cy.get(".question-input-word").eq(1).should("have.class", "border-b-fuchsia-500");
+        cy.get(input).type("eat", { force: true });
+        cy.get('[data-testid="answer-sentence"]').should("not.exist");
+        cy.get(input).type(confirmationKey, { force: true });
+        cy.get('[data-testid="answer-sentence"]').should("be.visible");
       });
-      cy.get(input).type("{backspace}", { force: true });
-      cy.get(".question-input-word").eq(0).should("have.text", "don't");
-      cy.get(".question-input-word").eq(1).should("have.class", "border-b-fuchsia-500");
-      cy.get(input).type("eat", { force: true });
-      cy.get('[data-testid="answer-sentence"]').should("not.exist");
-      cy.get(input).type(" ", { force: true });
-      cy.get('[data-testid="answer-sentence"]').should("be.visible");
-    });
+    }
   }
 });

@@ -34,7 +34,7 @@ describe("experimental word space checking setting", () => {
     expect(legacy.element.disabled).toBe(false);
     expect(legacy.element.checked).toBe(true);
     await experimental.setValue(true);
-    expect(section.text()).toContain("空格确认当前词元，回车表示不会并回退");
+    expect(section.text()).toContain("空格确认当前词元；回车在匹配时确认，未匹配时回退");
     expect(legacy.element.disabled).toBe(true);
     expect(localStorage.getItem("wordSpaceCheck")).toBe("true");
     wrapper.unmount();

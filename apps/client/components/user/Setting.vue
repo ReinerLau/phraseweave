@@ -106,7 +106,7 @@
                 v-if="wordSpaceCheck"
                 class="mt-1 text-sm"
               >
-                空格确认当前词元，回车表示不会并回退
+                空格确认当前词元；回车在匹配时确认，未匹配时回退
               </p>
             </td>
             <td class="w-[300px] text-center">

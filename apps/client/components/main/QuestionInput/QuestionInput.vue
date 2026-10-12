@@ -321,13 +321,14 @@ function cancelWordFeedback() {
   clearWordFeedback();
 }
 
-function handleWordConfirmation() {
+function handleWordConfirmation(unmatchedAction: "feedback" | "help" = "feedback") {
   if (isAnswerTip() || !userInputWords.some((word) => word.isActive)) return;
   cancelWordFeedback();
   setInputValue(inputEl.value?.value ?? inputValue.value);
   const result = confirmCurrentWord();
   if (result === "unmatched") {
-    wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
+    if (unmatchedAction === "help") handleWordHelp();
+    else wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
   } else if (result === "confirmed" || result === "complete") {
     void playCorrectSound();
     if (result === "complete") handleAnswerRight();
@@ -426,8 +427,7 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (e.repeat) return;
-    if (e.code === "Space") handleWordConfirmation();
-    else handleWordHelp();
+    handleWordConfirmation(e.code === "Enter" ? "help" : "feedback");
     return;
   }
 

@@ -57,16 +57,20 @@ describe("word space checking in QuestionInput", () => {
     return { input, wrapper, store, words, press };
   }
 
-  it.each([false, true])(
-    "confirms only the current token regardless of space-submit: %s",
-    async (spaceSubmit) => {
+  it.each(
+    ["Space", "Enter"].flatMap((code) =>
+      [false, true].map((spaceSubmit) => ({ code, spaceSubmit })),
+    ),
+  )(
+    "confirms only the current token with $code regardless of space-submit: $spaceSubmit",
+    async ({ code, spaceSubmit }) => {
       localStorage.setItem("spaceSubmitAnswer", String(spaceSubmit));
       const { input, words, store, press } = setup();
       await input.setValue("I");
       expect(words()[0].classes()).not.toContain("border-b-transparent");
       expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
       const width = words()[0].attributes("style");
-      await press();
+      await press(code);
       expect(words()[0].classes()).toContain("border-b-transparent");
       expect(words()[0].attributes("style")).toBe(width);
       expect(words()[1].classes()).toContain("border-b-fuchsia-500");
@@ -75,19 +79,48 @@ describe("word space checking in QuestionInput", () => {
       await input.setValue("");
       expect(words()[0].text()).toBe("I");
       await input.setValue("eat");
-      await press();
+      await press(code);
       expect(store.passCurrentStatement).not.toHaveBeenCalled();
       await input.setValue("apples");
       expect(store.passCurrentStatement).not.toHaveBeenCalled();
-      await press();
+      await press(code);
       expect(store.passCurrentStatement).toHaveBeenCalledOnce();
       expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(3);
       expect(useGameMode().isAnswer()).toBe(true);
-      await press();
+      await press(code);
       expect(store.passCurrentStatement).toHaveBeenCalledOnce();
       expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(3);
     },
   );
+
+  it.each([
+    { source: "Don’t go.", drafts: ["DON'T", "GO"] },
+    { source: "woman's coat", drafts: ["WOMAN’S", "coat"] },
+    { source: "anti-social", drafts: ["anti", "social"] },
+  ])("normalizes each Enter-confirmed token in $source", async ({ source, drafts }) => {
+    const { input, words, store, press } = setup(source);
+    for (const [index, draft] of drafts.entries()) {
+      await input.setValue(draft);
+      await press("Enter");
+      expect(words()[index].classes()).toContain("border-b-transparent");
+    }
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+    expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(drafts.length);
+  });
+
+  it("synchronizes the native draft before Enter confirmation", async () => {
+    const { input, words, store, press } = setup("I eat");
+    (input.element as HTMLInputElement).value = "I";
+    await press("Enter");
+    expect(words()[0].classes()).toContain("border-b-transparent");
+    expect((input.element as HTMLInputElement).value).toBe("");
+    (input.element as HTMLInputElement).value = "eat";
+    await press("Enter");
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(2);
+  });
 
   it.each(["", "ea", "eats", "eat apples"])(
     "briefly marks '%s' without clearing or recovery",
@@ -117,7 +150,7 @@ describe("word space checking in QuestionInput", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each(["", "x", "eat"])(
+  it.each(["", "x", "ea", "eats", "eat apples"])(
     "requests help with the current draft '%s' treated as empty",
     async (draft) => {
       const { input, store, press } = setup();
@@ -129,6 +162,8 @@ describe("word space checking in QuestionInput", () => {
       expect(store.failCurrentStatement).toHaveBeenCalledWith("I ", 1);
       expect(store.passCurrentStatement).not.toHaveBeenCalled();
       expect((input.element as HTMLInputElement).value).toBe("");
+      expect(vi.getTimerCount()).toBe(0);
+      expect(useCorrectSound().playCorrectSound).toHaveBeenCalledOnce();
     },
   );
 
@@ -138,7 +173,7 @@ describe("word space checking in QuestionInput", () => {
     await press("Enter");
     expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
     await input.setValue("computer");
-    await press();
+    await press("Enter");
     expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([undefined]);
   });
 
@@ -151,12 +186,13 @@ describe("word space checking in QuestionInput", () => {
     expect(words()[0].classes()).not.toContain("border-b-transparent");
     await input.trigger("compositionend", { data: "I" });
     await press("Space", { isComposing: true });
+    await press("Enter", { isComposing: true });
     await press("Enter", { keyCode: 229 });
     await press("Space", { repeat: true });
     await press("Enter", { repeat: true });
     expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
-    await press();
+    await press("Enter");
     expect(words()[0].classes()).toContain("border-b-transparent");
   });
 

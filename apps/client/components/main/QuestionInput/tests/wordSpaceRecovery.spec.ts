@@ -90,16 +90,16 @@ describe("word space checking recovery", () => {
       const wrapper = mount(QuestionInput, { global: { plugins: [pinia] } });
       const input = wrapper.get("input");
 
-      async function confirmWord(word: string) {
+      async function confirmWord(word: string, code = "Enter") {
         await input.setValue(word);
-        await input.trigger("keydown", { code: "Space", key: " " });
+        await input.trigger("keydown", { code, key: code === "Space" ? " " : "Enter" });
       }
 
-      async function askForWord(word: string) {
+      async function askForWord(word: string, draft = "") {
         const words = getClozeWords(store.currentStatement!.english);
-        for (const prefix of words.slice(0, words.indexOf(word))) await confirmWord(prefix);
-        // A correctly spelled but unconfirmed word still requests recovery on Enter.
-        await input.setValue(word);
+        for (const prefix of words.slice(0, words.indexOf(word)))
+          await confirmWord(prefix, "Space");
+        await input.setValue(draft);
         await input.trigger("keydown", { code: "Enter", key: "Enter" });
       }
 
@@ -121,7 +121,7 @@ describe("word space checking recovery", () => {
       expect(store.currentCourse?.passedUnitIds).toBeUndefined();
       expect(saveLocalExerciseProgress).not.toHaveBeenCalled();
       await completeUnit("0:28");
-      await askForWord("plague");
+      await askForWord("plague", "plagu");
       expect(store.currentStatement?.unitId).toBe("0:4");
       await completeUnit("0:25");
       await completeUnit("0:28");
