@@ -85,6 +85,7 @@ import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
+import { lookupPronunciation } from "~/services/pronunciation";
 import { isSpeakableWord } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
 import ClozeText from "./ClozeText.vue";
@@ -98,6 +99,8 @@ import {
 import { useTypingSound } from "./useTypingSound";
 
 defineProps<{ inline?: boolean }>();
+const emit = defineEmits<{ "hint-change": [syllables: string[] | undefined] }>();
+let hintSequence = 0;
 
 const courseStore = useExerciseStore();
 const { loadingElement } = useWordAudio();
@@ -152,7 +155,29 @@ onMounted(() => {
 });
 
 focusInputWhenWIndowFocus();
-onUnmounted(cancelErrorReset);
+onUnmounted(() => {
+  cancelErrorReset();
+  clearPhoneticHint();
+});
+
+function clearPhoneticHint() {
+  hintSequence++;
+  emit("hint-change", undefined);
+}
+
+async function showPhoneticHint() {
+  if (courseStore.canDecomposeCurrentUnit || courseStore.words.length !== 1) return;
+  const word = courseStore.words[0];
+  if (!isSpeakableWord(word)) return;
+  const request = ++hintSequence;
+  try {
+    const syllables = await lookupPronunciation(word);
+    if (request !== hintSequence) return;
+    emit("hint-change", syllables);
+  } catch {
+    // A missing resource never interrupts answering or error recovery.
+  }
+}
 
 watch(
   () => inputValue.value,
@@ -176,9 +201,16 @@ watch(isAnswerTip, (isVisible) => {
 });
 
 watch(
-  () => [courseStore.currentStatement?.id, courseStore.learningMode, courseStore.practiceView],
+  () => [
+    courseStore.currentStatement?.id,
+    courseStore.statementIndex,
+    courseStore.currentCourse?.id,
+    courseStore.learningMode,
+    courseStore.practiceView,
+  ],
   () => {
     cancelErrorReset();
+    clearPhoneticHint();
     clearWordHover();
     clearInput();
     focusInput();
@@ -255,6 +287,7 @@ function handleAnswerError() {
   cancelErrorReset();
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
+    void showPhoneticHint();
     clearInput();
     courseStore.failCurrentStatement();
   }, ERROR_FEEDBACK_DURATION_MS);
@@ -262,6 +295,7 @@ function handleAnswerError() {
 
 function handleAnswerRight() {
   cancelErrorReset();
+  clearPhoneticHint();
   courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
     courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时

@@ -16,7 +16,10 @@
     "test:smoke": "cypress run --e2e --spec cypress/e2e/smoke.cy.ts",
     "test:ci": "pnpm run test:unit:ci",
     "cypress:open": "cypress open",
-    "type-check": "nuxi typecheck"
+    "type-check": "nuxi typecheck",
+    "pronunciation:build": "python3 ../../tools/pronunciation/build_dictionary.py",
+    "prebuild": "pnpm pronunciation:build",
+    "pregenerate": "pnpm pronunciation:build"
   },
   "devDependencies": {
     "@egoist/tailwindcss-icons": "^1.7.4",

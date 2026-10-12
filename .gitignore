@@ -149,3 +149,7 @@ tools/lexical_chunks/build/
 # Local scratch notes and Wrangler development state
 .scratch/
 **/.wrangler/
+
+# Browser verification artifacts
+apps/client/cypress/screenshots/
+apps/client/cypress/videos/

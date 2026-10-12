@@ -11,13 +11,21 @@ async function checkResponse(response: Response) {
   }
 }
 
-export async function fetchWordAudio(text: string, signal: AbortSignal) {
+export function fetchWordAudio(text: string, signal: AbortSignal) {
+  return fetchAudio(text, signal);
+}
+
+export function fetchSentenceAudio(text: string, signal: AbortSignal) {
+  return fetchAudio(text, signal, "sentence");
+}
+
+async function fetchAudio(text: string, signal: AbortSignal, kind?: "sentence") {
   let response: Response;
   try {
     response = await localServiceFetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, ...(kind ? { kind } : {}) }),
       signal,
     });
   } catch (error) {
