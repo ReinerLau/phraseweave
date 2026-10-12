@@ -122,6 +122,7 @@ describe("learning direction", () => {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
       practiceView: "single",
+      resumeStatementIndex: 3,
     });
 
     setActivePinia(createPinia());
@@ -303,6 +304,7 @@ describe("learning direction", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: 3,
       practiceView: "single",
+      resumeStatementIndex: 3,
     });
     setActivePinia(createPinia());
     store = await setup();
@@ -324,6 +326,7 @@ describe("learning direction", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: null,
       practiceView: "single",
+      resumeStatementIndex: 8,
     });
   });
 

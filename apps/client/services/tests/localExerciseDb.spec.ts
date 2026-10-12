@@ -160,12 +160,14 @@ describe("normalizeExerciseImport", () => {
     pack.courses[0].practiceView = "fulltext";
     pack.courses[0].sentenceFirstStartIndex = 0;
     pack.courses[0].statementIndex = 0;
+    pack.courses[0].resumeStatementIndex = 0;
     const [restored] = normalizeExerciseImport(JSON.parse(JSON.stringify([pack])));
     expect(restored.courses[0]).toMatchObject({
       learningMode: "sentence-first",
       practiceView: "fulltext",
       sentenceFirstStartIndex: 0,
       statementIndex: 0,
+      resumeStatementIndex: 0,
     });
   });
 
@@ -182,6 +184,8 @@ describe("normalizeExerciseImport", () => {
     pack.courses[0].learningMode = "progressive";
     pack.courses[0].practiceView = "fulltext";
     pack.courses[0].passedUnitIds = ["unit:old"];
+    pack.courses[0].resumeStatementIndex = 1;
+    stale.courses[0].resumeStatementIndex = 0;
     stale.courses[0].passedUnitIds = ["unit:new"];
     const merged = mergeLocalExerciseProgress(pack, stale);
     expect(merged.courses[0]).toMatchObject({
@@ -190,8 +194,17 @@ describe("normalizeExerciseImport", () => {
       learningMode: "progressive",
       completionCount: 1,
       passedUnitIds: ["unit:old", "unit:new"],
+      resumeStatementIndex: 1,
     });
     expect(pack.courses[0].completionCount).toBe(0);
+  });
+
+  it("preserves an explicitly cleared return position against stale full-pack writes", () => {
+    const [pack] = normalizeExerciseImport({ schema_version: 4, statements: [firstUnit] });
+    const stale = structuredClone(pack);
+    pack.courses[0].resumeStatementIndex = null;
+    stale.courses[0].resumeStatementIndex = 0;
+    expect(mergeLocalExerciseProgress(pack, stale).courses[0].resumeStatementIndex).toBeNull();
   });
 
   it("rejects links to absent or later units", () => {
