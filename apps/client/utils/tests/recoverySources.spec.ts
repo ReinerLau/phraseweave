@@ -53,6 +53,25 @@ describe("postorder recovery planning", () => {
     expect(select(target, "no go", sources)).toEqual(["first", "whole"]);
   });
 
+  it("locates errors within separately generated possessive units", () => {
+    const text = "woman's";
+    const target = unit(text, "whole", 0, text.length);
+    const sources = [unit(text, "woman", 0, 5), unit(text, "suffix", 5, 7)];
+    expect(select(target, "womon's", sources)).toEqual(["woman", "whole"]);
+    expect(select(target, "woman'z", sources)).toEqual(["suffix", "whole"]);
+    expect(select(target, "womon'z", sources)).toEqual(["woman", "suffix", "whole"]);
+    expect(select(target, "womans", sources)).toEqual(["woman", "suffix", "whole"]);
+    expect(select(target, "WOMAN’S", sources)).toBeUndefined();
+  });
+
+  it("retains contraction leaves when the word is not split into source units", () => {
+    const text = "don't go";
+    const target = unit(text, "whole", 0, text.length);
+    const sources = [unit(text, "contraction", 0, 5), unit(text, "go", 6, 8)];
+    expect(select(target, "dont go", sources)).toEqual(["contraction", "whole"]);
+    expect(select(target, "don't stop", sources)).toEqual(["go", "whole"]);
+  });
+
   it("retains every overlapping source containing an error", () => {
     const text = "A B C.";
     const target = unit(text, "whole", 0, text.length);
