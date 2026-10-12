@@ -2,6 +2,8 @@ import { createTestingPinia } from "@pinia/testing";
 import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import Contents from "~/components/main/Contents/Contents.vue";
+import { useContent } from "~/components/main/Contents/useContents";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
@@ -285,6 +287,56 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("");
     await vi.advanceTimersByTimeAsync(300);
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
+  });
+
+  it("clears input, tips and a pending error and focuses the target after a directory jump", async () => {
+    useGameMode().showQuestion();
+    const pinia = createTestingPinia({ createSpy: vi.fn, stubActions: false });
+    const store = useExerciseStore(pinia);
+    store.currentCourse = {
+      id: "course",
+      title: "文章",
+      order: 1,
+      coursePackId: "pack",
+      completionCount: 0,
+      statementIndex: 0,
+      practiceView: "fulltext",
+      passedUnitIds: ["unit:1"],
+      statements: ["I eat", "Birds sing"].map((english, index) => ({
+        id: String(index),
+        order: index + 1,
+        english,
+        unitId: String(index),
+        sourceUnitIds: [],
+        contextBefore: "",
+        contextAfter: ".",
+        sentenceChinese: index ? "鸟在歌唱。" : "我吃饭。",
+      })),
+    };
+    store.statementIndex = 0;
+    store.currentStatement = store.currentCourse.statements[0];
+    const wrapper = mount(QuestionInput, { attachTo: document.body, global: { plugins: [pinia] } });
+    const contents = mount(Contents, { attachTo: document.body, global: { plugins: [pinia] } });
+    const input = wrapper.get('input[type="text"]');
+    await submitAnswer(input, "I like");
+    expect(vi.getTimerCount()).toBe(1);
+    useGameMode().showAnswer();
+    useAnswerTip().showAnswerTip();
+    const directory = useContent();
+    directory.toggleContents(new MouseEvent("click"));
+    expect(directory.isShowContents()).toBe(true);
+    await contents.findAll("button")[1].trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(store.statementIndex).toBe(1);
+    expect(store.currentStatement?.english).toBe("Birds sing");
+    expect(useGameMode().isQuestion()).toBe(true);
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    expect(directory.isShowContents()).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(document.activeElement).toBe(input.element);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(store.advanceAfterCorrect()).toBe(false);
   });
 
   it("keeps the original sentence punctuation visible before input, in tips, and after input", async () => {

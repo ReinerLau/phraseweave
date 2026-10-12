@@ -146,9 +146,20 @@ export const useExerciseStore = defineStore("exercise", () => {
     return baseStatements.value.length;
   });
 
+  function canJumpToStatement(index: number) {
+    const statement = baseStatements.value[index];
+    return (
+      Number.isInteger(index) &&
+      statement !== undefined &&
+      index !== questionIndex.value &&
+      (!isFulltext.value || isStatementPassed(statement))
+    );
+  }
+
   function toSpecificStatement(index: number) {
-    if (isFulltext.value) return;
+    if (isFulltext.value && !canJumpToStatement(index)) return false;
     setQuestionIndex(index);
+    return true;
   }
 
   function toPreviousStatement() {
@@ -419,6 +430,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     advanceAfterCorrect,
     cancelRecovery,
     completeCourse,
+    canJumpToStatement,
     toSpecificStatement,
     toPreviousStatement,
     toNextStatement,

@@ -120,7 +120,7 @@ describe("fulltext practice", () => {
     expect(store.precedingSentences).toHaveLength(1);
   });
 
-  it("blocks every manual navigation API and historic passes cannot unlock the final question", async () => {
+  it("blocks shortcuts and unpassed directory targets, and historic passes cannot complete the course", async () => {
     course.statementIndex = 26;
     course.passedUnitIds = ["unit:2:ABC"];
     const store = await setup();
@@ -138,6 +138,92 @@ describe("fulltext practice", () => {
     await store.completeCourse();
     expect(saveLocalExercise).toHaveBeenCalledOnce();
     expect(store.advanceAfterCorrect()).toBe(false);
+  });
+
+  it.each(["sentence-first", "progressive"] as const)(
+    "jumps to passed questions in either direction and continues the %s sequence",
+    async (mode) => {
+      course.learningMode = mode;
+      course.passedUnitIds = ["unit:0:ABC", "unit:2:ABC"];
+      const store = await setup();
+      const lastQuestion = store.totalQuestionsCount - 1;
+      const firstWholeQuestion = mode === "sentence-first" ? 0 : 8;
+      expect(store.canJumpToStatement(lastQuestion)).toBe(true);
+      expect(store.toSpecificStatement(lastQuestion)).toBe(true);
+      expect(store.statementIndex).toBe(26);
+      expect(store.advanceAfterCorrect()).toBe(false);
+      expect(store.isAllDone()).toBe(false);
+      await store.completeCourse();
+      expect(saveLocalExercise).not.toHaveBeenCalled();
+      expect(store.toSpecificStatement(firstWholeQuestion)).toBe(true);
+      expect(store.statementIndex).toBe(8);
+      expect(store.currentStatement?.id).toBe("0-row-8");
+      expect(store.advanceAfterCorrect()).toBe(false);
+      correct(store);
+      expect(store.statementIndex).toBe(mode === "sentence-first" ? 17 : 9);
+      expect(store.currentSentenceIndex).toBe(1);
+    },
+  );
+
+  it("rejects invalid, current and unpassed targets without cancelling recovery or saving progress", async () => {
+    course.passedUnitIds = ["unit:0:ABC"];
+    const store = await setup();
+    store.failCurrentStatement();
+    const statement = store.currentStatement;
+    for (const index of [-1, 0, 1, 3, 0.5, NaN, Infinity]) {
+      expect(store.canJumpToStatement(index)).toBe(false);
+      expect(store.toSpecificStatement(index)).toBe(false);
+    }
+    expect(store.currentStatement).toBe(statement);
+    expect(store.isRecovering).toBe(true);
+    expect(store.statementIndex).toBe(8);
+    await flushPromises();
+    expect(saveLocalExerciseProgress).not.toHaveBeenCalled();
+  });
+
+  it("cancels recovery and accepted answers, persists the target and restores it on refresh", async () => {
+    course.passedUnitIds = ["unit:1:ABC", "unit:2:ABC"];
+    let store = await setup();
+    store.failCurrentStatement();
+    store.failCurrentStatement();
+    store.passCurrentStatement();
+    expect(store.toSpecificStatement(1)).toBe(true);
+    expect(store.isRecovering).toBe(false);
+    expect(store.currentStatement?.id).toBe("1-row-8");
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.toSpecificStatement(2)).toBe(true);
+    await flushPromises();
+    expect(saveLocalExerciseProgress).toHaveBeenLastCalledWith("pack", "course", 26, {
+      learningMode: "sentence-first",
+      sentenceFirstStartIndex: null,
+      practiceView: "fulltext",
+    });
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.currentStatement?.id).toBe("2-row-8");
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(correct(store)).toBe(true);
+    store.doAgain();
+    expect(store.fulltextCompleted).toBe(false);
+    expect(store.canJumpToStatement(2)).toBe(true);
+    expect(store.toSpecificStatement(2)).toBe(true);
+    expect(store.isAllDone()).toBe(false);
+    expect(store.advanceAfterCorrect()).toBe(false);
+  });
+
+  it("locates repeated progressive occurrences and does not unlock identical text in another sentence", async () => {
+    course.learningMode = "progressive";
+    course.statementIndex = 8;
+    course.passedUnitIds = ["unit:0:A"];
+    const store = await setup();
+    expect(store.toSpecificStatement(2)).toBe(true);
+    expect(store.currentStatement?.id).toBe("0-row-2");
+    expect(store.currentSentenceIndex).toBe(0);
+    expect(store.canJumpToStatement(9)).toBe(false);
+    expect(store.toSpecificStatement(9)).toBe(false);
+    expect(store.statementIndex).toBe(2);
+    correct(store);
+    expect(store.statementIndex).toBe(3);
   });
 
   it("preserves nested recovery and the original anchor when switching only the view", async () => {
