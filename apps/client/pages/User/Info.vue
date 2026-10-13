@@ -1,12 +1,20 @@
 <template>
-  <div class="flex min-h-full flex-1 justify-center px-6 py-12 lg:px-8">
-    <UserMenu
-      :menus="userMenus"
-      :defaultMenuName="defaultMenuName"
-      @changeMenu="handleChangeMenu"
-    />
-    <div class="flex-1 pl-4">
-      <component :is="currentComponent"></component>
+  <div class="flex min-h-full min-w-0 flex-1 flex-col px-6 py-8 lg:px-8">
+    <div class="mb-6">
+      <BackLink
+        label="返回练习清单"
+        to="/"
+      />
+    </div>
+    <div class="flex min-w-0 flex-1">
+      <UserMenu
+        :menus="userMenus"
+        :defaultMenuName="defaultMenuName"
+        @changeMenu="handleChangeMenu"
+      />
+      <div class="min-w-0 flex-1 overflow-x-auto pl-4">
+        <component :is="currentComponent"></component>
+      </div>
     </div>
   </div>
 </template>
@@ -15,6 +23,7 @@
 import { computed, ref, shallowRef, watchEffect } from "vue";
 import { useRoute } from "vue-router";
 
+import BackLink from "~/components/common/BackLink.vue";
 import UserSetting from "~/components/user/Setting.vue";
 
 interface ComponentMap {

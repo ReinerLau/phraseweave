@@ -32,7 +32,7 @@
         </span>
       </div>
       <div
-        class="question-sentence dark:text-gray-50"
+        class="question-sentence practice-english dark:text-gray-50"
         data-testid="cloze-sentence"
       >
         <SpeakableText
@@ -98,7 +98,8 @@ function contentFits() {
     rootRect.bottom -
     parseFloat(rootStyles.borderBottomWidth) -
     parseFloat(rootStyles.paddingBottom);
-  const contentBottom = contentFlow.getBoundingClientRect().bottom;
+  // Focus and scroll anchoring can move the viewport while the font is resized.
+  const contentBottom = contentFlow.getBoundingClientRect().bottom + root.scrollTop;
 
   return contentBottom <= availableBottom + 1 && root.scrollWidth <= root.clientWidth + 1;
 }
@@ -121,6 +122,7 @@ function fitQuestionFontSize() {
   });
 
   setQuestionFontSize(fittingSize);
+  root.scrollTop = 0;
 }
 
 function scheduleQuestionFontSize() {

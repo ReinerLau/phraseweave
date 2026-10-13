@@ -221,7 +221,7 @@ function letterUnderlineGapEm(word: HTMLElement) {
   return (underlineTop - range.getBoundingClientRect().bottom) / parseFloat(styles.fontSize);
 }
 
-function assertFulltextWordGap(singleGap: number) {
+function assertFulltextWordGap(singleGapEm: number) {
   cy.get(".fulltext-body").should(($body) => {
     const buttons = $body.find('[data-testid="sentence-audio-button"]');
     const completed = $body.find(".answer-content").length > 0;
@@ -236,7 +236,11 @@ function assertFulltextWordGap(singleGap: number) {
   cy.get(".fulltext-body .question-input-words").should(($words) => {
     const words = $words[0];
     const styles = words.ownerDocument.defaultView!.getComputedStyle(words);
-    expect(parseFloat(styles.columnGap), "fulltext column gap").to.be.closeTo(singleGap / 2, 0.1);
+    const expectedGap = singleGapEm * parseFloat(styles.fontSize);
+    expect(parseFloat(styles.columnGap), "fulltext column gap scales with its font").to.be.closeTo(
+      expectedGap,
+      0.1,
+    );
     expect(styles.rowGap, "fulltext row gap").to.equal("0px");
     expect(styles.fontSize, "fulltext font size").to.equal("18px");
     const groups = Array.from(words.querySelectorAll(".question-input-group"));
@@ -246,7 +250,7 @@ function assertFulltextWordGap(singleGap: number) {
       const current = groups[index].getBoundingClientRect();
       if (Math.abs(current.top - previous.top) < 1) {
         expect(current.left - previous.right, `gap before group ${index}`).to.be.closeTo(
-          singleGap / 2,
+          expectedGap,
           0.1,
         );
         sameLinePairs++;
@@ -281,11 +285,11 @@ describe("cloze spacing across practice views", () => {
         .then(($word) => {
           const singleGap = letterUnderlineGapEm($word[0]);
           const words = $word[0].closest(".question-input-words")!;
-          const singleColumnGap = parseFloat(
-            words.ownerDocument.defaultView!.getComputedStyle(words).columnGap,
-          );
+          const singleStyles = words.ownerDocument.defaultView!.getComputedStyle(words);
+          const singleColumnGapEm =
+            parseFloat(singleStyles.columnGap) / parseFloat(singleStyles.fontSize);
           cy.get('select[aria-label="展示方式"]').select("fulltext");
-          assertFulltextWordGap(singleColumnGap);
+          assertFulltextWordGap(singleColumnGapEm);
           cy.get('[data-testid="show-answer-button"]').click({ force: true });
           cy.get(".question-input-word")
             .first()
@@ -296,7 +300,7 @@ describe("cloze spacing across practice views", () => {
                 0.03,
               );
             });
-          assertFulltextWordGap(singleColumnGap);
+          assertFulltextWordGap(singleColumnGapEm);
           cy.get('input[aria-label="填写当前英文单元"]').type(punctuationAnswer, {
             force: true,
             delay: 0,
@@ -310,13 +314,13 @@ describe("cloze spacing across practice views", () => {
                 0.03,
               );
             });
-          assertFulltextWordGap(singleColumnGap);
+          assertFulltextWordGap(singleColumnGapEm);
           assertFixedPunctuation();
           cy.get(".question-input-word").then(($words) => {
             const before = Array.from($words).map((word) => word.getBoundingClientRect());
             cy.get('input[aria-label="填写当前英文单元"]').type("{enter}", { force: true });
             cy.get(".answer-content").should("exist");
-            assertFulltextWordGap(singleColumnGap);
+            assertFulltextWordGap(singleColumnGapEm);
             cy.get(".answer-content .question-input-word").should(($answers) => {
               expect($answers).to.have.length(before.length);
               Array.from($answers).forEach((word, index) => {
@@ -332,12 +336,11 @@ describe("cloze spacing across practice views", () => {
           });
           cy.get('select[aria-label="展示方式"]').select("single");
           cy.get(".question-input-words").should(($single) => {
+            const styles = $single[0].ownerDocument.defaultView!.getComputedStyle($single[0]);
             expect(
-              parseFloat(
-                $single[0].ownerDocument.defaultView!.getComputedStyle($single[0]).columnGap,
-              ),
-              "single view gap after switching back",
-            ).to.be.closeTo(singleColumnGap, 0.1);
+              parseFloat(styles.columnGap) / parseFloat(styles.fontSize),
+              "single view space width after switching back",
+            ).to.be.closeTo(singleColumnGapEm, 0.003);
           });
         });
     });

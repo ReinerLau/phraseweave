@@ -139,13 +139,24 @@ body {
   background: #cecacac7;
 }
 
+/* Keep English text and its measurement probes on the same fixed-width font. */
+.practice-english,
+.question-input-words {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+}
+
 /* 练习词块：输入区（QuestionInput）与答案区（Answer）共用同一套规则，
    保证答题前后词块的间隙、行高、换行点、总高完全一致（零偏移）。
    不分层放置：与原 scoped 样式的层叠行为保持一致（gap 不被 Tailwind gap-* 工具类覆盖）。
    词块的 border-box 高度 = 行高 1em + 下划线 2px（min-height 含边框）；
    答案区不带 border-b-2，同样占 1em+2px（2px 留空）—— 唯一差异是没有下划线。 */
 .question-input-words {
-  --question-word-gap: clamp(0.5rem, max(0.5rem, min(2vw, 1dvh)), 0.75rem);
+  /* Components replace this fallback with the measured space width in em. */
+  --question-word-gap: 1ch;
   column-gap: var(--question-word-gap);
   row-gap: 0.22em;
   font-size: inherit;

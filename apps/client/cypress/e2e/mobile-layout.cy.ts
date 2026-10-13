@@ -596,6 +596,9 @@ describe("mobile practice layout", () => {
       const document = $shell[0].ownerDocument;
       expect(document.documentElement.scrollHeight).to.be.at.most(pageHeightBeforeKeyboard + 1);
     });
+    cy.get(".question-content").should(($root) => {
+      expect($root[0].scrollTop, "resizing keeps the Chinese prompt at the top").to.equal(0);
+    });
     cy.get('[data-testid="question-prompt"]').contains("这是一个测试句子").should("be.visible");
     assertQuestionInputDoesNotScroll();
   });
