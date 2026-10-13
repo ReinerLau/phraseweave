@@ -13,25 +13,6 @@
         {{ courseStore.currentStatement?.sentenceChinese }}
       </div>
       <div
-        v-if="phoneticSyllables"
-        class="phonetic-hint text-slate-500 dark:text-slate-300"
-        data-testid="phonetic-hint"
-        role="status"
-        aria-label="音标提示"
-      >
-        <span
-          v-for="(syllable, index) in phoneticSyllables"
-          :key="index"
-          class="phonetic-syllable"
-        >
-          <span
-            v-if="index > 0"
-            aria-hidden="true"
-            >· </span
-          >/{{ syllable }}/
-        </span>
-      </div>
-      <div
         class="question-sentence practice-english dark:text-gray-50"
         data-testid="cloze-sentence"
       >
@@ -44,7 +25,26 @@
         /><SpeakableText
           class="cloze-context"
           :text="courseStore.currentStatement?.contextAfter"
-        />
+        /><span
+          v-if="phoneticSyllables"
+          class="phonetic-hint text-slate-500 dark:text-slate-300"
+          data-testid="phonetic-hint"
+          role="status"
+          aria-label="音标提示"
+          >{{ " "
+          }}<template
+            v-for="(syllable, index) in phoneticSyllables"
+            :key="index"
+            >{{ index > 0 ? " " : ""
+            }}<span class="phonetic-syllable"
+              ><span
+                v-if="index > 0"
+                aria-hidden="true"
+                >· </span
+              >/{{ syllable }}/</span
+            ></template
+          ></span
+        >
       </div>
     </div>
   </div>
@@ -176,19 +176,15 @@ onUnmounted(() => {
 }
 
 .phonetic-hint {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 0.12em 0.3em;
-  width: 100%;
-  min-width: 0;
-  margin: 0 0 0.5em;
+  display: inline;
+  white-space: normal;
   font-family: "Arial", "Helvetica", sans-serif;
   font-size: max(1em, 20px);
   line-height: 1.35;
 }
 
 .phonetic-syllable {
+  display: inline-block;
   white-space: nowrap;
 }
 
