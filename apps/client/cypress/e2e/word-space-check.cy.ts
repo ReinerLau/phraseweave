@@ -107,7 +107,7 @@ describe("word space checking", () => {
             const word = $word[0];
             const window = word.ownerDocument.defaultView!;
             const underlineWidth = parseFloat(window.getComputedStyle(word, "::after").width);
-            cy.get(input).type("don'tx ", { force: true });
+            cy.get(input).should("have.attr", "maxlength", "5").type("WWWWWx ", { force: true });
             cy.get(".question-input-word")
               .first()
               .should(($typed) => {
@@ -122,9 +122,9 @@ describe("word space checking", () => {
                 expect(range.getBoundingClientRect().width).to.be.greaterThan(underlineWidth);
               });
           });
-        cy.get(input).should("have.value", "don'tx");
+        cy.get(input).should("have.value", "WWWWW");
         cy.get(".question-input-word").eq(0).should("not.have.class", "border-b-transparent");
-        cy.get(input).type("{backspace}", { force: true });
+        cy.get(input).clear({ force: true }).type("don't", { force: true });
         cy.get(input).should("have.value", "don't");
         cy.document().then((document) => document.fonts.ready);
         cy.get(".question-input-word").then(($words) => {
@@ -151,7 +151,8 @@ describe("word space checking", () => {
         cy.get(input).type("{backspace}", { force: true });
         cy.get(".question-input-word").eq(0).should("have.text", "don't");
         cy.get(".question-input-word").eq(1).should("have.class", "border-b-fuchsia-500");
-        cy.get(input).type("eat", { force: true });
+        cy.get(input).should("have.attr", "maxlength", "3").type("eatx", { force: true });
+        cy.get(input).should("have.value", "eat");
         cy.get('[data-testid="answer-sentence"]').should("not.exist");
         cy.get(input).type(confirmationKey, { force: true });
         cy.get('[data-testid="answer-sentence"]').should("be.visible");

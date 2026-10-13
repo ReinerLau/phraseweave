@@ -57,6 +57,15 @@ describe("word space checking in QuestionInput", () => {
     return { input, wrapper, store, words, press };
   }
 
+  it("leaves legacy sentence input without a native token-length limit", async () => {
+    localStorage.setItem("wordSpaceCheck", "false");
+    const { input, store, press } = setup("I eat");
+    expect(input.attributes("maxlength")).toBeUndefined();
+    await input.setValue("I eat");
+    await press("Enter");
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+  });
+
   it.each(
     ["Space", "Enter"].flatMap((code) =>
       [false, true].map((spaceSubmit) => ({ code, spaceSubmit })),
@@ -122,7 +131,7 @@ describe("word space checking in QuestionInput", () => {
     expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["", "ea", "eats", "eat apples"])(
+  it.each(["", "ea", "eaz", "ear"])(
     "briefly marks '%s' without clearing or recovery",
     async (draft) => {
       const { input, words, store, press } = setup("eat apples");
@@ -150,12 +159,18 @@ describe("word space checking in QuestionInput", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("retains overlong drafts without changing the target underline width", async () => {
+  it("limits drafts to the active token length without changing its underline width", async () => {
     const { input, words, store, press } = setup("eat apples");
     const underlineWidth = words()[0].element.style.getPropertyValue("--word-underline-width");
     expect(words()[0].classes()).toContain("fixed-underline");
-    for (const draft of ["e", "eat", "eatx", "EATXXXX", "eat apples"]) {
-      await input.setValue(draft);
+    expect(input.attributes("maxlength")).toBe("3");
+    for (const [raw, draft] of [
+      ["e", "e"],
+      ["eatx", "eat"],
+      ["EATXXXX", "EAT"],
+      ["eaz apples", "eaz"],
+    ]) {
+      await input.setValue(raw);
       expect((input.element as HTMLInputElement).value).toBe(draft);
       expect(words()[0].text()).toBe(draft);
       expect(words()[0].element.style.getPropertyValue("--word-underline-width")).toBe(
@@ -167,9 +182,17 @@ describe("word space checking in QuestionInput", () => {
     expect(store.passCurrentStatement).not.toHaveBeenCalled();
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
     expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
+    await input.setValue("eat");
+    await press("Enter");
+    expect(input.attributes("maxlength")).toBe("6");
+    await input.setValue("applesx");
+    expect((input.element as HTMLInputElement).value).toBe("apples");
+    expect(words()[0].text()).toBe("eat");
+    await press("Enter");
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
   });
 
-  it.each(["", "x", "ea", "eats", "eat apples"])(
+  it.each(["", "x", "ea", "eaz", "ear"])(
     "requests help with the current draft '%s' treated as empty",
     async (draft) => {
       const { input, store, press } = setup();

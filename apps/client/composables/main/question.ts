@@ -80,7 +80,9 @@ export function useInput({
       const word = userInputWords[confirmedWordCount];
       // The native input only contains the current draft. Confirmed words never
       // enter its editable value, including during paste or selection replacement.
-      const draft = word ? normalizeClozeInput(val, [word.text]).trim() : "";
+      const draft = word
+        ? normalizeClozeInput(val, [word.text]).trim().slice(0, word.text.length)
+        : "";
       inputValue.value = draft;
       if (word) word.userInput = draft;
       if (draft !== val) {

@@ -39,24 +39,44 @@ describe("word space checking", () => {
     expect(input.getWordHelpRequest()).toBeUndefined();
   });
 
-  it.each(["", "e", "eats", "eat apples"])(
-    "retains unmatched draft '%s' without advancing",
-    (draft) => {
-      const input = createInput(() => "eat apples");
-      input.setInputValue(draft);
-      expect(input.inputValue.value).toBe(draft);
-      expect(input.confirmCurrentWord()).toBe("unmatched");
-      expect(input.userInputWords[0]).toMatchObject({
-        isActive: true,
-        incorrect: true,
-        confirmed: false,
-      });
-      expect(input.userInputWords[1].userInput).toBe("");
-      input.clearWordFeedback();
-      expect(input.inputValue.value).toBe(draft);
-      expect(input.userInputWords[0].incorrect).toBe(false);
-    },
-  );
+  it.each(["", "e", "eaz", "ear"])("retains unmatched draft '%s' without advancing", (draft) => {
+    const input = createInput(() => "eat apples");
+    input.setInputValue(draft);
+    expect(input.inputValue.value).toBe(draft);
+    expect(input.confirmCurrentWord()).toBe("unmatched");
+    expect(input.userInputWords[0]).toMatchObject({
+      isActive: true,
+      incorrect: true,
+      confirmed: false,
+    });
+    expect(input.userInputWords[1].userInput).toBe("");
+    input.clearWordFeedback();
+    expect(input.inputValue.value).toBe(draft);
+    expect(input.userInputWords[0].incorrect).toBe(false);
+  });
+
+  it("limits the draft by the token character count instead of glyph width", () => {
+    const input = useInput({
+      source: () => "iii eat",
+      isWordSpaceCheckEnabled: () => true,
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => 0,
+      getInputWordWidth: (word) =>
+        [...word].reduce((width, letter) => width + (letter === "W" ? 4 : 1), 0),
+      getInputWordCapacity: (word) => word.length,
+    });
+    input.setInputValue("WWWW");
+    expect(input.inputValue.value).toBe("WWW");
+    expect(input.userInputWords[0].userInput).toBe("WWW");
+    expect(input.confirmCurrentWord()).toBe("unmatched");
+    input.setInputValue("iiix");
+    expect(input.inputValue.value).toBe("iii");
+    expect(input.confirmCurrentWord()).toBe("confirmed");
+    input.setInputValue("eat apples");
+    expect(input.inputValue.value).toBe("eat");
+    expect(input.userInputWords[0].userInput).toBe("iii");
+    expect(input.userInputWords[1].confirmed).toBe(false);
+  });
 
   it.each([
     ["Don't go", ["DON’T", "GO"]],

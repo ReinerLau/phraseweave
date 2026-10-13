@@ -52,6 +52,7 @@
         :class="{ 'cursor-pointer': hoveredWordIndex !== undefined }"
         type="text"
         aria-label="填写当前英文单元"
+        :maxlength="inputMaxLength"
         v-model="inputValue"
         @keydown="handleKeydown"
         @beforeinput="handleBeforeInput"
@@ -75,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
@@ -152,6 +153,11 @@ const {
   isWordSpaceCheckEnabled,
 });
 const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+const inputMaxLength = computed(() =>
+  isWordSpaceCheckEnabled()
+    ? userInputWords.find((word) => word.isActive)?.text.length ?? 0
+    : undefined,
+);
 
 // Re-check after visible text changes, even when the pointer stays still.
 watch(() => [inputValue.value, isAnswerTip()], refreshWordHover, { flush: "post" });
@@ -293,7 +299,7 @@ function getWordsClassNames(index: number) {
   return "text-[#20202099] border-b-gray-300 dark:text-gray-300 dark:border-b-gray-400";
 }
 
-// 词块可容纳完整草稿；实验模式的下划线单独按目标词元宽度绘制。
+// 词块容纳当前草稿；实验模式的下划线单独按目标词元宽度绘制。
 function inputWidth(index: number) {
   const targetWord = courseStore.words[index] ?? "";
   const typedWord = isAnswerTip() ? "" : userInputWords[index]?.userInput ?? "";
@@ -491,7 +497,7 @@ function preventCursorMove(event: MouseEvent) {
 
 <style scoped>
 /* Retain the shared minimum height while drawing a target-sized underline.
-   Draft text can grow without stretching its line or losing editable characters. */
+   Wider letters in the draft must not stretch its line. */
 .fixed-underline {
   position: relative;
   border-bottom-width: 0;
