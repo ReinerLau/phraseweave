@@ -74,26 +74,40 @@ function seed(word: string, fulltext: boolean, dark: boolean) {
   cy.get(".question-input-word").should("have.length", 1);
 }
 
-function assertLayout() {
+function assertLayout(sameLine = false) {
   cy.get('[data-testid="phonetic-hint"]')
     .should("be.visible")
     .should(($hint) => {
       const hint = $hint[0].getBoundingClientRect();
       const root = $hint[0].closest(".question-content-flow")!;
-      const prompt = root.querySelector('[data-testid="question-prompt"]')!;
       const sentence = root.querySelector('[data-testid="cloze-sentence"]')!;
+      const context = sentence.querySelectorAll(".cloze-context")[1];
       const word = root.querySelector(".question-input-word")!;
       const styles = window.getComputedStyle($hint[0]);
-      expect(hint.top).to.be.at.least(prompt.getBoundingClientRect().bottom - 1);
-      expect(hint.bottom).to.be.at.most(sentence.getBoundingClientRect().top + 1);
-      expect(Math.abs(hint.left - root.getBoundingClientRect().left)).to.be.lessThan(1);
-      expect(Math.abs(hint.width - root.getBoundingClientRect().width)).to.be.lessThan(1);
+      const range = context.ownerDocument.createRange();
+      range.selectNodeContents(context);
+      const tail = Array.from(range.getClientRects()).at(-1)!;
+      const firstSyllable = $hint[0].querySelector(".phonetic-syllable")!.getBoundingClientRect();
+      expect($hint[0].parentElement).to.equal(sentence);
+      expect($hint[0].previousElementSibling).to.equal(context);
+      expect(sentence.lastElementChild).to.equal($hint[0]);
+      expect(context.textContent).to.equal(" every day.");
+      if (sameLine) {
+        expect(firstSyllable.top).to.be.lessThan(tail.bottom);
+        expect(firstSyllable.bottom).to.be.greaterThan(tail.top);
+        expect(firstSyllable.left).to.be.greaterThan(tail.right);
+      } else if (firstSyllable.top < tail.bottom && firstSyllable.bottom > tail.top) {
+        expect(firstSyllable.left).to.be.greaterThan(tail.right);
+      } else {
+        expect(firstSyllable.top).to.be.at.least(tail.bottom - 1);
+      }
+      expect(hint.left).to.be.at.least(sentence.getBoundingClientRect().left - 1);
+      expect(hint.right).to.be.at.most(sentence.getBoundingClientRect().right + 1);
       expect(parseFloat(styles.fontSize)).to.be.at.least(20);
       expect(parseFloat(styles.fontSize)).to.be.at.least(
         parseFloat(window.getComputedStyle(word).fontSize),
       );
       expect($hint[0].closest(".question-input-shell")).to.equal(null);
-      expect($hint[0].scrollWidth).to.be.at.most($hint[0].clientWidth + 1);
     });
   cy.get('[data-testid="cloze-sentence"]').should(($sentence) => {
     expect($sentence[0].scrollWidth).to.be.at.most($sentence[0].clientWidth + 1);
@@ -105,27 +119,35 @@ function assertLayout() {
   });
 }
 
-describe("phonetic spelling hint and original sentence audio", () => {
+describe("sentence-end phonetic spelling hint and original sentence audio", () => {
   for (const [width, fulltext, dark] of [
     [1440, false, false],
+    [1440, false, true],
+    [1440, true, false],
+    [1440, true, true],
+    [320, false, false],
     [320, false, true],
     [320, true, false],
-    [1440, true, true],
+    [320, true, true],
   ] as const) {
-    it(`places a large independent pronunciation row (${width}px, fulltext=${fulltext}, dark=${dark})`, () => {
+    it(`appends pronunciation after the sentence (${width}px, fulltext=${fulltext}, dark=${dark})`, () => {
       cy.viewport(width, 800);
       seed("computer", fulltext, dark);
       cy.get('[data-testid="phonetic-hint"]').should("not.exist");
       cy.get('input[type="text"]').type("x{enter}", { force: true });
       cy.get('[data-testid="phonetic-hint"]').should("contain.text", "/ˈpjuː/");
       cy.get('input[type="text"]').should("have.value", "");
-      assertLayout();
+      assertLayout(width === 1440);
       cy.get('[data-testid="phonetic-hint"]').should(($hint) => {
         expect(window.getComputedStyle($hint[0]).color).to.equal(
           dark ? "rgb(203, 213, 225)" : "rgb(100, 116, 139)",
         );
       });
       cy.screenshot(`phonetic-${width}-${fulltext}-${dark}`);
+      cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
+      cy.get('input[type="text"]').type("computer{enter}", { force: true });
+      cy.get('[data-testid="phonetic-hint"]').should("not.exist");
+      cy.get('[data-testid="sentence-audio-button"]').should("be.visible");
       cy.intercept("POST", "**/api/tts", { statusCode: 503, body: { error: "测试朗读失败" } }).as(
         "speech",
       );
@@ -134,9 +156,6 @@ describe("phonetic spelling hint and original sentence audio", () => {
         .its("request.body")
         .should("deep.equal", { text: "I use a computer every day.", kind: "sentence" });
       cy.contains("测试朗读失败").should("be.visible");
-      cy.get('input[type="text"]').type("computer{enter}", { force: true });
-      cy.get('[data-testid="phonetic-hint"]').should("not.exist");
-      cy.get('[data-testid="sentence-audio-button"]').should("be.visible");
     });
   }
 
@@ -146,6 +165,12 @@ describe("phonetic spelling hint and original sentence audio", () => {
     cy.get('input[type="text"]').type("x{enter}", { force: true });
     cy.get(".phonetic-syllable").should("have.length", 12);
     assertLayout();
+    cy.get(".phonetic-syllable").should(($syllables) => {
+      const rows = new Set(
+        Array.from($syllables, (syllable) => syllable.getBoundingClientRect().top),
+      );
+      expect(rows.size).to.be.greaterThan(1);
+    });
     cy.screenshot("phonetic-long-phone");
   });
 });
