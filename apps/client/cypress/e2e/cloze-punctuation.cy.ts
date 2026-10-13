@@ -72,6 +72,14 @@ function seedPunctuationExercise(english = punctuationSentence, recognizeSentenc
   );
 }
 
+// These legacy phrase fixtures have no pronunciation; the first Enter completes help.
+function showAnswerWithKeyboard() {
+  cy.get('input[type="text"]').clear({ force: true }).type("{enter}", { force: true });
+  cy.get(".question-input-word").first().should("not.have.class", "border-b-red-500");
+  cy.get('input[type="text"]').type("{enter}", { force: true }).should("be.focused");
+  cy.get(".question-input-word").first().should("have.class", "text-gray-400");
+}
+
 function assertFixedPunctuation() {
   cy.get(".cloze-punctuation").should(($parts) => {
     expect(Array.from($parts).map((part) => part.textContent)).to.deep.equal(["-", ",", ",", ","]);
@@ -103,7 +111,7 @@ describe("cloze punctuation", () => {
 
   it("keeps punctuation visible and preserves layout from blank to tip to completed answer on a narrow screen", () => {
     assertFixedPunctuation();
-    cy.get('[data-testid="show-answer-button"]').click({ force: true });
+    showAnswerWithKeyboard();
     cy.get(".question-input-word").eq(9).should("have.text", "anti");
     cy.get(".question-input-word").eq(10).should("have.text", "social");
     assertFixedPunctuation();
@@ -290,7 +298,7 @@ describe("cloze spacing across practice views", () => {
             parseFloat(singleStyles.columnGap) / parseFloat(singleStyles.fontSize);
           cy.get('select[aria-label="展示方式"]').select("fulltext");
           assertFulltextWordGap(singleColumnGapEm);
-          cy.get('[data-testid="show-answer-button"]').click({ force: true });
+          showAnswerWithKeyboard();
           cy.get(".question-input-word")
             .first()
             .should("have.text", "The")
