@@ -12,7 +12,7 @@
       {{ courseStore.currentStatement?.sentenceChinese }}
     </div>
     <div
-      class="answer-sentence dark:text-gray-50"
+      class="answer-sentence practice-english dark:text-gray-50"
       data-testid="answer-sentence"
     >
       <SpeakableText

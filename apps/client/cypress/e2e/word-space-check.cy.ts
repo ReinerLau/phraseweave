@@ -1,7 +1,39 @@
 const wordSpacePack = "word-space-check-pack";
 const wordSpaceCourse = "word-space-check-course";
 
-function seedWordSpaceExercise() {
+function assertMonospace(element: HTMLElement) {
+  const document = element.ownerDocument;
+  const styles = document.defaultView!.getComputedStyle(element);
+  expect(styles.fontFamily).to.contain("monospace");
+  expect(styles.fontKerning).to.equal("none");
+  expect(styles.fontVariantLigatures).to.equal("none");
+  const probe = document.createElement("span");
+  Object.assign(probe.style, {
+    position: "absolute",
+    visibility: "hidden",
+    whiteSpace: "pre",
+    fontFamily: styles.fontFamily,
+    fontSize: styles.fontSize,
+    fontWeight: styles.fontWeight,
+    fontStyle: styles.fontStyle,
+    fontKerning: styles.fontKerning,
+    fontVariantLigatures: styles.fontVariantLigatures,
+    letterSpacing: styles.letterSpacing,
+  });
+  document.body.appendChild(probe);
+  try {
+    probe.textContent = "iiiii";
+    const width = probe.getBoundingClientRect().width;
+    for (const text of ["wwwww", "WWWWW", "FIfiX", "DON'T", "DON’T"]) {
+      probe.textContent = text;
+      expect(probe.getBoundingClientRect().width, text).to.be.closeTo(width, 0.1);
+    }
+  } finally {
+    probe.remove();
+  }
+}
+
+function seedWordSpaceExercise(fulltext = false) {
   return cy.window().then(
     (window) =>
       new Cypress.Promise<void>((resolve, reject) => {
@@ -40,8 +72,32 @@ function seedWordSpaceExercise() {
                 order: 1,
                 completionCount: 0,
                 statementIndex: 0,
+                practiceView: fulltext ? "fulltext" : "single",
                 statements: [
-                  { id: "sentence", order: 1, english: "Don’t eat.", sentenceChinese: "不要吃。" },
+                  {
+                    id: "sentence",
+                    unitId: "sentence",
+                    order: 1,
+                    english: "Don’t eat",
+                    contextBefore: "",
+                    contextAfter: ".",
+                    sourceUnitIds: [],
+                    sentenceChinese: "不要吃。",
+                  },
+                  ...(fulltext
+                    ? [
+                        {
+                          id: "next-sentence",
+                          unitId: "next-sentence",
+                          order: 2,
+                          english: "We will wait",
+                          contextBefore: "",
+                          contextAfter: ".",
+                          sourceUnitIds: [],
+                          sentenceChinese: "我们会等待。",
+                        },
+                      ]
+                    : []),
                 ],
               },
             ],
@@ -119,7 +175,9 @@ describe("word space checking", () => {
                 );
                 const range = word.ownerDocument.createRange();
                 range.selectNodeContents($typed[0]);
-                expect(range.getBoundingClientRect().width).to.be.greaterThan(underlineWidth);
+                expect(range.getBoundingClientRect().width).to.be.closeTo(underlineWidth, 1);
+                expect(range.getBoundingClientRect().width).to.be.at.most(underlineWidth + 0.1);
+                assertMonospace($typed[0]);
               });
           });
         cy.get(input).should("have.value", "WWWWW");
@@ -156,7 +214,42 @@ describe("word space checking", () => {
         cy.get('[data-testid="answer-sentence"]').should("not.exist");
         cy.get(input).type(confirmationKey, { force: true });
         cy.get('[data-testid="answer-sentence"]').should("be.visible");
+        cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
+          assertMonospace($sentence[0]),
+        );
       });
     }
   }
+
+  it("uses the same monospace font for fulltext input, answers, and preceding English", () => {
+    cy.viewport(1000, 800);
+    cy.visit("/course-pack");
+    seedWordSpaceExercise(true);
+    cy.window().then((window) => {
+      window.localStorage.setItem("wordSpaceCheck", "true");
+      window.localStorage.setItem("keyboardSoundEnabled", "false");
+      window.localStorage.setItem("autoNextQuestion", "false");
+    });
+    cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+    const input = 'input[aria-label="填写当前英文单元"]';
+    cy.get('[data-testid="cloze-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
+    cy.get(input).type("DON'T{enter}EAT{enter}", { force: true });
+    cy.get('[data-testid="answer-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
+    cy.get('[data-testid="answer-sentence"] .question-input-word')
+      .eq(0)
+      .focus()
+      .type("{rightarrow}");
+    cy.get('[data-testid="fulltext-history-sentence"] .practice-english').then(($sentence) =>
+      assertMonospace($sentence[0]),
+    );
+    cy.get(input).type("We{enter}will{enter}wait{enter}", { force: true });
+    cy.get('[data-testid="answer-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
+    cy.get('[data-testid="answer-sentence"] .question-input-word')
+      .eq(0)
+      .focus()
+      .type("{rightarrow}");
+    cy.get('[data-testid="fulltext-current"] .practice-english').then(($sentence) =>
+      assertMonospace($sentence[0]),
+    );
+  });
 });

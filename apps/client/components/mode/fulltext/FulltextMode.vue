@@ -24,7 +24,7 @@
           data-testid="fulltext-history-sentence"
         >
           <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
-          <p class="whitespace-pre-wrap dark:text-gray-50">
+          <p class="practice-english whitespace-pre-wrap dark:text-gray-50">
             <SpeakableText :text="sentence.english" /><SentenceAudioButton
               :text="sentence.english"
             />
@@ -38,7 +38,7 @@
         >
           <div v-if="courseStore.fulltextCompleted">
             <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
-            <p class="whitespace-pre-wrap break-words dark:text-gray-50">
+            <p class="practice-english whitespace-pre-wrap break-words dark:text-gray-50">
               <SpeakableText :text="sentence.english" /><SentenceAudioButton
                 :text="sentence.english"
               />
