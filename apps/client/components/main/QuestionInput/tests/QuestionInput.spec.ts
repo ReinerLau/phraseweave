@@ -20,6 +20,7 @@ describe("QuestionInput", () => {
     vi.useFakeTimers();
     vi.mocked(lookupPronunciation).mockReset().mockResolvedValue(["kəm", "ˈpjuː", "tər"]);
     useAnswerTip().hiddenAnswerTip();
+    useGameMode().showQuestion();
   });
 
   afterEach(() => {

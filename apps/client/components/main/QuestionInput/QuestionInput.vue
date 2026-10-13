@@ -110,14 +110,15 @@ import { useTypingSound } from "./useTypingSound";
 defineProps<{ inline?: boolean }>();
 const emit = defineEmits<{ "hint-change": [syllables: string[] | undefined] }>();
 let hintSequence = 0;
+let phoneticHintStage: "idle" | "pending" | "shown" | "unavailable" = "idle";
 
 const courseStore = useExerciseStore();
 const { loadingElement } = useWordAudio();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
-const { showAnswer } = useGameMode();
-const { showSummary } = useSummary();
+const { showAnswer, isQuestion } = useGameMode();
+const { showSummary, showModal } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { wordSpaceCheck, isWordSpaceCheckEnabled } = useWordSpaceCheck();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
@@ -153,7 +154,7 @@ const {
   getInputWordCapacity,
   isWordSpaceCheckEnabled,
 });
-const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 const inputMaxLength = computed(() =>
   isWordSpaceCheckEnabled()
     ? userInputWords.find((word) => word.isActive)?.text.length ?? 0
@@ -191,19 +192,26 @@ onUnmounted(() => {
 
 function clearPhoneticHint() {
   hintSequence++;
+  phoneticHintStage = "idle";
   emit("hint-change", undefined);
 }
 
 async function showPhoneticHint() {
-  if (courseStore.canDecomposeCurrentUnit || courseStore.words.length !== 1) return;
+  if (courseStore.canDecomposeCurrentUnit || phoneticHintStage !== "idle") return;
   const word = courseStore.words[0];
-  if (!isSpeakableWord(word)) return;
+  if (courseStore.words.length !== 1 || !isSpeakableWord(word)) {
+    phoneticHintStage = "unavailable";
+    return;
+  }
   const request = ++hintSequence;
+  phoneticHintStage = "pending";
   try {
     const syllables = await lookupPronunciation(word);
     if (request !== hintSequence) return;
-    emit("hint-change", syllables);
+    phoneticHintStage = syllables?.length ? "shown" : "unavailable";
+    emit("hint-change", syllables?.length ? syllables : undefined);
   } catch {
+    if (request === hintSequence) phoneticHintStage = "idle";
     // A missing resource never interrupts answering or error recovery.
   }
 }
@@ -223,6 +231,17 @@ watch(
     }
   },
 );
+
+// Restarting at the same unit does not necessarily change its ID or position.
+courseStore.$onAction(({ name }) => {
+  if (name === "doAgain" || name === "setup") {
+    cancelErrorReset();
+    cancelWordFeedback();
+    clearPhoneticHint();
+    hiddenAnswerTip();
+    clearInput();
+  }
+});
 
 watch(isAnswerTip, (isVisible) => {
   if (isVisible) {
@@ -247,6 +266,7 @@ watch(
     cancelWordFeedback();
     clearPhoneticHint();
     clearWordHover();
+    hiddenAnswerTip();
     clearInput();
     focusInput();
   },
@@ -409,12 +429,38 @@ function handleCompositionEnd() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (isWordSpaceCheckEnabled() && (isComposing.value || e.isComposing || e.keyCode === 229)) {
+  if (isComposing.value || e.isComposing || e.keyCode === 229) {
+    if (e.code === "Enter") e.stopPropagation();
     return;
   }
   if (e.ctrlKey) {
     e.preventDefault();
     return;
+  }
+
+  if (e.code === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.repeat || !isQuestion() || showModal.value || courseStore.fulltextCompleted) return;
+    const draft = sanitizeQuestionInput(inputEl.value?.value ?? inputValue.value);
+    if (
+      courseStore.currentStatement &&
+      !courseStore.canDecomposeCurrentUnit &&
+      !draft.trim() &&
+      !userInputWords.some((word) => word.confirmed) &&
+      (phoneticHintStage === "shown" || phoneticHintStage === "unavailable")
+    ) {
+      showAnswerTip();
+      focusInput();
+      return;
+    }
+    // Keep a pending lookup (and legacy feedback timer) alive until help is ready.
+    if (
+      !courseStore.canDecomposeCurrentUnit &&
+      !draft.trim() &&
+      (phoneticHintStage === "pending" || errorResetTimer !== undefined)
+    )
+      return;
   }
 
   if (isAnswerTip()) {

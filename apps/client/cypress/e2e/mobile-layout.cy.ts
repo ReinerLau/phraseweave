@@ -74,6 +74,14 @@ function seedLocalExercise(english = englishSentence) {
   );
 }
 
+// These legacy phrase fixtures have no pronunciation; the first Enter completes help.
+function showAnswerWithKeyboard() {
+  cy.get('input[type="text"]').clear({ force: true }).type("{enter}", { force: true });
+  cy.get(".question-input-word").first().should("not.have.class", "border-b-red-500");
+  cy.get('input[type="text"]').type("{enter}", { force: true }).should("be.focused");
+  cy.get(".question-input-word").first().should("have.class", "text-gray-400");
+}
+
 function assertNoHorizontalOverflow() {
   cy.document().then((document) => {
     expect(document.documentElement.scrollWidth).to.be.at.most(
@@ -368,7 +376,7 @@ describe("mobile practice layout", () => {
     );
     cy.get('input[type="text"]').type("this", { force: true });
     cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
-    cy.get('[data-testid="show-answer-button"]').click();
+    showAnswerWithKeyboard();
     cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
     cy.get('input[type="text"]').clear({ force: true }).type(englishSentence, { force: true });
     cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
@@ -414,31 +422,18 @@ describe("mobile practice layout", () => {
     cy.get('.question-content [data-testid="sentence-audio-button"]').should("not.exist");
     cy.get('.question-content [data-testid="show-answer-button"]').should("not.exist");
     cy.get('[data-testid="practice-toolbar"] [data-testid="show-answer-button"]').should(
-      "be.visible",
+      "not.exist",
     );
     assertNoHorizontalOverflow();
     assertNoVerticalOverflow();
   });
 
-  it("keeps the answer hint in the toolbar before the title without a version or arrow controls", () => {
+  it("keeps the toolbar free of answer hints, versions and arrow controls", () => {
     cy.get("footer").should("not.exist");
     cy.get(".arrow-btn").should("not.exist");
     cy.get('[data-testid="practice-tips"]').should("not.exist");
     cy.get('[data-testid="next-question-button"]').should("not.exist");
-    cy.get('[data-testid="show-answer-button"]')
-      .should("have.length", 1)
-      .should("be.visible")
-      .and("have.attr", "aria-label", "显示答案");
-    cy.get('.question-content [data-testid="show-answer-button"]').should("not.exist");
-    cy.get('[data-testid="practice-toolbar"]').should(($toolbar) => {
-      const button = $toolbar[0].querySelector<HTMLElement>('[data-testid="show-answer-button"]')!;
-      const title = $toolbar[0].querySelector<HTMLElement>('[data-tip="练习卡片列表"]')!;
-      const buttonRect = button.getBoundingClientRect();
-
-      expect(buttonRect.height).to.be.at.least(44);
-      expect(buttonRect.width).to.be.at.least(44);
-      expect(buttonRect.right).to.be.at.most(title.getBoundingClientRect().left);
-    });
+    cy.get('[data-testid="show-answer-button"]').should("not.exist");
     cy.get(".question-content").should(($question) => {
       const document = $question[0].ownerDocument;
       const questionTop = $question[0].getBoundingClientRect().top;
@@ -603,7 +598,7 @@ describe("mobile practice layout", () => {
     assertQuestionInputDoesNotScroll();
   });
 
-  it("keeps the toolbar answer button visible with the keyboard open", () => {
+  it("reveals answers by keyboard while the keyboard is open", () => {
     cy.get('input[type="text"]').click({ force: true });
     cy.window().then((window) => {
       const viewport = window.visualViewport;
@@ -618,26 +613,11 @@ describe("mobile practice layout", () => {
       viewport?.dispatchEvent(new Event("resize"));
     });
 
-    cy.get('[data-testid="practice-toolbar"] [data-testid="show-answer-button"]')
-      .should("be.visible")
-      .should(($button) => {
-        const document = $button[0].ownerDocument;
-        const questionTop = document
-          .querySelector(".question-content")!
-          .getBoundingClientRect().top;
-        const button = $button[0];
-        const buttonRect = button.getBoundingClientRect();
-
-        expect(buttonRect.height).to.be.at.least(44);
-        expect(buttonRect.width).to.be.at.least(44);
-        expect(buttonRect.bottom).to.be.at.most(questionTop);
-      });
-    cy.get('[data-testid="show-answer-button"]').click();
+    cy.get('[data-testid="practice-toolbar"] [data-testid="show-answer-button"]').should(
+      "not.exist",
+    );
+    showAnswerWithKeyboard();
     cy.get('input[type="text"]').should("be.focused");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
-    cy.get('[data-testid="show-answer-button"]').click();
-    cy.get('input[type="text"]').should("be.focused");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "显示答案");
     assertNoHorizontalOverflow();
     assertNoVerticalOverflow();
   });
@@ -764,7 +744,7 @@ describe("mobile practice layout", () => {
 
   it("shows the answer in the input area without opening a popup", () => {
     cy.get('input[type="text"]').type("wrong", { force: true });
-    cy.get('[data-testid="show-answer-button"]').click({ force: true });
+    showAnswerWithKeyboard();
     cy.get('[data-testid="next-question-button"]').should("not.exist");
 
     cy.get('input[type="text"]').should("have.value", "");
@@ -794,12 +774,12 @@ describe("mobile practice layout", () => {
     cy.get('input[type="text"]')
       .type("{leftarrow}{backspace}{enter} ", { force: true })
       .should("have.value", " ");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
+    cy.get(".question-input-word").first().should("have.class", "text-gray-400");
 
     cy.get('input[type="text"]').clear({ force: true }).should("have.value", "");
     cy.get('input[type="text"]').type("this", { force: true }).should("have.value", "this");
     cy.get(".question-input-word").first().should("have.text", "this");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "显示答案");
+    cy.get(".question-input-word").first().should("not.have.class", "text-gray-400");
     assertQuestionInputDoesNotScroll();
   });
 
@@ -816,8 +796,10 @@ describe("mobile practice layout", () => {
     cy.get('input[type="text"]').blur().should("not.be.focused");
     cy.get('[data-tip="练习卡片列表"]').click();
     cy.get('input[type="text"]').should("not.be.focused");
+    cy.get('[data-tip="练习卡片列表"]').click();
+    cy.get('[data-testid="practice-focus-area"]').click("center");
 
-    cy.get('[data-testid="show-answer-button"]').click({ force: true });
+    showAnswerWithKeyboard();
     cy.get('input[type="text"]').should("be.focused");
   });
 
@@ -831,21 +813,21 @@ describe("mobile practice layout", () => {
     cy.contains("再来一次").should("be.visible");
   });
 
-  it("filters non-Latin input and keeps the answer visible until a letter is entered", () => {
-    cy.get('[data-testid="show-answer-button"]').click({ force: true });
+  it("filters Chinese input and keeps the answer visible until a letter is entered", () => {
+    showAnswerWithKeyboard();
     cy.get('input[type="text"]').click({ force: true }).should("be.focused");
 
-    setNativeInputValue("中文123");
+    setNativeInputValue("中文");
     cy.get('input[type="text"]').should("have.value", "");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
+    cy.get(".question-input-word").first().should("have.class", "text-gray-400");
 
     setNativeInputValue(".,?!- ");
-    cy.get('input[type="text"]').should("have.value", ".,?!- ");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "隐藏答案");
+    cy.get('input[type="text"]').should("have.value", " ");
+    cy.get(".question-input-word").first().should("have.class", "text-gray-400");
 
-    setNativeInputValue("中文a123");
+    setNativeInputValue("中文a");
     cy.get('input[type="text"]').should("have.value", "a");
-    cy.get('[data-testid="show-answer-button"]').should("have.attr", "aria-label", "显示答案");
+    cy.get(".question-input-word").first().should("not.have.class", "text-gray-400");
   });
 
   it("moves the course title to the right without a return tooltip", () => {
@@ -883,7 +865,7 @@ describe("mobile practice layout", () => {
         );
         button.click();
       });
-    cy.get('button[aria-label="同步"]').should("be.visible");
+    cy.get('[role="menu"]').should("be.visible");
     cy.get('button[aria-label="删除"]').should("be.visible");
   });
 });
