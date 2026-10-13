@@ -184,3 +184,23 @@ test("consumes a native-host capture exactly once", async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test("proxies TTS preparation and protects retry mutations", async () => {
+  assert.equal((await fetch(new URL("/api/tts/status", url))).status, 200);
+  assert.deepEqual(requests.at(-1), ["/api/tts/status", "GET", undefined]);
+  const headers = { Origin: new URL(url).origin };
+  assert.equal(
+    (await fetch(new URL("/api/tts/retry", url), { method: "POST", headers })).status,
+    200,
+  );
+  assert.deepEqual(requests.at(-1), ["/api/tts/retry", "POST", ""]);
+  assert.equal(
+    (
+      await fetch(new URL("/api/tts/retry", url), {
+        method: "POST",
+        headers: { Origin: "https://evil.example" },
+      })
+    ).status,
+    403,
+  );
+});

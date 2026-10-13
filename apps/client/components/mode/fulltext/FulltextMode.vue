@@ -24,8 +24,10 @@
           data-testid="fulltext-history-sentence"
         >
           <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
-          <p class="whitespace-pre-wrap dark:text-gray-50">
-            <SpeakableText :text="sentence.english" />
+          <p class="practice-english whitespace-pre-wrap dark:text-gray-50">
+            <SpeakableText :text="sentence.english" /><SentenceAudioButton
+              :text="sentence.english"
+            />
           </p>
         </div>
         <section
@@ -36,8 +38,10 @@
         >
           <div v-if="courseStore.fulltextCompleted">
             <p class="dark:text-gray-50">{{ sentence.chinese }}</p>
-            <p class="whitespace-pre-wrap break-words dark:text-gray-50">
-              <SpeakableText :text="sentence.english" />
+            <p class="practice-english whitespace-pre-wrap break-words dark:text-gray-50">
+              <SpeakableText :text="sentence.english" /><SentenceAudioButton
+                :text="sentence.english"
+              />
             </p>
           </div>
           <ModeClozeMode v-else />
@@ -72,6 +76,7 @@
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import type { ChineseMaskLayout } from "./chineseMaskLayout";
+import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
 import SpeakableText from "~/components/SpeakableText.vue";
 import { useExerciseStore } from "~/store/exercise";
 import { measureChineseMasks } from "./chineseMaskLayout";
@@ -158,8 +163,6 @@ onUnmounted(() => {
 }
 
 .fulltext-body :deep(.question-input-words) {
-  /* Fixed 18px / 36px ratio, independent of the single view's adaptive font size. */
-  column-gap: calc(var(--question-word-gap) / 2);
   row-gap: 0;
 }
 

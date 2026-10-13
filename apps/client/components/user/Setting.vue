@@ -54,6 +54,25 @@
             </td>
           </tr>
           <tr class="hover">
+            <td class="label-text">本地朗读（美式女声，正常语速）</td>
+            <td class="text-center">
+              <p
+                class="text-sm"
+                role="status"
+              >
+                {{ ttsStatus.error || ttsStatus.message }}
+              </p>
+              <button
+                v-if="ttsStatus.state === 'error'"
+                class="btn btn-outline btn-secondary btn-sm mt-2"
+                :disabled="retryingTts"
+                @click="retryLocalTts"
+              >
+                {{ retryingTts ? "正在重试…" : "重试朗读准备" }}
+              </button>
+            </td>
+          </tr>
+          <tr class="hover">
             <td class="label-text">朗读缓存（单词与整句，保留至手动清理）</td>
             <td class="text-center">
               <button
@@ -81,12 +100,33 @@
       <table class="table">
         <tbody>
           <tr class="hover">
+            <td class="label-text">
+              <label for="word-space-check">逐词空格检查（实验）</label>
+              <p
+                v-if="wordSpaceCheck"
+                class="mt-1 text-sm"
+              >
+                空格确认当前词元；回车在匹配时确认，未匹配时回退
+              </p>
+            </td>
+            <td class="w-[300px] text-center">
+              <input
+                id="word-space-check"
+                type="checkbox"
+                class="toggle toggle-secondary"
+                :checked="wordSpaceCheck"
+                @change="toggleWordSpaceCheck"
+              />
+            </td>
+          </tr>
+          <tr class="hover">
             <td class="label-text">开启空格提交答案</td>
             <td class="w-[300px] text-center">
               <input
                 type="checkbox"
                 class="toggle toggle-secondary"
                 :checked="useSpace"
+                :disabled="wordSpaceCheck"
                 @change="toggleUseSpaceSubmitAnswer"
               />
             </td>
@@ -159,8 +199,12 @@ import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { useWordSpaceCheck } from "~/composables/user/wordSpaceCheck";
+import { useTtsStatus } from "~/composables/useTtsStatus";
 import { clearWordAudioCache } from "~/composables/useWordAudio";
 import { parseShortcutKeys } from "~/utils/keyboardShortcuts";
+
+const { status: ttsStatus, retrying: retryingTts, retry: retryLocalTts } = useTtsStatus();
 
 const clearingAudioCache = ref(false);
 const cacheMessage = ref("");
@@ -195,6 +239,7 @@ const dialogBoxRef = ref<HTMLElement | null>(null);
 const { autoNextQuestion, toggleAutoQuestion } = useAutoNextQuestion();
 const { keyboardSound, toggleKeyboardSound } = useKeyboardSound();
 const { useSpace, toggleUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
+const { wordSpaceCheck, toggleWordSpaceCheck } = useWordSpaceCheck();
 const {
   showModal,
   shortcutKeys,

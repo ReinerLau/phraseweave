@@ -9,11 +9,7 @@ import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
 import { getLocalExercise, saveLocalExerciseProgress } from "~/services/localExerciseDb";
 import { useExerciseStore } from "~/store/exercise";
-import {
-  deepPneumonicStatements,
-  pneumonicReturnPath,
-  pneumonicSentence,
-} from "~/store/tests/fixtures/pneumonic";
+import { deepPneumonicStatements, pneumonicSentence } from "~/store/tests/fixtures/pneumonic";
 import QuestionInput from "../QuestionInput.vue";
 
 vi.mock("~/services/localExerciseDb", () => ({
@@ -41,13 +37,15 @@ describe("submitted-answer recovery", () => {
 
   const scenarios = (["progressive", "sentence-first"] as LearningMode[]).flatMap((mode) =>
     (["single", "fulltext"] as PracticeView[]).flatMap((view) =>
-      [false, true].map((autoNext) => ({ mode, view, autoNext })),
+      [false, true].flatMap((autoNext) =>
+        [false, true].map((partial) => ({ mode, view, autoNext, partial })),
+      ),
     ),
   );
 
   it.each(scenarios)(
-    "descends directly and resumes every parent after a nested failure ($mode, $view, auto-next: $autoNext)",
-    async ({ mode, view, autoNext }) => {
+    "skips deeper combinations and resumes after a nested failure ($mode, $view, auto-next: $autoNext, partial: $partial)",
+    async ({ mode, view, autoNext, partial }) => {
       localStorage.setItem("autoNextQuestion", String(autoNext));
       const statements = deepPneumonicStatements();
       const anchor = statements.length - 1;
@@ -93,8 +91,18 @@ describe("submitted-answer recovery", () => {
         await input.trigger("keydown", { code: "Enter", key: "Enter" });
       }
 
-      await submit(pneumonicSentence.replace("pneumonic", "x"));
+      const prefix = pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic"));
+      await submit(prefix.trimEnd());
       await vi.advanceTimersByTimeAsync(300);
+      expect(store.currentStatement?.unitId).toBe("0:29");
+      expect(store.isRecovering).toBe(false);
+      expect(store.statementIndex).toBe(anchor);
+      expect((input.element as HTMLInputElement).value).toBe(prefix.trimEnd());
+
+      await submit(partial ? prefix : pneumonicSentence.replace("pneumonic", "x"));
+      await vi.advanceTimersByTimeAsync(299);
+      expect(store.currentStatement?.unitId).toBe("0:29");
+      await vi.advanceTimersByTimeAsync(1);
       expect(store.currentStatement?.unitId).toBe("0:3");
       expect(store.statementIndex).toBe(anchor);
       expect(store.currentCourse?.passedUnitIds).toBeUndefined();
@@ -112,22 +120,32 @@ describe("submitted-answer recovery", () => {
         expect((input.element as HTMLInputElement).value).toBe("");
         if (next !== "next") expect(store.statementIndex).toBe(anchor);
       }
-      await submitCorrect("pneumonic", "0:7");
-      await submit("pneumonic x bacteria");
+      await submitCorrect("pneumonic", "0:28");
+      const combination = store.currentStatement!.english;
+      await submit(combination.slice(0, combination.indexOf("plague")).trimEnd());
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.currentStatement?.unitId).toBe("0:28");
+      expect(store.isRecovering).toBe(true);
+      expect(store.statementIndex).toBe(anchor);
+      await submit(
+        partial
+          ? combination.slice(0, combination.indexOf("plague"))
+          : combination.replace("plague", "x"),
+      );
       await vi.advanceTimersByTimeAsync(300);
       expect(store.currentStatement?.unitId).toBe("0:4");
-      await submitCorrect("plague", "0:6");
-      await submitCorrect("plague bacteria", "0:7");
-      for (const [index, [, english]] of pneumonicReturnPath.entries()) {
-        await submitCorrect(english, pneumonicReturnPath[index + 1]?.[0] ?? "next");
-      }
+      await submitCorrect("plague", "0:25");
+      await submitCorrect(store.currentStatement!.english, "0:28");
+      await submitCorrect(store.currentStatement!.english, "0:29");
+      await submitCorrect(pneumonicSentence, "next");
       expect(store.isRecovering).toBe(false);
       expect(store.statementIndex).toBe(anchor + 1);
       expect(store.currentCourse?.passedUnitIds).toEqual([
         "unit:0:3",
         "unit:0:4",
-        "unit:0:6",
-        ...pneumonicReturnPath.map(([id]) => `unit:${id}`),
+        "unit:0:25",
+        "unit:0:28",
+        "unit:0:29",
       ]);
     },
   );

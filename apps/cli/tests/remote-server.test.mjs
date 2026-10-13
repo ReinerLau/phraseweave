@@ -138,9 +138,15 @@ test("protects word synthesis and cache clearing and preserves authenticated aud
   };
   for (const [resource, method] of [
     ["/api/tts", "POST"],
+    ["/api/tts/status", "GET"],
+    ["/api/tts/retry", "POST"],
     ["/api/tts/cache", "DELETE"],
   ]) {
-    const response = await get(resource, { ...audioInit, method });
+    const response = await get(resource, {
+      ...audioInit,
+      method,
+      body: method === "GET" ? undefined : audioInit.body,
+    });
     assert.equal(response.status, 401);
     assert.equal((await response.json()).code, "REMOTE_AUTH_REQUIRED");
   }
@@ -274,5 +280,34 @@ test("return paths cannot redirect to another origin or loop through auth endpoi
   assert.equal(
     safeReturnPath("/game/1?mode=review#unit", config.origin),
     "/game/1?mode=review#unit",
+  );
+});
+
+test("authenticated phones can prepare TTS and retain the full synthesis deadline", async (t) => {
+  const headers = { Cookie: sessionCookie(await login()), Origin: config.origin };
+  assert.equal((await get("/api/tts/status", { headers })).status, 200);
+  assert.equal((await get("/api/tts/retry", { method: "POST", headers })).status, 200);
+  const deadlines = [];
+  const setTimeout = http.ClientRequest.prototype.setTimeout;
+  t.mock.method(http.ClientRequest.prototype, "setTimeout", function (milliseconds, callback) {
+    deadlines.push(milliseconds);
+    return setTimeout.call(this, milliseconds, callback);
+  });
+  const audio = await get("/api/tts", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: '{"text":"I use a computer every day.","kind":"sentence"}',
+  });
+  assert.equal(audio.status, 200);
+  assert.equal(audio.headers.get("content-type"), "audio/mpeg");
+  assert.ok(deadlines.some((value) => value > 60_000));
+  assert.equal(
+    (
+      await get("/api/tts/retry", {
+        method: "POST",
+        headers: { ...headers, Origin: "https://evil.example" },
+      })
+    ).status,
+    403,
   );
 });

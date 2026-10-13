@@ -7,6 +7,7 @@
       ref="questionInputWordsEl"
       class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       :class="inline ? 'w-fit' : 'w-full'"
+      :style="{ '--question-word-gap': `${measureEm(' ')}em` }"
       @pointermove="handleWordHover"
       @pointerleave="clearWordHover"
     >
@@ -17,6 +18,7 @@
             :class="[
               getWordsClassNames(token.wordIndex),
               {
+                'fixed-underline': isWordSpaceCheckEnabled(),
                 'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
                 'speech-hover': hoveredWordIndex === token.wordIndex,
                 'speech-loading':
@@ -36,7 +38,10 @@
                 questionInputWordsEl?.contains(loadingElement)) ||
               undefined
             "
-            :style="{ width: `${inputWidth(token.wordIndex)}em` }"
+            :style="{
+              width: `${inputWidth(token.wordIndex)}em`,
+              '--word-underline-width': `${wordWidth(token.text)}em`,
+            }"
           >
             {{ displayedWord(token.wordIndex, token.text) }}
           </span>
@@ -48,8 +53,10 @@
         :class="{ 'cursor-pointer': hoveredWordIndex !== undefined }"
         type="text"
         aria-label="填写当前英文单元"
+        :maxlength="inputMaxLength"
         v-model="inputValue"
         @keydown="handleKeydown"
+        @beforeinput="handleBeforeInput"
         @focus="handleInputFocus"
         @blur="handleInputBlur"
         @dblclick.prevent
@@ -70,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
@@ -84,6 +91,7 @@ import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
 import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
+import { useWordSpaceCheck } from "~/composables/user/wordSpaceCheck";
 import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
 import { lookupPronunciation } from "~/services/pronunciation";
 import { isSpeakableWord } from "~/services/wordAudio";
@@ -96,42 +104,62 @@ import {
   useQuestionInput,
   useWordWidths,
 } from "./questionInputHelper";
+import { useCorrectSound } from "./useCorrectSound";
 import { useTypingSound } from "./useTypingSound";
 
 defineProps<{ inline?: boolean }>();
 const emit = defineEmits<{ "hint-change": [syllables: string[] | undefined] }>();
 let hintSequence = 0;
+let phoneticHintStage: "idle" | "pending" | "shown" | "unavailable" = "idle";
 
 const courseStore = useExerciseStore();
 const { loadingElement } = useWordAudio();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
-const { showAnswer } = useGameMode();
-const { showSummary } = useSummary();
+const { showAnswer, isQuestion } = useGameMode();
+const { showSummary, showModal } = useSummary();
 const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
+const { wordSpaceCheck, isWordSpaceCheckEnabled } = useWordSpaceCheck();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
+const { playCorrectSound } = useCorrectSound();
 const { isAutoNextQuestion } = useAutoNextQuestion();
 const questionInputWordsEl = ref<HTMLElement>();
 const hoveredWordIndex = ref<number>();
 let hoverPoint: Pick<MouseEvent, "clientX" | "clientY"> | undefined;
 // 共享的词块宽度测量（探针、失效重测、字号变化重测），与答案区同源
-const { probeEl: questionInputProbeEl, measureEm } = useWordWidths(questionInputWordsEl);
+const { probeEl: questionInputProbeEl, measureEm, wordWidth } = useWordWidths(questionInputWordsEl);
 
 const ERROR_FEEDBACK_DURATION_MS = 300;
 let errorResetTimer: ReturnType<typeof setTimeout> | undefined;
+let wordFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
-const { inputValue, userInputWords, submitAnswer, setInputValue, clearInput, handleKeyboardInput } =
-  useInput({
-    source: () => courseStore.currentStatement?.english ?? "",
-    setInputCursorPosition,
-    getInputCursorPosition,
-    inputChangedCallback,
-    getInputWordWidth,
-    getInputWordCapacity,
-  });
-const { hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+const {
+  inputValue,
+  userInputWords,
+  submitAnswer,
+  setInputValue,
+  clearInput,
+  handleKeyboardInput,
+  confirmCurrentWord,
+  clearWordFeedback,
+  getWordHelpRequest,
+} = useInput({
+  source: () => courseStore.currentStatement?.english ?? "",
+  setInputCursorPosition,
+  getInputCursorPosition,
+  inputChangedCallback,
+  getInputWordWidth,
+  getInputWordCapacity,
+  isWordSpaceCheckEnabled,
+});
+const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
+const inputMaxLength = computed(() =>
+  isWordSpaceCheckEnabled()
+    ? userInputWords.find((word) => word.isActive)?.text.length ?? 0
+    : undefined,
+);
 
 // Re-check after visible text changes, even when the pointer stays still.
 watch(() => [inputValue.value, isAnswerTip()], refreshWordHover, { flush: "post" });
@@ -157,24 +185,33 @@ onMounted(() => {
 focusInputWhenWIndowFocus();
 onUnmounted(() => {
   cancelErrorReset();
+  cancelWordFeedback();
   clearPhoneticHint();
+  clearInput();
 });
 
 function clearPhoneticHint() {
   hintSequence++;
+  phoneticHintStage = "idle";
   emit("hint-change", undefined);
 }
 
 async function showPhoneticHint() {
-  if (courseStore.canDecomposeCurrentUnit || courseStore.words.length !== 1) return;
+  if (courseStore.canDecomposeCurrentUnit || phoneticHintStage !== "idle") return;
   const word = courseStore.words[0];
-  if (!isSpeakableWord(word)) return;
+  if (courseStore.words.length !== 1 || !isSpeakableWord(word)) {
+    phoneticHintStage = "unavailable";
+    return;
+  }
   const request = ++hintSequence;
+  phoneticHintStage = "pending";
   try {
     const syllables = await lookupPronunciation(word);
     if (request !== hintSequence) return;
-    emit("hint-change", syllables);
+    phoneticHintStage = syllables?.length ? "shown" : "unavailable";
+    emit("hint-change", syllables?.length ? syllables : undefined);
   } catch {
+    if (request === hintSequence) phoneticHintStage = "idle";
     // A missing resource never interrupts answering or error recovery.
   }
 }
@@ -182,6 +219,7 @@ async function showPhoneticHint() {
 watch(
   () => inputValue.value,
   (val) => {
+    if (isWordSpaceCheckEnabled()) cancelWordFeedback();
     const sanitizedValue = sanitizeQuestionInput(val);
     if (isAnswerTip() && containsAllowedQuestionCharacter(sanitizedValue)) {
       hiddenAnswerTip();
@@ -194,8 +232,22 @@ watch(
   },
 );
 
+// Restarting at the same unit does not necessarily change its ID or position.
+courseStore.$onAction(({ name }) => {
+  if (name === "doAgain" || name === "setup") {
+    cancelErrorReset();
+    cancelWordFeedback();
+    clearPhoneticHint();
+    hiddenAnswerTip();
+    clearInput();
+  }
+});
+
 watch(isAnswerTip, (isVisible) => {
   if (isVisible) {
+    cancelErrorReset();
+    cancelWordFeedback();
+    clearPhoneticHint();
     clearInput();
   }
 });
@@ -207,11 +259,14 @@ watch(
     courseStore.currentCourse?.id,
     courseStore.learningMode,
     courseStore.practiceView,
+    wordSpaceCheck.value,
   ],
   () => {
     cancelErrorReset();
+    cancelWordFeedback();
     clearPhoneticHint();
     clearWordHover();
+    hiddenAnswerTip();
     clearInput();
     focusInput();
   },
@@ -243,6 +298,14 @@ function getWordsClassNames(index: number) {
     return "text-gray-400 border-b-gray-300 dark:text-gray-500 dark:border-b-gray-400";
   }
 
+  if (word.confirmed) {
+    return "text-[#202020] border-b-transparent dark:text-gray-50";
+  }
+
+  if (isWordSpaceCheckEnabled() && word.incorrect) {
+    return "text-red-500 border-b-red-500";
+  }
+
   // 当前单词激活 且 聚焦
   if (word.isActive && focusing.value) {
     return "text-fuchsia-500 border-b-fuchsia-500";
@@ -257,8 +320,7 @@ function getWordsClassNames(index: number) {
   return "text-[#20202099] border-b-gray-300 dark:text-gray-300 dark:border-b-gray-400";
 }
 
-// 输入块宽度 = 目标单词实测宽度的固定长度提示，不随输入生长；
-// 仅当实际显示文字更宽（如大小写差异）时才撑开，避免文字被挤出块外换行。单位 em。
+// 词块容纳当前草稿；实验模式的下划线单独按目标词元宽度绘制。
 function inputWidth(index: number) {
   const targetWord = courseStore.words[index] ?? "";
   const typedWord = isAnswerTip() ? "" : userInputWords[index]?.userInput ?? "";
@@ -283,19 +345,59 @@ function cancelErrorReset() {
   errorResetTimer = undefined;
 }
 
-function handleAnswerError() {
+function cancelWordFeedback() {
+  if (wordFeedbackTimer !== undefined) clearTimeout(wordFeedbackTimer);
+  wordFeedbackTimer = undefined;
+  clearWordFeedback();
+}
+
+function handleWordConfirmation(unmatchedAction: "feedback" | "help" = "feedback") {
+  if (isAnswerTip() || !userInputWords.some((word) => word.isActive)) return;
+  cancelWordFeedback();
+  setInputValue(inputEl.value?.value ?? inputValue.value);
+  const result = confirmCurrentWord();
+  if (result === "unmatched") {
+    if (unmatchedAction === "help") handleWordHelp();
+    else wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
+  } else if (result === "confirmed" || result === "complete") {
+    void playCorrectSound();
+    if (result === "complete") handleAnswerRight();
+  }
+}
+
+function handleWordHelp() {
+  const request = getWordHelpRequest();
+  if (!request) return;
+  cancelWordFeedback();
   cancelErrorReset();
-  const submittedInput = inputValue.value;
+  void showPhoneticHint();
+  clearInput();
+  courseStore.failCurrentStatement(request.input, request.lastWordIndex);
+}
+
+// Soft keyboards can insert a space without dispatching a keydown event.
+function handleBeforeInput(event: Event) {
+  const inputEvent = event as InputEvent;
+  if (!isWordSpaceCheckEnabled() || isComposing.value || inputEvent.isComposing) return;
+  if (inputEvent.inputType === "insertText" && inputEvent.data === " ") {
+    event.preventDefault();
+    handleWordConfirmation();
+  }
+}
+
+function handleAnswerError(submittedInput: string, lastWordIndex: number) {
+  cancelErrorReset();
   errorResetTimer = setTimeout(() => {
     errorResetTimer = undefined;
     void showPhoneticHint();
     clearInput();
-    courseStore.failCurrentStatement(submittedInput);
+    courseStore.failCurrentStatement(submittedInput, lastWordIndex);
   }, ERROR_FEEDBACK_DURATION_MS);
 }
 
 function handleAnswerRight() {
   cancelErrorReset();
+  cancelWordFeedback();
   clearPhoneticHint();
   courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
@@ -327,9 +429,38 @@ function handleCompositionEnd() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  if (isComposing.value || e.isComposing || e.keyCode === 229) {
+    if (e.code === "Enter") e.stopPropagation();
+    return;
+  }
   if (e.ctrlKey) {
     e.preventDefault();
     return;
+  }
+
+  if (e.code === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.repeat || !isQuestion() || showModal.value || courseStore.fulltextCompleted) return;
+    const draft = sanitizeQuestionInput(inputEl.value?.value ?? inputValue.value);
+    if (
+      courseStore.currentStatement &&
+      !courseStore.canDecomposeCurrentUnit &&
+      !draft.trim() &&
+      !userInputWords.some((word) => word.confirmed) &&
+      (phoneticHintStage === "shown" || phoneticHintStage === "unavailable")
+    ) {
+      showAnswerTip();
+      focusInput();
+      return;
+    }
+    // Keep a pending lookup (and legacy feedback timer) alive until help is ready.
+    if (
+      !courseStore.canDecomposeCurrentUnit &&
+      !draft.trim() &&
+      (phoneticHintStage === "pending" || errorResetTimer !== undefined)
+    )
+      return;
   }
 
   if (isAnswerTip()) {
@@ -348,9 +479,18 @@ function handleKeydown(e: KeyboardEvent) {
     }
   }
 
-  if (e.code === "Enter" && !isComposing.value) {
+  if (isWordSpaceCheckEnabled() && (e.code === "Space" || e.code === "Enter")) {
+    e.preventDefault();
     e.stopPropagation();
-    submitAnswer(handleAnswerRight, handleAnswerError);
+    if (e.repeat) return;
+    handleWordConfirmation(e.code === "Enter" ? "help" : "feedback");
+    return;
+  }
+
+  if (e.code === "Enter" && !isComposing.value) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (submitAnswer(handleAnswerRight, handleAnswerError) === "continue") cancelErrorReset();
     return;
   }
 
@@ -403,6 +543,25 @@ function preventCursorMove(event: MouseEvent) {
 </script>
 
 <style scoped>
+/* Retain the shared minimum height while drawing a target-sized underline.
+   Wider letters in the draft must not stretch its line. */
+.fixed-underline {
+  position: relative;
+  border-bottom-width: 0;
+}
+
+.fixed-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--word-underline-width);
+  max-width: 100%;
+  border-bottom: 2px solid;
+  border-bottom-color: inherit;
+  pointer-events: none;
+}
+
 /* 词块样式（.question-input-words / .question-input-word）已迁移到
    assets/css/globals.css，与答案区共用同一套规则，保证答题前后零偏移。 */
 .question-input-shell {

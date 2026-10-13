@@ -3,12 +3,14 @@ import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Course } from "~/store/exercise";
+import QuestionInput from "~/components/main/QuestionInput/QuestionInput.vue";
 import Tool from "~/components/main/Tool.vue";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
 import { useShowAnswer } from "~/composables/main/showAnswer";
 import { useSummary } from "~/composables/main/summary";
 import { getLocalExercise } from "~/services/localExerciseDb";
+import { lookupPronunciation } from "~/services/pronunciation";
 import { useExerciseStore } from "~/store/exercise";
 import Question from "../Question.vue";
 
@@ -17,12 +19,17 @@ vi.mock("~/services/localExerciseDb", () => ({
   saveLocalExerciseProgress: vi.fn().mockResolvedValue(undefined),
   saveLocalExerciseUnitPassed: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("~/services/pronunciation", () => ({ lookupPronunciation: vi.fn() }));
 enableAutoUnmount(afterEach);
 
 describe("answer availability", () => {
   let course: Course;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(lookupPronunciation).mockReset().mockResolvedValue(["kæts"]);
+    localStorage.setItem("keyboardSoundEnabled", "false");
+    localStorage.setItem("wordSpaceCheck", "false");
     setActivePinia(createPinia());
     useSummary().hideSummary();
     useGameMode().showQuestion();
@@ -70,6 +77,13 @@ describe("answer availability", () => {
     }));
   });
 
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    localStorage.removeItem("keyboardSoundEnabled");
+    localStorage.removeItem("wordSpaceCheck");
+  });
+
   async function setup() {
     const pinia = getActivePinia()!;
     const store = useExerciseStore(pinia);
@@ -80,7 +94,7 @@ describe("answer availability", () => {
         global: {
           plugins: [pinia],
           stubs: {
-            MainQuestionInput: true,
+            MainQuestionInput: QuestionInput,
             MainContents: true,
             MainMessageBox: true,
             LearningModeSwitch: true,
@@ -94,6 +108,21 @@ describe("answer availability", () => {
     return { store, wrapper };
   }
 
+  it("does not offer sentence audio while answering, including with an answer hint", async () => {
+    const { wrapper } = await setup();
+    const sentence = wrapper.get('[data-testid="cloze-sentence"]');
+    expect(sentence.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    useAnswerTip().showAnswerTip();
+    await wrapper.vm.$nextTick();
+    expect(sentence.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    expect(
+      wrapper
+        .get('[data-testid="practice-toolbar"]')
+        .find('[data-testid="sentence-audio-button"]')
+        .exists(),
+    ).toBe(false);
+  });
+
   it("updates a query read before course setup and after reloading the same current unit", async () => {
     const store = useExerciseStore();
     expect(store.canDecomposeCurrentUnit).toBe(false);
@@ -104,54 +133,40 @@ describe("answer availability", () => {
     expect(store.canDecomposeCurrentUnit).toBe(false);
   });
 
+  async function reveal(wrapper: Awaited<ReturnType<typeof setup>>["wrapper"]) {
+    const input = wrapper.get("input");
+    await input.trigger("keydown", { code: "Enter", key: "Enter" });
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    await vi.advanceTimersByTimeAsync(300);
+    await input.trigger("keydown", { code: "Enter", key: "Enter" });
+    expect(useAnswerTip().isAnswerTip()).toBe(true);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
+  }
+
   it.each(["single", "fulltext"] as const)(
-    "keeps the %s leaf hint only in the toolbar and hides it in answer and summary states",
+    "reveals a %s leaf by keyboard after displaying pronunciation",
     async (view) => {
       course.practiceView = view;
       course.learningMode = "progressive";
       course.statementIndex = 0;
       const { store, wrapper } = await setup();
-      expect(
-        wrapper.findComponent(Question).find('[data-testid="show-answer-button"]').exists(),
-      ).toBe(false);
-      expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
-      expect(wrapper.findAll('[data-testid="show-answer-button"]')).toHaveLength(1);
-      useGameMode().showAnswer();
-      await flushPromises();
-      expect(wrapper.findComponent(Tool).find('[data-testid="show-answer-button"]').exists()).toBe(
-        false,
-      );
-      useGameMode().showQuestion();
-      useSummary().showSummary();
-      await flushPromises();
-      expect(wrapper.findComponent(Tool).find('[data-testid="show-answer-button"]').exists()).toBe(
-        false,
-      );
-      useSummary().hideSummary();
-      store.switchPracticeView(view === "single" ? "fulltext" : "single");
-      await flushPromises();
-      expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
-      expect(
-        wrapper.findComponent(Question).find('[data-testid="show-answer-button"]').exists(),
-      ).toBe(false);
-      expect(wrapper.findAll('[data-testid="show-answer-button"]')).toHaveLength(1);
+      const input = wrapper.get("input");
+      await input.trigger("keydown", { code: "Enter", key: "Enter" });
+      await vi.advanceTimersByTimeAsync(300);
+      expect(wrapper.get('[data-testid="phonetic-hint"]').text()).toContain("kæts");
+      expect(useAnswerTip().isAnswerTip()).toBe(false);
+      await input.trigger("keydown", { code: "Enter", key: "Enter" });
+      expect(useAnswerTip().isAnswerTip()).toBe(true);
+      expect(wrapper.get(".question-input-word").text()).toBe("Cats");
+      expect(store.currentStatement?.unitId).toBe("unit-0");
+      expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
+      await input.setValue("Cats");
+      expect(useAnswerTip().isAnswerTip()).toBe(false);
+      await input.trigger("keydown", { code: "Enter", key: "Enter" });
+      expect(store.isStatementPassed(store.currentStatement!)).toBe(true);
+      expect(useGameMode().isAnswer()).toBe(true);
     },
   );
-
-  it("hides the toolbar hint when the final fulltext leaf is completed", async () => {
-    course.practiceView = "fulltext";
-    course.learningMode = "progressive";
-    course.statements[4].sourceUnitIds = [];
-    const { store, wrapper } = await setup();
-    expect(wrapper.findComponent(Tool).find('button[aria-label="显示答案"]').exists()).toBe(true);
-    store.passCurrentStatement();
-    expect(store.advanceAfterCorrect()).toBe(true);
-    await flushPromises();
-    expect(store.fulltextCompleted).toBe(true);
-    expect(wrapper.findComponent(Tool).find('[data-testid="show-answer-button"]').exists()).toBe(
-      false,
-    );
-  });
 
   async function correct(store: ReturnType<typeof useExerciseStore>) {
     store.passCurrentStatement();
@@ -159,14 +174,21 @@ describe("answer availability", () => {
     await flushPromises();
   }
 
-  it.each([
-    ["progressive", "single"],
-    ["progressive", "fulltext"],
-    ["sentence-first", "single"],
-    ["sentence-first", "fulltext"],
-  ] as const)(
-    "shows the button only at leaves during nested recovery in %s / %s",
-    async (mode, view) => {
+  it.each(
+    (
+      [
+        ["progressive", "single"],
+        ["progressive", "fulltext"],
+        ["sentence-first", "single"],
+        ["sentence-first", "fulltext"],
+      ] as const
+    ).flatMap(([mode, view]) =>
+      [false, true].map((wordChecking) => ({ mode, view, wordChecking })),
+    ),
+  )(
+    "uses keyboard hints during nested recovery in $mode / $view with word checking: $wordChecking",
+    async ({ mode, view, wordChecking }) => {
+      localStorage.setItem("wordSpaceCheck", String(wordChecking));
       course.learningMode = mode;
       course.practiceView = view;
       const { store, wrapper } = await setup();
@@ -179,9 +201,8 @@ describe("answer availability", () => {
       store.failCurrentStatement(); // A is a leaf.
       await flushPromises();
       expect(store.canDecomposeCurrentUnit).toBe(false);
-      await wrapper.get('button[aria-label="显示答案"]').trigger("click");
-      expect(useAnswerTip().isAnswerTip()).toBe(true);
-      await wrapper.get('button[aria-label="隐藏答案"]').trigger("click");
+      await reveal(wrapper);
+      await wrapper.get("input").setValue("Cats");
       expect(useAnswerTip().isAnswerTip()).toBe(false);
       for (const [unit, canDecompose] of [
         ["unit-1", false],
@@ -192,7 +213,7 @@ describe("answer availability", () => {
         await correct(store);
         expect(store.currentStatement?.unitId).toBe(unit);
         expect(store.canDecomposeCurrentUnit).toBe(canDecompose);
-        expect(hasButton()).toBe(!canDecompose);
+        expect(hasButton()).toBe(false);
       }
       expect(store.statementIndex).toBe(4);
       expect(store.isAnsweringBaseUnit).toBe(true);
@@ -220,7 +241,7 @@ describe("answer availability", () => {
     store.failCurrentStatement();
     await flushPromises();
     expect(store.currentStatement?.unitId).toBe("unit-3");
-    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
     await correct(store);
     expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
   });
@@ -245,8 +266,7 @@ describe("answer availability", () => {
     }
     const { store, wrapper } = await setup();
     expect(store.canDecomposeCurrentUnit).toBe(false);
-    await wrapper.get('button[aria-label="显示答案"]').trigger("click");
-    expect(useAnswerTip().isAnswerTip()).toBe(true);
+    await reveal(wrapper);
     store.failCurrentStatement();
     expect(store.isRecovering).toBe(false);
     expect(store.currentStatement?.id).toBe(whole.id);
@@ -258,7 +278,7 @@ describe("answer availability", () => {
     store.failCurrentStatement();
     store.switchPracticeView("fulltext");
     await flushPromises();
-    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
     store.switchLearningMode("progressive");
     expect(store.canDecomposeCurrentUnit).toBe(false);
     store.switchLearningMode("sentence-first");
@@ -277,6 +297,11 @@ describe("answer availability", () => {
     refreshed.doAgain();
     await flushPromises();
     expect(refreshed.currentStatement?.unitId).toBe("unit-0");
-    expect(restored.find('[data-testid="show-answer-button"]').exists()).toBe(true);
+    expect(restored.find('[data-testid="show-answer-button"]').exists()).toBe(false);
+    await reveal(restored);
+    refreshed.doAgain();
+    await flushPromises();
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    await reveal(restored);
   });
 });

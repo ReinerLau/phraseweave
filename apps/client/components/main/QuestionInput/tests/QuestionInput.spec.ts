@@ -2,6 +2,8 @@ import { createTestingPinia } from "@pinia/testing";
 import { enableAutoUnmount, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import Contents from "~/components/main/Contents/Contents.vue";
+import { useContent } from "~/components/main/Contents/useContents";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
@@ -18,6 +20,7 @@ describe("QuestionInput", () => {
     vi.useFakeTimers();
     vi.mocked(lookupPronunciation).mockReset().mockResolvedValue(["kəm", "ˈpjuː", "tər"]);
     useAnswerTip().hiddenAnswerTip();
+    useGameMode().showQuestion();
   });
 
   afterEach(() => {
@@ -54,6 +57,67 @@ describe("QuestionInput", () => {
     await input.setValue(value);
     await input.trigger("keydown", { code: "Enter", key: "Enter" });
   }
+
+  it("keeps correct prefixes and cancels a pending recovery when the prefix is corrected", async () => {
+    const { input, wrapper, store } = mountQuestionInput("I like apples very much");
+    await submitAnswer(input, "I lik");
+    expect(vi.getTimerCount()).toBe(1);
+    await submitAnswer(input, "I like");
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(300);
+    expect((input.element as HTMLInputElement).value).toBe("I like");
+    expect((input.element as HTMLInputElement).selectionStart).toBe(6);
+    expect(wrapper.findAll(".question-input-word")[1].classes()).toContain("border-b-fuchsia-500");
+    expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(0);
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(store.passCurrentStatement).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { english: "I like apples very much", value: "", snapshot: "", index: 0, errors: 1 },
+    {
+      english: "I like apples very much",
+      value: "I like ",
+      snapshot: "I like ",
+      index: 2,
+      errors: 1,
+    },
+    {
+      english: "I like apples very much",
+      value: "X like app",
+      snapshot: "X like app",
+      index: 2,
+      errors: 2,
+    },
+    { english: "Don't go home", value: "DON’T ", snapshot: "DON’T ", index: 1, errors: 1 },
+    {
+      english: "I like apples very much",
+      value: "X lik apples",
+      snapshot: "X lik apples",
+      index: 2,
+      errors: 2,
+    },
+    { english: "woman's coat is red", value: "woman'z", snapshot: "woman'z", index: 0, errors: 1 },
+    { english: "anti-social work", value: "anti-", snapshot: "anti ", index: 1, errors: 1 },
+  ])(
+    "limits feedback and recovery to the current word for '$value'",
+    async ({ english, value, snapshot, index, errors }) => {
+      const { input, wrapper, store } = mountQuestionInput(english);
+      await submitAnswer(input, value);
+      expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(errors);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.failCurrentStatement).toHaveBeenCalledWith(snapshot, index);
+      expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    },
+  );
+
+  it("freezes the current word boundary even if typing continues during feedback", async () => {
+    const { input, store } = mountQuestionInput("I like apples very much");
+    await submitAnswer(input, "I like ");
+    await input.setValue("I like apples very");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).toHaveBeenCalledWith("I like ", 2);
+  });
 
   it("reveals syllables after the error delay, keeps them on retry, and clears on success", async () => {
     const { input, wrapper } = mountQuestionInput("computer");
@@ -162,7 +226,7 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("");
     expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(0);
     expect(wrapper.find(".question-input-word").classes()).toContain("border-b-fuchsia-500");
-    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput);
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput, 1);
   });
 
   it("uses the submitted snapshot even when input changes during error feedback", async () => {
@@ -171,7 +235,7 @@ describe("QuestionInput", () => {
     const submittedInput = (input.element as HTMLInputElement).value;
     await input.setValue("I eat");
     await vi.advanceTimersByTimeAsync(300);
-    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput);
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput, 1);
   });
 
   it("replaces a pending reset for a newer incorrect answer", async () => {
@@ -193,7 +257,7 @@ describe("QuestionInput", () => {
     await wrapper.vm.$nextTick();
     expect((input.element as HTMLInputElement).value).toBe("");
     expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledOnce();
-    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput);
+    expect(useExerciseStore().failCurrentStatement).toHaveBeenCalledWith(submittedInput, 1);
   });
 
   it("cancels a pending reset after a correct answer", async () => {
@@ -285,6 +349,66 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("");
     await vi.advanceTimersByTimeAsync(300);
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
+  });
+
+  it("clears input, tips and a pending error and focuses the target after a directory jump", async () => {
+    useGameMode().showQuestion();
+    const pinia = createTestingPinia({ createSpy: vi.fn, stubActions: false });
+    const store = useExerciseStore(pinia);
+    store.currentCourse = {
+      id: "course",
+      title: "文章",
+      order: 1,
+      coursePackId: "pack",
+      completionCount: 0,
+      statementIndex: 0,
+      practiceView: "fulltext",
+      passedUnitIds: ["unit:1"],
+      statements: ["I eat", "Birds sing"].map((english, index) => ({
+        id: String(index),
+        order: index + 1,
+        english,
+        unitId: String(index),
+        sourceUnitIds: [],
+        contextBefore: "",
+        contextAfter: ".",
+        sentenceChinese: index ? "鸟在歌唱。" : "我吃饭。",
+      })),
+    };
+    store.statementIndex = 0;
+    store.currentStatement = store.currentCourse.statements[0];
+    const wrapper = mount(QuestionInput, { attachTo: document.body, global: { plugins: [pinia] } });
+    const contents = mount(Contents, { attachTo: document.body, global: { plugins: [pinia] } });
+    const input = wrapper.get('input[type="text"]');
+    await submitAnswer(input, "I like");
+    expect(vi.getTimerCount()).toBe(1);
+    useGameMode().showAnswer();
+    useAnswerTip().showAnswerTip();
+    const directory = useContent();
+    directory.toggleContents(new MouseEvent("click"));
+    expect(directory.isShowContents()).toBe(true);
+    await contents.findAll("button")[1].trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(store.statementIndex).toBe(1);
+    expect(store.currentStatement?.english).toBe("Birds sing");
+    expect(useGameMode().isQuestion()).toBe(true);
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    expect(directory.isShowContents()).toBe(false);
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(document.activeElement).toBe(input.element);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(store.advanceAfterCorrect()).toBe(false);
+    await input.setValue("Birds");
+    useAnswerTip().showAnswerTip();
+    await contents.findAll("button")[0].trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(store.statementIndex).toBe(0);
+    expect(store.currentStatement?.english).toBe("I eat");
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    expect(document.activeElement).toBe(input.element);
+    expect(store.advanceAfterCorrect()).toBe(false);
   });
 
   it("keeps the original sentence punctuation visible before input, in tips, and after input", async () => {

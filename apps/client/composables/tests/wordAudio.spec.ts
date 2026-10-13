@@ -3,8 +3,10 @@ import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import QuestionInput from "~/components/main/QuestionInput/QuestionInput.vue";
+import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
 import SpeakableText from "~/components/SpeakableText.vue";
 import { useAnswerTip } from "~/composables/main/answerTip";
+import { useSummary } from "~/composables/main/summary";
 import {
   clearWordAudioCache,
   disposeWordAudio,
@@ -65,6 +67,7 @@ beforeEach(() => {
   vi.mocked(fetchWordAudio).mockResolvedValue(new Blob(["audio"], { type: "audio/mpeg" }));
   vi.mocked(fetchSentenceAudio).mockResolvedValue(new Blob(["sentence"], { type: "audio/mpeg" }));
   useAnswerTip().hiddenAnswerTip();
+  useSummary().hideSummary();
 });
 
 afterEach(() => {
@@ -106,6 +109,54 @@ describe("word audio playback", () => {
     await play;
     expect(signal.aborted).toBe(true);
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("switches between identical sentences by button and resets their state on completion", async () => {
+    const first = mount(SentenceAudioButton, { props: { text: "Hello world." } });
+    const second = mount(SentenceAudioButton, { props: { text: "Hello world." } });
+    await first.get("button").trigger("click");
+    await flushPromises();
+    expect(first.get("button").attributes("aria-pressed")).toBe("true");
+    expect(second.get("button").attributes("aria-pressed")).toBe("false");
+    await second.get("button").trigger("click");
+    await flushPromises();
+    expect(fetchSentenceAudio).toHaveBeenCalledTimes(2);
+    expect(first.get("button").attributes("aria-pressed")).toBe("false");
+    expect(second.get("button").attributes("aria-pressed")).toBe("true");
+    media.onended?.();
+    await flushPromises();
+    expect(second.get("button").attributes("aria-pressed")).toBe("false");
+    expect(useWordAudio().activeElement.value).toBeUndefined();
+    expect(useWordAudio().activeSentence.value).toBeUndefined();
+  });
+
+  it("switches identical pending requests to the latest button and discards the stale response", async () => {
+    const pending = deferred<Blob>();
+    vi.mocked(fetchSentenceAudio).mockReturnValueOnce(pending.promise);
+    const first = document.createElement("button");
+    const second = document.createElement("button");
+    const old = playSentenceAudio("Hello world.", first);
+    const signal = vi.mocked(fetchSentenceAudio).mock.calls[0][1];
+    await playSentenceAudio("Hello world.", second);
+    expect(signal.aborted).toBe(true);
+    expect(useWordAudio().activeElement.value).toBe(second);
+    pending.resolve(new Blob(["old"]));
+    await old;
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+  });
+
+  it("resets sentence button state after failure and allows retry", async () => {
+    vi.mocked(fetchSentenceAudio).mockRejectedValueOnce(new Error("offline"));
+    const wrapper = mount(SentenceAudioButton, { props: { text: "Hello world." } });
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+    expect(useWordAudio().audioError.value).toBe("offline");
+    expect(wrapper.get("button").attributes("aria-pressed")).toBe("false");
+    expect(wrapper.get("button").attributes("aria-busy")).toBeUndefined();
+    await wrapper.get("button").trigger("click");
+    await flushPromises();
+    expect(useWordAudio().audioError.value).toBe("");
+    expect(wrapper.get("button").attributes("aria-pressed")).toBe("true");
   });
 
   it("only plays the latest click and discards late responses", async () => {

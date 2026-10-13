@@ -122,6 +122,7 @@ describe("learning direction", () => {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
       practiceView: "single",
+      resumeStatementIndex: 3,
     });
 
     setActivePinia(createPinia());
@@ -209,7 +210,7 @@ describe("learning direction", () => {
       course.statementIndex = 8;
       course.learningMode = mode;
       const store = await setup();
-      store.failCurrentStatement("A B");
+      store.failCurrentStatement("A B ");
       expect(store.currentStatement?.unitId).toBe("0:3");
       expect(store.currentCourse?.passedUnitIds).toBeUndefined();
       expect(store.statementIndex).toBe(8);
@@ -303,6 +304,7 @@ describe("learning direction", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: 3,
       practiceView: "single",
+      resumeStatementIndex: 3,
     });
     setActivePinia(createPinia());
     store = await setup();
@@ -324,6 +326,7 @@ describe("learning direction", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: null,
       practiceView: "single",
+      resumeStatementIndex: 8,
     });
   });
 

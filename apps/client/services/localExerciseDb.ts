@@ -235,7 +235,8 @@ export function mergeLocalExerciseProgress(
         previous.learningMode === "progressive" ||
         previous.learningMode === "sentence-first" ||
         previous.practiceView === "single" ||
-        previous.practiceView === "fulltext";
+        previous.practiceView === "fulltext" ||
+        previous.resumeStatementIndex !== undefined;
       return {
         ...course,
         ...(hasPracticeState
@@ -244,6 +245,7 @@ export function mergeLocalExerciseProgress(
               learningMode: previous.learningMode,
               sentenceFirstStartIndex: previous.sentenceFirstStartIndex,
               practiceView: previous.practiceView,
+              resumeStatementIndex: previous.resumeStatementIndex,
             }
           : { statementIndex: Math.max(previous.statementIndex ?? 0, course.statementIndex ?? 0) }),
         completionCount: Math.max(previous.completionCount ?? 0, course.completionCount ?? 0),
@@ -263,6 +265,7 @@ export async function saveLocalExerciseProgress(
     learningMode: LearningMode;
     sentenceFirstStartIndex: number | null;
     practiceView?: PracticeView;
+    resumeStatementIndex?: number | null;
   },
 ) {
   if (typeof window === "undefined") return;
@@ -282,6 +285,9 @@ export async function saveLocalExerciseProgress(
         course.learningMode = state.learningMode;
         course.sentenceFirstStartIndex = state.sentenceFirstStartIndex ?? undefined;
         if (state.practiceView !== undefined) course.practiceView = state.practiceView;
+        if (state.resumeStatementIndex !== undefined) {
+          course.resumeStatementIndex = state.resumeStatementIndex;
+        }
       }
       store.put(coursePack);
     };

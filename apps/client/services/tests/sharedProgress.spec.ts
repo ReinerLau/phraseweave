@@ -18,6 +18,7 @@ describe("shared exercise progress", () => {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: 3,
       practiceView: "fulltext",
+      resumeStatementIndex: 8,
     });
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
@@ -30,6 +31,7 @@ describe("shared exercise progress", () => {
           learningMode: "sentence-first",
           sentenceFirstStartIndex: 3,
           practiceView: "fulltext",
+          resumeStatementIndex: 8,
         }),
       }),
     );
@@ -37,6 +39,7 @@ describe("shared exercise progress", () => {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
       practiceView: "single",
+      resumeStatementIndex: null,
     });
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({
       courseId: "course",
@@ -44,6 +47,7 @@ describe("shared exercise progress", () => {
       learningMode: "progressive",
       sentenceFirstStartIndex: null,
       practiceView: "single",
+      resumeStatementIndex: null,
     });
   });
 });

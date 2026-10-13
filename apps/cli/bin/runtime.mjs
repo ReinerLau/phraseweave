@@ -150,7 +150,7 @@ export class GeneratorRuntime {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(endpoint === "/api/tts" ? 65_000 : 30_000),
     });
   }
 

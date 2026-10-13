@@ -12,7 +12,7 @@
       {{ courseStore.currentStatement?.sentenceChinese }}
     </div>
     <div
-      class="answer-sentence dark:text-gray-50"
+      class="answer-sentence practice-english dark:text-gray-50"
       data-testid="answer-sentence"
     >
       <SpeakableText
@@ -22,6 +22,7 @@
       <div
         ref="answerWordsEl"
         class="answer-words question-input-words relative inline-flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+        :style="{ '--question-word-gap': `${measureEm(' ')}em` }"
       >
         <ClozeText :tokens="courseStore.clozeTokens">
           <template #word="{ token }">
@@ -41,7 +42,7 @@
       <SpeakableText
         class="cloze-context"
         :text="courseStore.currentStatement?.contextAfter"
-      />
+      /><SentenceAudioButton :text="courseStore.originalSentence" />
     </div>
     <div
       v-if="courseStore.currentStatement?.soundmark"
@@ -57,6 +58,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import ClozeText from "~/components/main/QuestionInput/ClozeText.vue";
 import { useWordWidths } from "~/components/main/QuestionInput/questionInputHelper";
+import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
 import SpeakableText from "~/components/SpeakableText.vue";
 import SpeakableWord from "~/components/SpeakableWord.vue";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
@@ -77,7 +79,7 @@ const questionStyle = computed(() =>
 );
 
 const answerWordsEl = ref<HTMLElement>();
-const { probeEl, wordWidth } = useWordWidths(answerWordsEl);
+const { probeEl, measureEm, wordWidth } = useWordWidths(answerWordsEl);
 
 registerShortcutKeyForNextQuestion();
 

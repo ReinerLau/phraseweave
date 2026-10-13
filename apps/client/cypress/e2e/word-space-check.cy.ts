@@ -1,0 +1,340 @@
+const wordSpacePack = "word-space-check-pack";
+const wordSpaceCourse = "word-space-check-course";
+
+function renderedSpaceWidth(element: HTMLElement) {
+  const document = element.ownerDocument;
+  const styles = document.defaultView!.getComputedStyle(element);
+  const probe = document.createElement("span");
+  Object.assign(probe.style, {
+    position: "absolute",
+    visibility: "hidden",
+    whiteSpace: "pre",
+    fontFamily: styles.fontFamily,
+    fontSize: styles.fontSize,
+    fontWeight: styles.fontWeight,
+    fontStyle: styles.fontStyle,
+    fontKerning: styles.fontKerning,
+    fontVariantLigatures: styles.fontVariantLigatures,
+    letterSpacing: styles.letterSpacing,
+  });
+  probe.textContent = " ";
+  document.body.appendChild(probe);
+  try {
+    return probe.getBoundingClientRect().width;
+  } finally {
+    probe.remove();
+  }
+}
+
+function assertWordSpacing(element: HTMLElement) {
+  const spaceWidth = renderedSpaceWidth(element);
+  const styles = element.ownerDocument.defaultView!.getComputedStyle(element);
+  expect(parseFloat(styles.columnGap), "input/answer gap matches a displayed space").to.be.closeTo(
+    spaceWidth,
+    0.1,
+  );
+  const groups = Array.from(element.querySelectorAll(".question-input-group"));
+  for (let index = 1; index < groups.length; index++) {
+    const before = groups[index - 1].getBoundingClientRect();
+    const after = groups[index].getBoundingClientRect();
+    if (Math.abs(before.top - after.top) < 1) {
+      expect(after.left - before.right, "rendered gap between tokens").to.be.closeTo(
+        spaceWidth,
+        0.1,
+      );
+    }
+  }
+}
+
+function assertDisplayedSpacing(element: HTMLElement) {
+  const spaceWidth = renderedSpaceWidth(element);
+  const words = Array.from(element.querySelectorAll(".speech-word"));
+  let pairs = 0;
+  for (let index = 1; index < words.length; index++) {
+    const before = words[index - 1].getBoundingClientRect();
+    const after = words[index].getBoundingClientRect();
+    if (Math.abs(before.top - after.top) < 1) {
+      expect(after.left - before.right, "displayed word gap").to.be.closeTo(spaceWidth, 0.1);
+      pairs++;
+    }
+  }
+  expect(pairs, "compared displayed words").to.be.greaterThan(0);
+}
+
+function assertMonospace(element: HTMLElement) {
+  const document = element.ownerDocument;
+  const styles = document.defaultView!.getComputedStyle(element);
+  expect(styles.fontFamily).to.contain("monospace");
+  expect(styles.fontKerning).to.equal("none");
+  expect(styles.fontVariantLigatures).to.equal("none");
+  const probe = document.createElement("span");
+  Object.assign(probe.style, {
+    position: "absolute",
+    visibility: "hidden",
+    whiteSpace: "pre",
+    fontFamily: styles.fontFamily,
+    fontSize: styles.fontSize,
+    fontWeight: styles.fontWeight,
+    fontStyle: styles.fontStyle,
+    fontKerning: styles.fontKerning,
+    fontVariantLigatures: styles.fontVariantLigatures,
+    letterSpacing: styles.letterSpacing,
+  });
+  document.body.appendChild(probe);
+  try {
+    probe.textContent = "iiiii";
+    const width = probe.getBoundingClientRect().width;
+    for (const text of ["wwwww", "WWWWW", "FIfiX", "DON'T", "DON’T"]) {
+      probe.textContent = text;
+      expect(probe.getBoundingClientRect().width, text).to.be.closeTo(width, 0.1);
+    }
+  } finally {
+    probe.remove();
+  }
+}
+
+function seedWordSpaceExercise(fulltext = false) {
+  return cy.window().then(
+    (window) =>
+      new Cypress.Promise<void>((resolve, reject) => {
+        const request = window.indexedDB.open("phraseweave-local", 1);
+        request.onerror = () => reject(request.error);
+        request.onupgradeneeded = () => {
+          const database = request.result;
+          for (const name of ["coursePacks", "coursePackCatalog"]) {
+            if (!database.objectStoreNames.contains(name))
+              database.createObjectStore(name, { keyPath: "id" });
+          }
+          if (!database.objectStoreNames.contains("metadata"))
+            database.createObjectStore("metadata", { keyPath: "key" });
+        };
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction(
+            ["coursePacks", "coursePackCatalog"],
+            "readwrite",
+          );
+          const catalog = {
+            id: wordSpacePack,
+            title: "逐词检查",
+            description: "",
+            isFree: true,
+            cover: "",
+          };
+          transaction.objectStore("coursePackCatalog").put(catalog);
+          transaction.objectStore("coursePacks").put({
+            ...catalog,
+            courses: [
+              {
+                id: wordSpaceCourse,
+                coursePackId: wordSpacePack,
+                title: "逐词检查",
+                order: 1,
+                completionCount: 0,
+                statementIndex: 0,
+                practiceView: fulltext ? "fulltext" : "single",
+                statements: [
+                  {
+                    id: "sentence",
+                    unitId: "sentence",
+                    order: 1,
+                    english: "Don’t eat",
+                    contextBefore: "",
+                    contextAfter: ".",
+                    sourceUnitIds: [],
+                    sentenceChinese: "不要吃。",
+                  },
+                  ...(fulltext
+                    ? [
+                        {
+                          id: "next-sentence",
+                          unitId: "next-sentence",
+                          order: 2,
+                          english: "We will wait",
+                          contextBefore: "",
+                          contextAfter: ".",
+                          sourceUnitIds: [],
+                          sentenceChinese: "我们会等待。",
+                        },
+                      ]
+                    : []),
+                ],
+              },
+            ],
+          });
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onerror = () => reject(transaction.error);
+        };
+      }),
+  );
+}
+
+describe("word space checking", () => {
+  it("opens the experiment from homepage settings and returns to practice", () => {
+    cy.intercept("GET", "http://127.0.0.1:8765/api/tts/status", {
+      state: "ready",
+      message: "准备完成",
+    });
+    cy.visit("/", {
+      onBeforeLoad(window) {
+        window.localStorage.removeItem("wordSpaceCheck");
+        window.localStorage.setItem("keyboardSoundEnabled", "false");
+        window.localStorage.setItem("autoNextQuestion", "false");
+      },
+    });
+    seedWordSpaceExercise();
+    cy.contains("a", "设置").should("be.visible").click();
+    cy.location("pathname").should("equal", "/user/info");
+    cy.get("#word-space-check").should("not.be.checked").check();
+    cy.contains("空格确认当前词元；回车在匹配时确认，未匹配时回退").should("be.visible");
+    cy.reload();
+    cy.get("#word-space-check").should("be.checked");
+    cy.contains("a", "返回练习清单").click();
+    cy.location("pathname").should("equal", "/");
+    cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+    cy.get('input[aria-label="填写当前英文单元"]').type("don't ", { force: true });
+    cy.get(".question-input-word").eq(0).should("have.class", "border-b-transparent");
+  });
+
+  for (const confirmationKey of [" ", "{enter}"]) {
+    for (const [width, height] of [
+      [1280, 800],
+      [320, 568],
+    ]) {
+      it(`locks confirmed words without shifting their geometry at ${width}x${height} using ${confirmationKey === " " ? "Space" : "Enter"}`, () => {
+        cy.viewport(width, height);
+        cy.intercept("GET", "**/right.mp3").as("correctSound");
+        cy.visit("/course-pack");
+        seedWordSpaceExercise();
+        cy.window().then((window) => {
+          window.localStorage.setItem("wordSpaceCheck", "true");
+          window.localStorage.setItem("keyboardSoundEnabled", "false");
+          window.localStorage.setItem("autoNextQuestion", "false");
+        });
+        cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+        const input = 'input[aria-label="填写当前英文单元"]';
+        cy.document().then((document) => document.fonts.ready);
+        cy.get(".question-input-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get(".question-input-word")
+          .first()
+          .then(($word) => {
+            const word = $word[0];
+            const window = word.ownerDocument.defaultView!;
+            const underlineWidth = parseFloat(window.getComputedStyle(word, "::after").width);
+            cy.get(input).should("have.attr", "maxlength", "5").type("WWWWWx ", { force: true });
+            cy.get(".question-input-word")
+              .first()
+              .should(($typed) => {
+                const underline = window.getComputedStyle($typed[0], "::after");
+                expect(parseFloat(underline.width)).to.be.closeTo(underlineWidth, 1);
+                expect(parseFloat(underline.borderBottomWidth)).to.equal(2);
+                expect(underline.borderBottomColor).to.equal(
+                  window.getComputedStyle($typed[0]).borderBottomColor,
+                );
+                const range = word.ownerDocument.createRange();
+                range.selectNodeContents($typed[0]);
+                expect(range.getBoundingClientRect().width).to.be.closeTo(underlineWidth, 1);
+                expect(range.getBoundingClientRect().width).to.be.at.most(underlineWidth + 0.1);
+                assertMonospace($typed[0]);
+              });
+          });
+        cy.get(input).should("have.value", "WWWWW");
+        cy.get(".question-input-word").eq(0).should("not.have.class", "border-b-transparent");
+        cy.get(input).clear({ force: true }).type("don't", { force: true });
+        cy.get(input).should("have.value", "don't");
+        cy.document().then((document) => document.fonts.ready);
+        cy.get(".question-input-word").then(($words) => {
+          const before = Array.from($words).map((word) => word.getBoundingClientRect());
+          cy.get(input).type(confirmationKey, { force: true }).should("have.value", "");
+          cy.wait("@correctSound").its("response.statusCode").should("be.oneOf", [200, 304]);
+          cy.get(".question-input-word").should(($confirmed) => {
+            Array.from($confirmed).forEach((word, index) => {
+              const after = word.getBoundingClientRect();
+              for (const property of ["left", "top", "width", "height"] as const) {
+                expect(
+                  Math.abs(after[property] - before[index][property]),
+                  `${property} of word ${index}`,
+                ).to.be.at.most(1);
+              }
+            });
+            expect(getComputedStyle($confirmed[0]).borderBottomColor).to.equal("rgba(0, 0, 0, 0)");
+            expect(
+              $confirmed[0].ownerDocument.defaultView!.getComputedStyle($confirmed[0], "::after")
+                .borderBottomColor,
+            ).to.equal("rgba(0, 0, 0, 0)");
+          });
+        });
+        cy.get(input).type("{backspace}", { force: true });
+        cy.get(".question-input-word").eq(0).should("have.text", "don't");
+        cy.get(".question-input-word").eq(1).should("have.class", "border-b-fuchsia-500");
+        cy.get(input).should("have.attr", "maxlength", "3").type("eatx", { force: true });
+        cy.get(input).should("have.value", "eat");
+        cy.get('[data-testid="answer-sentence"]').should("not.exist");
+        cy.get(input).type(confirmationKey, { force: true });
+        cy.get('[data-testid="answer-sentence"]').should("be.visible");
+        cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
+          assertMonospace($sentence[0]),
+        );
+        cy.get(".answer-words").should(($words) => assertWordSpacing($words[0]));
+      });
+    }
+  }
+
+  for (const enabled of [true, false]) {
+    for (const [width, height] of [
+      [1000, 800],
+      [320, 568],
+    ]) {
+      it(`keeps fulltext input, answers, history, and completed text spacing consistent at ${width}x${height} with experiment ${enabled}`, () => {
+        cy.viewport(width, height);
+        cy.visit("/course-pack");
+        seedWordSpaceExercise(true);
+        cy.window().then((window) => {
+          window.localStorage.setItem("wordSpaceCheck", String(enabled));
+          window.localStorage.setItem("keyboardSoundEnabled", "false");
+          window.localStorage.setItem("autoNextQuestion", "false");
+        });
+        cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+        const input = 'input[aria-label="填写当前英文单元"]';
+        cy.get('[data-testid="cloze-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
+        cy.get(".question-input-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get(input).type(enabled ? "DON'T{enter}EAT{enter}" : "DON'T EAT{enter}", {
+          force: true,
+        });
+        cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
+          assertMonospace($sentence[0]),
+        );
+        cy.get(".answer-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get('[data-testid="answer-sentence"] .question-input-word')
+          .eq(0)
+          .focus()
+          .type("{rightarrow}");
+        cy.get('[data-testid="fulltext-history-sentence"] .practice-english').should(
+          ($sentence) => {
+            assertMonospace($sentence[0]);
+            assertDisplayedSpacing($sentence[0]);
+          },
+        );
+        cy.get(".question-input-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get(input).type(enabled ? "We{enter}will{enter}wait{enter}" : "We will wait{enter}", {
+          force: true,
+        });
+        cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
+          assertMonospace($sentence[0]),
+        );
+        cy.get(".answer-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get('[data-testid="answer-sentence"] .question-input-word')
+          .eq(0)
+          .focus()
+          .type("{rightarrow}");
+        cy.get('[data-testid="fulltext-current"] .practice-english').should(($sentence) => {
+          assertMonospace($sentence[0]);
+          assertDisplayedSpacing($sentence[0]);
+        });
+      });
+    }
+  }
+});

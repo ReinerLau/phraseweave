@@ -3,7 +3,12 @@ import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Contents from "~/components/main/Contents/Contents.vue";
+import { useContent } from "~/components/main/Contents/useContents";
+import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
+import ClozeMode from "~/components/mode/cloze/ClozeMode.vue";
+import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
+import { useSummary } from "~/composables/main/summary";
 import { useExerciseStore } from "~/store/exercise";
 import { measureChineseMasks } from "../chineseMaskLayout";
 import FulltextMode from "../FulltextMode.vue";
@@ -19,6 +24,8 @@ enableAutoUnmount(afterEach);
 describe("FulltextMode", () => {
   beforeEach(() => {
     useGameMode().showQuestion();
+    useAnswerTip().hiddenAnswerTip();
+    useSummary().hideSummary();
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       queueMicrotask(() => callback(0));
@@ -102,21 +109,150 @@ describe("FulltextMode", () => {
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
   });
 
-  it("lists every directory position without revealing future answers or allowing jumps", async () => {
+  it("offers audio only after submitting a correct answer and on completed sentences", async () => {
     const { pinia, store } = setup();
-    store.currentCourse!.passedUnitIds = ["unit:whole-0", "unit:whole-1", "unit:whole-2"];
-    const wrapper = mount(Contents, { global: { plugins: [pinia] } });
+    const wrapper = mount(FulltextMode, {
+      global: {
+        plugins: [pinia],
+        components: { ModeClozeMode: ClozeMode },
+        stubs: { MainQuestionInput: true },
+      },
+    });
     await flushPromises();
-    expect(wrapper.text()).toContain("____");
-    expect(wrapper.text()).not.toContain("Future");
-    expect(wrapper.text()).not.toContain("Last");
-    expect(wrapper.findAll(".text-center")).toHaveLength(3);
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual([]);
+    for (const pending of wrapper.findAll('[data-testid="fulltext-pending-sentence"]')) {
+      expect(pending.find('[data-testid="sentence-audio-button"]').exists()).toBe(false);
+    }
+    store.passCurrentStatement();
+    useGameMode().showAnswer();
+    await flushPromises();
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First."]);
+    store.advanceAfterCorrect();
+    useGameMode().showQuestion();
+    await flushPromises();
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First."]);
+    expect(
+      wrapper
+        .get('[data-testid="fulltext-current"]')
+        .find('[data-testid="sentence-audio-button"]')
+        .exists(),
+    ).toBe(false);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
     store.passCurrentStatement();
     store.advanceAfterCorrect();
     await flushPromises();
-    expect(wrapper.text()).toContain("First");
+    expect(store.fulltextCompleted).toBe(true);
+    expect(
+      wrapper.findAllComponents(SentenceAudioButton).map((button) => button.props("text")),
+    ).toEqual(["First.", "Future.", "Last."]);
+    expect(wrapper.findAll('[data-testid="sentence-audio-button"]')).toHaveLength(3);
+    expect(wrapper.find('[data-testid="fulltext-pending-sentence"]').exists()).toBe(false);
+  });
+
+  it("enables passed directory targets in both directions while leaving unpassed text masked", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.passedUnitIds = ["unit:whole-0", "unit:whole-2"];
+    const wrapper = mount(Contents, { global: { plugins: [pinia] } });
+    const fulltext = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain("____");
     expect(wrapper.text()).not.toContain("Future");
-    await wrapper.get(".text-center").trigger("click");
+    expect(wrapper.text()).toContain("Last");
+    const buttons = wrapper.findAll("button");
+    expect(buttons).toHaveLength(3);
+    expect(buttons[0].attributes("disabled")).toBeDefined();
+    expect(buttons[0].attributes("aria-current")).toBe("step");
+    expect(buttons[1].attributes("disabled")).toBeDefined();
+    expect(buttons[2].attributes("disabled")).toBeUndefined();
+    expect(buttons[2].attributes("type")).toBe("button");
+    expect(buttons[2].attributes("tabindex")).toBe("-1");
+    useContent().toggleContents(new MouseEvent("click"));
+    await flushPromises();
+    expect(buttons[2].attributes("tabindex")).toBe("0");
+    const globalKeydown = vi.fn();
+    window.addEventListener("keydown", globalKeydown);
+    try {
+      await buttons[2].trigger("keydown", { key: "Enter", code: "Enter" });
+      expect(globalKeydown).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", globalKeydown);
+    }
+    expect(fulltext.text()).not.toContain("Last");
+    await buttons[1].trigger("click");
+    expect(store.statementIndex).toBe(0);
+    useGameMode().showAnswer();
+    useAnswerTip().showAnswerTip();
+    const scroll = fulltext.element as HTMLElement;
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 600 });
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(1000);
+    scroll.scrollTop = 420;
+    await buttons[2].trigger("click");
+    await flushPromises();
+    expect(store.statementIndex).toBe(2);
+    expect(scroll.scrollTop).toBe(904);
+    expect(useContent().isShowContents()).toBe(false);
+    expect(useGameMode().isQuestion()).toBe(true);
+    expect(useAnswerTip().isAnswerTip()).toBe(false);
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.fulltextCompleted).toBe(false);
+    expect(buttons[0].attributes("disabled")).toBeUndefined();
+    await buttons[0].trigger("click");
+    await flushPromises();
+    expect(store.statementIndex).toBe(0);
+    expect(fulltext.findAll('[data-testid="fulltext-pending-sentence"]')).toHaveLength(2);
+    expect(fulltext.text()).not.toContain("Last");
+    expect(fulltext.text()).not.toContain("第三句");
+  });
+
+  it("marks and enables the unfinished return target without revealing its answer", async () => {
+    const { pinia, store } = setup();
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    const wrapper = mount(Contents, { global: { plugins: [pinia] } });
+    const fulltext = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    await wrapper.findAll("button")[0].trigger("click");
+    await flushPromises();
+    const buttons = wrapper.findAll("button");
+    expect(buttons[1].text()).toContain("继续练习");
+    expect(buttons[1].text()).toContain("____");
+    expect(buttons[1].text()).not.toContain("Future");
+    expect(buttons[1].attributes("disabled")).toBeUndefined();
+    expect(buttons[2].attributes("disabled")).toBeDefined();
+    expect(fulltext.text()).not.toContain("Future");
+    const scroll = fulltext.element as HTMLElement;
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 600 });
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockReturnValue(1000);
+    scroll.scrollTop = 420;
+    await buttons[1].trigger("click");
+    await flushPromises();
+    expect(store.statementIndex).toBe(1);
+    expect(scroll.scrollTop).toBe(904);
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.isStatementPassed(store.baseStatements[1])).toBe(false);
+    expect(buttons[1].attributes("disabled")).toBeDefined();
+    expect(fulltext.findAll('[data-testid="fulltext-pending-sentence"]')).toHaveLength(1);
+  });
+
+  it("keeps single-view directory navigation available for unpassed questions", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.practiceView = "single";
+    const wrapper = mount(Contents, { global: { plugins: [pinia] } });
+    await flushPromises();
+    const target = wrapper.findAll("button")[1];
+    expect(target.attributes("disabled")).toBeUndefined();
+    await target.trigger("click");
     expect(store.statementIndex).toBe(1);
   });
 

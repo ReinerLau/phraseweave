@@ -43,9 +43,8 @@
           </p>
           <p class="py-1 leading-7">验证通过后会显示填好的英文原句。</p>
           <h3 class="py-2 text-base font-semibold">答题小技巧</h3>
-          <p class="p-1">
-            <button class="instruction-btn">显示答案</button>
-            查看当前空缺的英文单元
+          <p class="p-1 leading-7">
+            不会时按回车回退复习。到单词后先看音标提示，保持输入为空再按回车查看答案；没有可用音标时，再次空白回车也能查看。开始输入会自动收起答案。
           </p>
           <h3 class="py-2 text-base font-semibold">答案页面</h3>
           <p class="py-1 leading-7">答案下方的按钮</p>

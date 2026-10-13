@@ -28,6 +28,12 @@
         >
           添加练习
         </button>
+        <NuxtLink
+          class="btn btn-sm"
+          to="/user/info?displayComponent=Setting"
+        >
+          设置
+        </NuxtLink>
         <RemoteLogout />
       </div>
     </div>
