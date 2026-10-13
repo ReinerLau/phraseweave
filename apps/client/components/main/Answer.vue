@@ -22,6 +22,7 @@
       <div
         ref="answerWordsEl"
         class="answer-words question-input-words relative inline-flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
+        :style="{ '--question-word-gap': `${measureEm(' ')}em` }"
       >
         <ClozeText :tokens="courseStore.clozeTokens">
           <template #word="{ token }">
@@ -78,7 +79,7 @@ const questionStyle = computed(() =>
 );
 
 const answerWordsEl = ref<HTMLElement>();
-const { probeEl, wordWidth } = useWordWidths(answerWordsEl);
+const { probeEl, measureEm, wordWidth } = useWordWidths(answerWordsEl);
 
 registerShortcutKeyForNextQuestion();
 

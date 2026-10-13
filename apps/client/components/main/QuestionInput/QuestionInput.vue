@@ -7,6 +7,7 @@
       ref="questionInputWordsEl"
       class="question-input-words relative flex min-w-0 max-w-full flex-wrap items-start justify-start text-left"
       :class="inline ? 'w-fit' : 'w-full'"
+      :style="{ '--question-word-gap': `${measureEm(' ')}em` }"
       @pointermove="handleWordHover"
       @pointerleave="clearWordHover"
     >

@@ -1,6 +1,66 @@
 const wordSpacePack = "word-space-check-pack";
 const wordSpaceCourse = "word-space-check-course";
 
+function renderedSpaceWidth(element: HTMLElement) {
+  const document = element.ownerDocument;
+  const styles = document.defaultView!.getComputedStyle(element);
+  const probe = document.createElement("span");
+  Object.assign(probe.style, {
+    position: "absolute",
+    visibility: "hidden",
+    whiteSpace: "pre",
+    fontFamily: styles.fontFamily,
+    fontSize: styles.fontSize,
+    fontWeight: styles.fontWeight,
+    fontStyle: styles.fontStyle,
+    fontKerning: styles.fontKerning,
+    fontVariantLigatures: styles.fontVariantLigatures,
+    letterSpacing: styles.letterSpacing,
+  });
+  probe.textContent = " ";
+  document.body.appendChild(probe);
+  try {
+    return probe.getBoundingClientRect().width;
+  } finally {
+    probe.remove();
+  }
+}
+
+function assertWordSpacing(element: HTMLElement) {
+  const spaceWidth = renderedSpaceWidth(element);
+  const styles = element.ownerDocument.defaultView!.getComputedStyle(element);
+  expect(parseFloat(styles.columnGap), "input/answer gap matches a displayed space").to.be.closeTo(
+    spaceWidth,
+    0.1,
+  );
+  const groups = Array.from(element.querySelectorAll(".question-input-group"));
+  for (let index = 1; index < groups.length; index++) {
+    const before = groups[index - 1].getBoundingClientRect();
+    const after = groups[index].getBoundingClientRect();
+    if (Math.abs(before.top - after.top) < 1) {
+      expect(after.left - before.right, "rendered gap between tokens").to.be.closeTo(
+        spaceWidth,
+        0.1,
+      );
+    }
+  }
+}
+
+function assertDisplayedSpacing(element: HTMLElement) {
+  const spaceWidth = renderedSpaceWidth(element);
+  const words = Array.from(element.querySelectorAll(".speech-word"));
+  let pairs = 0;
+  for (let index = 1; index < words.length; index++) {
+    const before = words[index - 1].getBoundingClientRect();
+    const after = words[index].getBoundingClientRect();
+    if (Math.abs(before.top - after.top) < 1) {
+      expect(after.left - before.right, "displayed word gap").to.be.closeTo(spaceWidth, 0.1);
+      pairs++;
+    }
+  }
+  expect(pairs, "compared displayed words").to.be.greaterThan(0);
+}
+
 function assertMonospace(element: HTMLElement) {
   const document = element.ownerDocument;
   const styles = document.defaultView!.getComputedStyle(element);
@@ -157,6 +217,7 @@ describe("word space checking", () => {
         cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
         const input = 'input[aria-label="填写当前英文单元"]';
         cy.document().then((document) => document.fonts.ready);
+        cy.get(".question-input-words").should(($words) => assertWordSpacing($words[0]));
         cy.get(".question-input-word")
           .first()
           .then(($word) => {
@@ -217,39 +278,63 @@ describe("word space checking", () => {
         cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
           assertMonospace($sentence[0]),
         );
+        cy.get(".answer-words").should(($words) => assertWordSpacing($words[0]));
       });
     }
   }
 
-  it("uses the same monospace font for fulltext input, answers, and preceding English", () => {
-    cy.viewport(1000, 800);
-    cy.visit("/course-pack");
-    seedWordSpaceExercise(true);
-    cy.window().then((window) => {
-      window.localStorage.setItem("wordSpaceCheck", "true");
-      window.localStorage.setItem("keyboardSoundEnabled", "false");
-      window.localStorage.setItem("autoNextQuestion", "false");
-    });
-    cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
-    const input = 'input[aria-label="填写当前英文单元"]';
-    cy.get('[data-testid="cloze-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
-    cy.get(input).type("DON'T{enter}EAT{enter}", { force: true });
-    cy.get('[data-testid="answer-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
-    cy.get('[data-testid="answer-sentence"] .question-input-word')
-      .eq(0)
-      .focus()
-      .type("{rightarrow}");
-    cy.get('[data-testid="fulltext-history-sentence"] .practice-english').then(($sentence) =>
-      assertMonospace($sentence[0]),
-    );
-    cy.get(input).type("We{enter}will{enter}wait{enter}", { force: true });
-    cy.get('[data-testid="answer-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
-    cy.get('[data-testid="answer-sentence"] .question-input-word')
-      .eq(0)
-      .focus()
-      .type("{rightarrow}");
-    cy.get('[data-testid="fulltext-current"] .practice-english').then(($sentence) =>
-      assertMonospace($sentence[0]),
-    );
-  });
+  for (const enabled of [true, false]) {
+    for (const [width, height] of [
+      [1000, 800],
+      [320, 568],
+    ]) {
+      it(`keeps fulltext input, answers, history, and completed text spacing consistent at ${width}x${height} with experiment ${enabled}`, () => {
+        cy.viewport(width, height);
+        cy.visit("/course-pack");
+        seedWordSpaceExercise(true);
+        cy.window().then((window) => {
+          window.localStorage.setItem("wordSpaceCheck", String(enabled));
+          window.localStorage.setItem("keyboardSoundEnabled", "false");
+          window.localStorage.setItem("autoNextQuestion", "false");
+        });
+        cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
+        const input = 'input[aria-label="填写当前英文单元"]';
+        cy.get('[data-testid="cloze-sentence"]').then(($sentence) => assertMonospace($sentence[0]));
+        cy.get(".question-input-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get(input).type(enabled ? "DON'T{enter}EAT{enter}" : "DON'T EAT{enter}", {
+          force: true,
+        });
+        cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
+          assertMonospace($sentence[0]),
+        );
+        cy.get(".answer-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get('[data-testid="answer-sentence"] .question-input-word')
+          .eq(0)
+          .focus()
+          .type("{rightarrow}");
+        cy.get('[data-testid="fulltext-history-sentence"] .practice-english').should(
+          ($sentence) => {
+            assertMonospace($sentence[0]);
+            assertDisplayedSpacing($sentence[0]);
+          },
+        );
+        cy.get(".question-input-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get(input).type(enabled ? "We{enter}will{enter}wait{enter}" : "We will wait{enter}", {
+          force: true,
+        });
+        cy.get('[data-testid="answer-sentence"]').then(($sentence) =>
+          assertMonospace($sentence[0]),
+        );
+        cy.get(".answer-words").should(($words) => assertWordSpacing($words[0]));
+        cy.get('[data-testid="answer-sentence"] .question-input-word')
+          .eq(0)
+          .focus()
+          .type("{rightarrow}");
+        cy.get('[data-testid="fulltext-current"] .practice-english').should(($sentence) => {
+          assertMonospace($sentence[0]);
+          assertDisplayedSpacing($sentence[0]);
+        });
+      });
+    }
+  }
 });
