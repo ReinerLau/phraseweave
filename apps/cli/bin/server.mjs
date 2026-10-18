@@ -38,12 +38,15 @@ function json(response, status, value) {
 }
 
 async function readBody(request, maxBytes = MAX_BODY_BYTES) {
-  let body = "";
+  const chunks = [];
+  let length = 0;
   for await (const chunk of request) {
-    body += chunk;
-    if (Buffer.byteLength(body) > maxBytes) throw new Error("Request body is too large.");
+    length += chunk.length;
+    if (length > maxBytes) throw new Error("Request body is too large.");
+    chunks.push(chunk);
   }
-  return body;
+  // A UTF-8 character may span network chunks; decode only after reassembly.
+  return Buffer.concat(chunks, length).toString("utf8");
 }
 
 export async function consumeCapture(id, directory = path.join(DATA_DIR, "captures")) {
