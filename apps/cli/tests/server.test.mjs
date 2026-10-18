@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -54,6 +55,48 @@ test("proxies generator requests from the local page", async () => {
   });
   assert.equal(response.status, 200);
   assert.deepEqual(requests.at(-1), ["/api/generate", "POST", '{"text":"Example"}']);
+});
+
+test("preserves UTF-8 characters split across request chunks", { timeout: 10_000 }, async (t) => {
+  for (const [pathname, method] of [
+    ["/api/generate", "POST"],
+    ["/api/local-exercises/pack", "PUT"],
+  ]) {
+    await t.test(pathname, async () => {
+      const payload = JSON.stringify({ contextBefore: "My mind wasn’t ", text: "当然——🙂" });
+      const bytes = Buffer.from(payload);
+      // Deliver every non-ASCII byte separately, including all three bytes of ’.
+      const chunks = [];
+      let start = 0;
+      for (let index = 0; index < bytes.length; index++) {
+        if (bytes[index] < 128) continue;
+        if (start < index) chunks.push(bytes.subarray(start, index));
+        chunks.push(bytes.subarray(index, index + 1));
+        start = index + 1;
+      }
+      chunks.push(bytes.subarray(start));
+
+      const incomingRequest = once(server, "request");
+      const request = http.request(new URL(pathname, url), {
+        method,
+        headers: { Origin: new URL(url).origin, "Content-Type": "application/json" },
+      });
+      const responseReady = once(request, "response");
+      request.flushHeaders();
+      const [incoming] = await incomingRequest;
+      for (const chunk of chunks) {
+        const received = once(incoming, "data");
+        request.write(chunk);
+        await received;
+      }
+      request.end();
+      const [response] = await responseReady;
+      response.resume();
+      await once(response, "end");
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(requests.at(-1), [pathname, method, payload]);
+    });
+  }
 });
 
 test("preserves binary word audio and accepts cache deletion", async () => {
