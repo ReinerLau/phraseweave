@@ -130,7 +130,7 @@ describe("generator capture preview", () => {
     expect(mocks.start).toHaveBeenCalledWith({
       text,
       format: "both",
-      translationProvider: "local",
+      translationProvider: "index-translate",
     });
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("");
@@ -219,12 +219,15 @@ describe("generator capture preview", () => {
   });
 
   it("retries a failed generation using the retained selection", async () => {
-    mocks.job.mockResolvedValueOnce({ id: "job-1", state: "failed", error: "模型失败" });
+    mocks.job.mockResolvedValueOnce({
+      id: "job-1",
+      state: "failed",
+      error: "Index-Translate 第 1 句请求超时（30 秒），请重试。",
+    });
     await mountAndGenerate();
-    expect(wrapper!.text()).toContain("模型失败");
+    expect(wrapper!.text()).toContain("Index-Translate 第 1 句请求超时");
     expect(mocks.save).not.toHaveBeenCalled();
     expect(wrapper!.find("textarea").element.value).toBe(text);
-    await wrapper!.findAll("select")[0].setValue("index-translate");
     await submit();
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).toHaveBeenCalledTimes(2);
@@ -292,26 +295,27 @@ describe("generator capture preview", () => {
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
     expect(wrapper!.text()).not.toContain("练习模式");
-    expect(wrapper!.findAll("select")).toHaveLength(2);
+    expect(wrapper!.findAll("select")).toHaveLength(1);
+    expect(wrapper!.text()).not.toContain("Hy-MT2 本地翻译");
     await wrapper!.find("textarea").setValue(text);
     await wrapper!.find("form").trigger("submit");
     await flushPromises();
     expect(mocks.start).toHaveBeenCalledWith({
       text,
       format: "both",
-      translationProvider: "local",
+      translationProvider: "index-translate",
     });
     expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it("submits edited selection with the chosen provider and export format", async () => {
+  it("submits edited selection with public translation and the chosen export format", async () => {
     await mount();
     await wrapper!.find("textarea").setValue("The dog runs.");
     const selects = wrapper!.findAll("select");
-    await selects[0].setValue("index-translate");
-    await selects[1].setValue("markdown");
+    expect(selects).toHaveLength(1);
+    await selects[0].setValue("markdown");
     expect(wrapper!.text()).toContain("英文原句会发送至 Bilibili");
     await submit();
     expect(mocks.start).toHaveBeenCalledWith({
@@ -321,27 +325,21 @@ describe("generator capture preview", () => {
     });
   });
 
-  it("remembers the translation selection for the next page visit", async () => {
+  it("ignores the saved provider preference and always uses public translation", async () => {
+    window.localStorage.setItem("phraseweave.translationProvider", "local");
     await mount();
-    await wrapper!.findAll("select")[0].setValue("index-translate");
-    expect(window.localStorage.getItem("phraseweave.translationProvider")).toBe("index-translate");
-    wrapper!.unmount();
-    await mount();
-    expect(wrapper!.findAll("select")[0].element.value).toBe("index-translate");
-    expect(mocks.start).not.toHaveBeenCalled();
     await submit();
     expect(mocks.start.mock.calls[0][0].translationProvider).toBe("index-translate");
+    expect(window.localStorage.getItem("phraseweave.translationProvider")).toBe("local");
   });
 
-  it("supports legacy services with only local translation", async () => {
-    window.localStorage.setItem("phraseweave.translationProvider", "index-translate");
+  it("disables generation when the service does not advertise public translation", async () => {
     mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
     await mount();
-    const select = wrapper!.findAll("select")[0];
-    expect(select.element.value).toBe("local");
-    expect(select.findAll("option")).toHaveLength(1);
+    expect(wrapper!.text()).toContain("当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。");
+    expect(button("生成学习单元").attributes("disabled")).toBeDefined();
     await submit();
-    expect(mocks.start.mock.calls[0][0].translationProvider).toBe("local");
+    expect(mocks.start).not.toHaveBeenCalled();
   });
 
   it("prefills legacy captures without generating and removes the consumed URL", async () => {
@@ -375,7 +373,7 @@ describe("generator capture preview", () => {
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
-  it("prevents duplicate submissions and provider changes while submitting", async () => {
+  it("prevents duplicate submissions and export format changes while submitting", async () => {
     let accept!: (value: { id: string }) => void;
     mocks.start.mockImplementation(
       () =>

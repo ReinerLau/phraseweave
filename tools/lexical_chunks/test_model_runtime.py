@@ -94,8 +94,9 @@ class PublicTranslationTests(TestCase):
             with self.subTest(status=status), patch("model_runtime.install_model") as install:
                 self.requests.clear()
                 self.responses.extend([(200, self.response("成功。")), (status, "<html>blocked</html>")])
-                with self.assertRaisesRegex(RuntimeError, f"第 2 句.*HTTP {status}"):
+                with self.assertRaisesRegex(RuntimeError, f"第 2 句.*HTTP {status}") as error:
                     translate_sentences(["One.", "Two.", "Three."], "index-translate")
+                self.assertNotIn("切换本地翻译", str(error.exception))
                 self.assertEqual(len(self.requests), 2)
                 install.assert_not_called()
 
