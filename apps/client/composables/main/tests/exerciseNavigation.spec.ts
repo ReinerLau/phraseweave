@@ -8,6 +8,11 @@ import { useGameMode } from "../game";
 const showSummary = vi.hoisted(() => vi.fn());
 const showModal = vi.hoisted(() => ({ value: false }));
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/composables/main/summary", () => ({
   useSummary: () => ({ showSummary, showModal }),
 }));

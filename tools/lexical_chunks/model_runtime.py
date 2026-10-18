@@ -138,15 +138,15 @@ def _translate_index(sentences: list[str], progress: Any = None) -> list[str]:
             translations.append(content.strip())
         except urllib.error.HTTPError as error:
             raise RuntimeError(
-                f"Index-Translate 第 {index} 句翻译失败（HTTP {error.code}），请重试或切换本地翻译。"
+                f"Index-Translate 第 {index} 句翻译失败（HTTP {error.code}），请重试。"
             ) from error
         except TimeoutError as error:
             raise RuntimeError(
-                f"Index-Translate 第 {index} 句请求超时（30 秒），请重试或切换本地翻译。"
+                f"Index-Translate 第 {index} 句请求超时（30 秒），请重试。"
             ) from error
         except (urllib.error.URLError, OSError) as error:
             raise RuntimeError(
-                f"Index-Translate 第 {index} 句无法连接公网服务，请检查网络或切换本地翻译。"
+                f"Index-Translate 第 {index} 句无法连接公网服务，请检查网络后重试。"
             ) from error
         except (ValueError, UnicodeError) as error:
             raise RuntimeError(f"Index-Translate 第 {index} 句翻译失败：{error}") from error

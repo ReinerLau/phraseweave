@@ -17,6 +17,7 @@ import {
   groupExerciseSentences,
   sentenceFirstIndices,
 } from "~/utils/learningDirection";
+import { practiceModeAvailability } from "~/utils/practiceModes";
 import { buildRecoverySteps } from "~/utils/recoverySources";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
@@ -103,7 +104,11 @@ export const useExerciseStore = defineStore("exercise", () => {
   const canUseFulltext = computed(
     () => canUseSentenceFirst.value && sentences.value.every((sentence) => sentence.chinese.trim()),
   );
-  const practiceView = computed(() => currentCourse.value?.practiceView ?? "single");
+  const practiceView = computed(
+    () =>
+      currentCourse.value?.practiceView ??
+      (practiceModeAvailability.single ? "single" : "fulltext"),
+  );
   const isFulltext = computed(() => practiceView.value === "fulltext");
   const currentSentenceIndex = computed(() =>
     sentences.value.findIndex(
@@ -111,7 +116,11 @@ export const useExerciseStore = defineStore("exercise", () => {
     ),
   );
   const precedingSentences = computed(() => sentences.value.slice(0, currentSentenceIndex.value));
-  const learningMode = computed(() => currentCourse.value?.learningMode ?? "progressive");
+  const learningMode = computed(
+    () =>
+      currentCourse.value?.learningMode ??
+      (practiceModeAvailability.progressive ? "progressive" : "sentence-first"),
+  );
   const questionIndices = computed(() => {
     const course = currentCourse.value;
     if (!course) return [];
@@ -239,6 +248,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function switchPracticeView(view: PracticeView) {
     const course = currentCourse.value;
+    if (view === "single" && !practiceModeAvailability.single) return false;
     if (!course || view === practiceView.value || (view === "fulltext" && !canUseFulltext.value))
       return false;
     course.practiceView = view;
@@ -250,6 +260,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function switchLearningMode(mode: LearningMode) {
     const course = currentCourse.value;
+    if (mode === "progressive" && !practiceModeAvailability.progressive) return false;
     if (
       !course ||
       mode === learningMode.value ||
@@ -383,6 +394,20 @@ export const useExerciseStore = defineStore("exercise", () => {
     const course = coursePack?.courses.find((item) => item.id === courseId);
     if (!course) throw new Error("本地找不到该练习卡片");
 
+    const groups = groupExerciseSentences(course.statements);
+    if (
+      (!practiceModeAvailability.progressive && !groups) ||
+      (!practiceModeAvailability.single &&
+        (!groups || groups.some((group) => !course.statements[group.end].sentenceChinese?.trim())))
+    ) {
+      throw new Error("该练习缺少原句分组或完整中文提示，请重新生成以使用整句优先和全文模式。");
+    }
+    if (!practiceModeAvailability.progressive) {
+      course.learningMode = "sentence-first";
+      course.sentenceFirstStartIndex = undefined;
+    }
+    if (!practiceModeAvailability.single) course.practiceView = "fulltext";
+
     const lastIndex = Math.max(0, course.statements.length - 1);
     course.statementIndex = Number.isFinite(course.statementIndex)
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
@@ -437,6 +462,8 @@ export const useExerciseStore = defineStore("exercise", () => {
     recoveryUnitId.value = undefined;
     setupStatement(currentCourse);
     refreshCurrentStatement();
+    if (!practiceModeAvailability.progressive || !practiceModeAvailability.single)
+      persistProgress();
   }
 
   return {

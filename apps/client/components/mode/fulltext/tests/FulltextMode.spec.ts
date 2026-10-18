@@ -13,6 +13,11 @@ import { useExerciseStore } from "~/store/exercise";
 import { measureChineseMasks } from "../chineseMaskLayout";
 import FulltextMode from "../FulltextMode.vue";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("../chineseMaskLayout", () => ({ measureChineseMasks: vi.fn() }));
 
 vi.mock("~/services/localExerciseDb", () => ({

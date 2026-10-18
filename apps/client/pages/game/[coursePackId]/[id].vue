@@ -8,6 +8,17 @@
     <template v-if="isLoading">
       <Loading></Loading>
     </template>
+    <div
+      v-else-if="loadError"
+      class="flex flex-col items-center gap-4 px-4 py-8"
+    >
+      <p role="alert">{{ loadError }}</p>
+      <NuxtLink
+        href="/course-pack"
+        class="btn btn-primary"
+        >返回练习列表</NuxtLink
+      >
+    </div>
     <template v-else>
       <MainTool />
       <div class="h-0 min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -36,6 +47,7 @@ import { preloadPronunciations } from "~/services/pronunciation";
 import { useExerciseStore } from "~/store/exercise";
 
 const isLoading = ref(true);
+const loadError = ref("");
 const route = useRoute();
 const coursesStore = useExerciseStore();
 const { audioError, stopWordAudio, disposeWordAudio } = useWordAudio();
@@ -65,10 +77,15 @@ onMounted(async () => {
   window.addEventListener("resize", updatePracticeViewportHeight);
 
   const { coursePackId, id } = route.params;
-  await coursesStore.setup(coursePackId as string, id as string);
-
-  void preloadPronunciations().catch(() => {});
-  isLoading.value = false;
+  try {
+    await coursesStore.setup(coursePackId as string, id as string);
+    void preloadPronunciations().catch(() => {});
+  } catch (error) {
+    loadError.value =
+      error instanceof Error ? error.message : "加载练习失败，请返回练习列表后重试。";
+  } finally {
+    isLoading.value = false;
+  }
 });
 
 onUnmounted(() => {
