@@ -3,6 +3,7 @@ import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Course } from "~/store/exercise";
+import { useContent } from "~/components/main/Contents/useContents";
 import QuestionInput from "~/components/main/QuestionInput/QuestionInput.vue";
 import Tool from "~/components/main/Tool.vue";
 import { useAnswerTip } from "~/composables/main/answerTip";
@@ -121,6 +122,23 @@ describe("answer availability", () => {
         .find('[data-testid="sentence-audio-button"]')
         .exists(),
     ).toBe(false);
+  });
+
+  it("shows a fixed directory label instead of the course title", async () => {
+    course.title = "Cats sleep quietly";
+    const { wrapper } = await setup();
+    const toolbar = wrapper.get('[data-testid="practice-toolbar"]');
+    const directoryButton = toolbar.get('[data-tip="练习卡片列表"]');
+    const { hideContents, isShowContents } = useContent();
+
+    expect(directoryButton.text()).toBe("目录");
+    expect(toolbar.text()).not.toContain(course.title);
+    expect(directoryButton.attributes("data-tip")).toBe("练习卡片列表");
+    expect(isShowContents()).toBe(false);
+
+    await directoryButton.trigger("click");
+    expect(isShowContents()).toBe(true);
+    hideContents();
   });
 
   it("updates a query read before course setup and after reloading the same current unit", async () => {

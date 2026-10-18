@@ -26,7 +26,7 @@
         data-tip="练习卡片列表"
         @click="toggleContents"
       >
-        {{ currentCourseInfo }}
+        目录
       </div>
     </div>
 
@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 
 import { useQuestionInput } from "~/components/main/QuestionInput/questionInputHelper";
 import { courseTimer } from "~/composables/courses/courseTimer";
@@ -59,10 +59,6 @@ const exerciseCatalogStore = useExerciseCatalogStore();
 const { focusInput } = useQuestionInput();
 const { toggleContents } = useContent();
 const { showTipModal, handleDoAgain, handleTipConfirm } = useDoAgain();
-
-const currentCourseInfo = computed(() => {
-  return courseStore.currentCourse?.title;
-});
 
 function useDoAgain() {
   const showTipModal = ref<boolean>(false);
