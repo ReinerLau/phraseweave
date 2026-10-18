@@ -11,6 +11,11 @@ import { useExerciseStore } from "~/store/exercise";
 import PracticeViewSwitch from "../PracticeViewSwitch.vue";
 
 const focusInput = vi.hoisted(() => vi.fn());
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/components/main/QuestionInput/questionInputHelper", () => ({
   useQuestionInput: () => ({ focusInput }),
 }));

@@ -4,23 +4,24 @@
     data-testid="practice-toolbar"
   >
     <!-- 左侧 -->
-    <div class="flex w-full min-w-0 flex-none items-start gap-2 sm:w-auto sm:flex-1">
+    <div class="flex min-w-0 flex-none items-start gap-2">
       <NuxtLink
         href="/course-pack"
         class="clickable-item flex h-11 shrink-0 items-center justify-center"
       >
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
-      <div class="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:max-w-md">
-        <LearningModeSwitch />
-        <PracticeViewSwitch />
+      <div
+        v-if="practiceModeAvailability.progressive || practiceModeAvailability.single"
+        class="flex min-w-0 flex-1 gap-2 sm:max-w-md"
+      >
+        <LearningModeSwitch v-if="practiceModeAvailability.progressive" />
+        <PracticeViewSwitch v-if="practiceModeAvailability.single" />
       </div>
     </div>
 
     <!-- 右侧 -->
-    <div
-      class="flex min-h-11 w-full min-w-0 items-center justify-end gap-2 sm:ml-2 sm:w-auto sm:max-w-[40%]"
-    >
+    <div class="ml-2 flex min-h-11 min-w-0 flex-1 items-center justify-end gap-2">
       <div
         class="clickable-item tooltip-item min-w-0 truncate text-right"
         data-tip="练习卡片列表"
@@ -50,6 +51,7 @@ import { useGameMode } from "~/composables/main/game";
 import { clearQuestionInput } from "~/composables/main/question";
 import { useExerciseStore } from "~/store/exercise";
 import { useExerciseCatalogStore } from "~/store/exerciseCatalog";
+import { practiceModeAvailability } from "~/utils/practiceModes";
 import { useContent } from "./Contents/useContents";
 import LearningModeSwitch from "./LearningModeSwitch.vue";
 import PracticeViewSwitch from "./PracticeViewSwitch.vue";

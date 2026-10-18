@@ -11,6 +11,11 @@ import { getLocalExercise } from "~/services/localExerciseDb";
 import { useExerciseStore } from "../exercise";
 import { useUserStore } from "../user";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/services/auth");
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
