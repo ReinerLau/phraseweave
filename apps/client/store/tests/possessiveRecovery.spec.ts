@@ -7,6 +7,11 @@ import { getLocalExercise } from "~/services/localExerciseDb";
 import { useExerciseStore } from "../exercise";
 import { russiaSentence, russiaStatements } from "./fixtures/russia";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
   saveLocalExercise: vi.fn().mockResolvedValue(undefined),

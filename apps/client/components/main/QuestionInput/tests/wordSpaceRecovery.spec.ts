@@ -14,6 +14,11 @@ import { deepPneumonicStatements } from "~/store/tests/fixtures/pneumonic";
 import { getClozeWords } from "~/utils/clozeText";
 import QuestionInput from "../QuestionInput.vue";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
   saveLocalExercise: vi.fn().mockResolvedValue(undefined),

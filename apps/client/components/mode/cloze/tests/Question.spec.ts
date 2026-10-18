@@ -14,6 +14,11 @@ import { lookupPronunciation } from "~/services/pronunciation";
 import { useExerciseStore } from "~/store/exercise";
 import Question from "../Question.vue";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
   saveLocalExerciseProgress: vi.fn().mockResolvedValue(undefined),

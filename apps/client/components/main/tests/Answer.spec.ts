@@ -6,6 +6,11 @@ import { ref } from "vue";
 import { useExerciseStore } from "~/store/exercise";
 import Answer from "../Answer.vue";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/composables/main/game", () => ({
   useGameMode: () => ({ showQuestion: vi.fn() }),
 }));

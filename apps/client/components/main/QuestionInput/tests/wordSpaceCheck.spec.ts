@@ -10,6 +10,11 @@ import QuestionInput from "../QuestionInput.vue";
 import { useCorrectSound } from "../useCorrectSound";
 
 // A stable spy lets us count one sound per confirmed token, including the final one.
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("../useCorrectSound", () => {
   const playCorrectSound = vi.fn();
   return { useCorrectSound: () => ({ playCorrectSound }) };

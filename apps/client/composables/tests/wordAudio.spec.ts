@@ -18,6 +18,11 @@ import {
 import { deleteWordAudioCache, fetchSentenceAudio, fetchWordAudio } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
 
+// Exercise the retained alternate modes independently of the temporary production restriction.
+vi.mock("~/utils/practiceModes", () => ({
+  practiceModeAvailability: { progressive: true, single: true },
+}));
+
 vi.mock("~/services/wordAudio", async (original) => ({
   ...(await original<typeof import("~/services/wordAudio")>()),
   fetchWordAudio: vi.fn(),
