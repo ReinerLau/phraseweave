@@ -5,11 +5,7 @@
         <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
         <h1 class="mt-1 text-3xl font-bold">渐进学习单元生成器</h1>
         <p class="mt-2 max-w-2xl text-sm opacity-75">
-          {{
-            translationProvider === "index-translate"
-              ? "使用 Index-Translate 生成整句中文提示。英文原句会发送至 Bilibili，学习单元在本机生成。"
-              : "使用本机模型生成整句中文提示。英文原句和学习单元只在本机处理。"
-          }}
+          使用 Index-Translate 生成整句中文提示。英文原句会发送至 Bilibili，学习单元在本机生成。
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -55,16 +51,14 @@
           生成引擎 {{ runtimeReady ? "已就绪" : "未就绪" }}
         </span>
         <span
-          v-if="translationProvider === 'local'"
-          class="badge"
-          :class="modelDownloaded ? 'badge-success' : 'badge-ghost'"
-        >
-          Hy-MT2 模型 {{ modelDownloaded ? "已下载" : "未下载" }}
-        </span>
-        <span
-          v-else
+          v-if="supportsPublicTranslation"
           class="badge badge-outline"
           >Index-Translate 公网翻译</span
+        >
+        <span
+          v-else
+          class="badge badge-error"
+          >公网翻译不可用</span
         >
       </div>
       <div
@@ -118,24 +112,6 @@
         <span class="mt-1 text-right text-xs opacity-60">{{ englishText.length }} / 30,000</span>
       </label>
 
-      <label class="form-control">
-        <span class="label-text mb-2 font-semibold">翻译方式</span>
-        <select
-          v-model="translationProvider"
-          class="select select-bordered"
-          :disabled="generationBusy || savingExercise"
-          @change="rememberTranslationProvider"
-        >
-          <option value="local">Hy-MT2 本地翻译</option>
-          <option
-            v-if="translationProviders.includes('index-translate')"
-            value="index-translate"
-          >
-            Index-Translate 公网翻译
-          </option>
-        </select>
-      </label>
-
       <div>
         <label class="form-control">
           <span class="label-text mb-2 font-semibold">导出格式</span>
@@ -163,14 +139,11 @@
           <template v-if="!serviceConnected"
             >请先启动本地服务；连接失败后点击上方刷新按钮。</template
           >
+          <template v-else-if="!supportsPublicTranslation"
+            >当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。</template
+          >
           <template v-else-if="!serviceReady">请等待本地服务完成初始化。</template>
-          <template v-else-if="translationProvider === 'index-translate'"
-            >需要联网；英文原句会发送至 Bilibili。</template
-          >
-          <template v-else-if="!modelDownloaded"
-            >首次本地生成会下载 Hy-MT2 模型，并显示准备进度。</template
-          >
-          <template v-else>模型运行在 Mac 上；可保存练习或下载生成文件。</template>
+          <template v-else>需要联网；英文原句会发送至 Bilibili。</template>
         </p>
       </div>
     </form>
@@ -334,16 +307,13 @@ const selectedText =
   typeof window === "undefined"
     ? null
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
-const TRANSLATION_PREFERENCE_KEY = "phraseweave.translationProvider";
-const translationProvider = ref<TranslationProvider>("local");
-const translationProviders = ref<TranslationProvider[]>(["local"]);
-const supportsProviderSelection = ref(false);
+const translationProvider: TranslationProvider = "index-translate";
+const supportsPublicTranslation = ref(false);
 const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
 const runtimeReady = ref(false);
-const modelDownloaded = ref(false);
 const initializationState = ref("starting");
 const initializationError = ref("");
 const serviceMessage = ref("正在连接本地服务…");
@@ -373,7 +343,7 @@ const serviceReady = computed(
   () =>
     serviceConnected.value &&
     runtimeReady.value &&
-    (supportsProviderSelection.value || modelDownloaded.value) &&
+    supportsPublicTranslation.value &&
     initializationState.value === "ready" &&
     !initializationError.value,
 );
@@ -386,13 +356,6 @@ const canGenerate = computed(
 );
 
 onMounted(() => {
-  try {
-    if (window.localStorage.getItem(TRANSLATION_PREFERENCE_KEY) === "index-translate") {
-      translationProvider.value = "index-translate";
-    }
-  } catch {
-    // The generator still works when browser storage is unavailable.
-  }
   void connectService();
   if (selectedText !== null) {
     window.history.replaceState(
@@ -443,15 +406,7 @@ function receiveCaptureText(text: string) {
     return;
   }
   englishText.value = text;
-  captureStatus.value = "选中文本已填入下方，可编辑文本并选择翻译方式，再点击“生成学习单元”。";
-}
-
-function rememberTranslationProvider() {
-  try {
-    window.localStorage.setItem(TRANSLATION_PREFERENCE_KEY, translationProvider.value);
-  } catch {
-    // A storage restriction should not prevent changing the translation provider.
-  }
+  captureStatus.value = "选中文本已填入下方，可编辑文本并选择导出格式，再点击“生成学习单元”。";
 }
 
 async function connectService() {
@@ -460,29 +415,28 @@ async function connectService() {
     const status = await getGeneratorStatus();
     serviceConnected.value = true;
     runtimeReady.value = status.runtimeReady;
-    modelDownloaded.value = status.modelDownloaded;
-    supportsProviderSelection.value = Array.isArray(status.translationProviders);
-    translationProviders.value = status.translationProviders || ["local"];
-    if (!translationProviders.value.includes(translationProvider.value)) {
-      translationProvider.value = "local";
-    }
+    supportsPublicTranslation.value =
+      Array.isArray(status.translationProviders) &&
+      status.translationProviders.includes("index-translate");
     initializationState.value = status.initialization?.state || "ready";
     initializationError.value = status.initialization?.error || "";
     if (status.initialization?.state === "error") {
       serviceMessage.value = status.initialization.error || "本地生成引擎初始化失败。";
     } else if (status.initialization?.state === "downloading") {
       serviceMessage.value = status.initialization.message;
+    } else if (!supportsPublicTranslation.value) {
+      serviceMessage.value = "当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。";
     } else if (!serviceReady.value) {
       serviceMessage.value = isLocalPackage()
         ? "本地服务尚未完成初始化，请稍候。"
         : "本地服务尚未完成初始化，请查看启动服务的终端。";
     } else {
-      serviceMessage.value = "本地生成引擎已就绪，请选择翻译方式后生成。";
+      serviceMessage.value = "本地生成引擎已就绪，翻译使用 Index-Translate 公网服务。";
     }
   } catch {
     serviceConnected.value = false;
     runtimeReady.value = false;
-    modelDownloaded.value = false;
+    supportsPublicTranslation.value = false;
     initializationState.value = "starting";
     initializationError.value = "";
     serviceMessage.value = isLocalPackage()
@@ -491,12 +445,14 @@ async function connectService() {
   } finally {
     connecting.value = false;
     const refreshDelay = isLocalPackage()
-      ? !serviceReady.value && !initializationError.value
+      ? supportsPublicTranslation.value && !serviceReady.value && !initializationError.value
         ? 1500
         : undefined
       : serviceReady.value
         ? 10000
-        : 3000;
+        : supportsPublicTranslation.value
+          ? 3000
+          : undefined;
     if (!disposed && refreshDelay !== undefined && !statusTimer) {
       statusTimer = setTimeout(() => {
         statusTimer = undefined;
@@ -548,7 +504,7 @@ async function generate() {
     await startJob({
       text: englishText.value,
       format: outputFormat.value,
-      translationProvider: translationProvider.value,
+      translationProvider,
     });
   } finally {
     submitting.value = false;
