@@ -145,7 +145,7 @@ describe("sentence-end phonetic spelling hint and original sentence audio", () =
       });
       cy.screenshot(`phonetic-${width}-${fulltext}-${dark}`);
       cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
-      cy.get('input[type="text"]').type("computer{enter}", { force: true });
+      cy.get('input[type="text"]').type("computer ", { force: true });
       cy.get('[data-testid="phonetic-hint"]').should("not.exist");
       cy.get('[data-testid="sentence-audio-button"]').should("be.visible");
       cy.intercept("POST", "**/api/tts", { statusCode: 503, body: { error: "测试朗读失败" } }).as(

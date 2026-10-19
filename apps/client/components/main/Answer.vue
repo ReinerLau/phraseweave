@@ -90,12 +90,10 @@ function registerShortcutKeyForNextQuestion() {
   }
   onMounted(() => {
     registerShortcut(" ", handleKeydown);
-    registerShortcut("enter", handleKeydown);
   });
 
   onUnmounted(() => {
     cancelShortcut(" ", handleKeydown);
-    cancelShortcut("enter", handleKeydown);
   });
 }
 

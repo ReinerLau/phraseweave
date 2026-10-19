@@ -70,9 +70,55 @@ describe("question", () => {
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
       } as unknown as KeyboardEvent,
-      { useSpaceSubmitAnswer: { enable: true, errorCallback: wrong } },
+      { errorCallback: wrong },
     );
     expect(wrong).toHaveBeenCalledWith("I eat app", 2);
+  });
+
+  it("rolls back with Enter even when the whole sentence is correct", () => {
+    const { setInputValue, rollbackAnswer } = useInput({
+      source: () => "I eat apples",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => "I eat apples".length,
+    });
+    setInputValue("I eat apples");
+    const wrong = vi.fn();
+    expect(rollbackAnswer(wrong)).toBe("incorrect");
+    expect(wrong).toHaveBeenCalledWith("I eat ", 2);
+  });
+
+  it("only marks and rolls back through the active word boundary", () => {
+    const { setInputValue, userInputWords, rollbackAnswer } = useInput({
+      source: () => "I eat apples",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => "I eat".length,
+    });
+    setInputValue("I eat");
+    const wrong = vi.fn();
+    rollbackAnswer(wrong);
+    expect(wrong).toHaveBeenCalledWith("I ", 1);
+    expect(userInputWords.map((word) => word.incorrect)).toEqual([false, false, false]);
+  });
+
+  it("does not submit when space is pressed before the last word", () => {
+    const { setInputValue, handleKeyboardInput } = useInput({
+      source: () => "I eat apples",
+      setInputCursorPosition: () => {},
+      getInputCursorPosition: () => "I".length,
+    });
+    setInputValue("I");
+    const right = vi.fn();
+    const wrong = vi.fn();
+    handleKeyboardInput(
+      {
+        code: "Space",
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as KeyboardEvent,
+      { rightCallback: right, errorCallback: wrong },
+    );
+    expect(right).not.toHaveBeenCalled();
+    expect(wrong).not.toHaveBeenCalled();
   });
 
   it("does not require a comma in a word answer", () => {
@@ -125,7 +171,7 @@ describe("question", () => {
     const rightCallback = vi.fn();
     handleKeyboardInput(
       { code: "Space", preventDefault, stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-      { useSpaceSubmitAnswer: { enable: true, rightCallback } },
+      { rightCallback },
     );
     expect(rightCallback).toHaveBeenCalledOnce();
   });
@@ -529,7 +575,7 @@ describe("question", () => {
     expect(stopPropagation).toBeCalled();
   });
 
-  it("should submit answer when enable use space", () => {
+  it("submits the whole answer with space at the last word", () => {
     const setInputCursorPosition = () => {};
     const getInputCursorPosition = vi.fn();
 
@@ -552,10 +598,7 @@ describe("question", () => {
         stopPropagation: () => {},
       } as any as KeyboardEvent,
       {
-        useSpaceSubmitAnswer: {
-          enable: true,
-          rightCallback: submitAnswerCallback,
-        },
+        rightCallback: submitAnswerCallback,
       },
     );
 

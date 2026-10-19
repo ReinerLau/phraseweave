@@ -51,12 +51,7 @@ describe("word space checking in QuestionInput", () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
-    for (const key of [
-      "wordSpaceCheck",
-      "keyboardSoundEnabled",
-      "spaceSubmitAnswer",
-      "autoNextQuestion",
-    ]) {
+    for (const key of ["wordSpaceCheck", "keyboardSoundEnabled", "autoNextQuestion"]) {
       localStorage.removeItem(key);
     }
   });
@@ -82,63 +77,55 @@ describe("word space checking in QuestionInput", () => {
     const { input, store, press } = setup("I eat");
     expect(input.attributes("maxlength")).toBeUndefined();
     await input.setValue("I eat");
-    await press("Enter");
+    await press();
     expect(store.passCurrentStatement).toHaveBeenCalledOnce();
     expect(useWordAudio().playAutoWordAudio).not.toHaveBeenCalled();
     expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledWith("I eat");
   });
 
-  it.each(
-    ["Space", "Enter"].flatMap((code) =>
-      [false, true].map((spaceSubmit) => ({ code, spaceSubmit })),
-    ),
-  )(
-    "confirms only the current token with $code regardless of space-submit: $spaceSubmit",
-    async ({ code, spaceSubmit }) => {
-      localStorage.setItem("spaceSubmitAnswer", String(spaceSubmit));
-      const { input, words, store, press } = setup();
-      await input.setValue("I");
-      expect(words()[0].classes()).not.toContain("border-b-transparent");
-      expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
-      const width = words()[0].attributes("style");
-      await press(code);
-      expect(words()[0].classes()).toContain("border-b-transparent");
-      expect(words()[0].attributes("style")).toBe(width);
-      expect(words()[1].classes()).toContain("border-b-fuchsia-500");
-      expect((input.element as HTMLInputElement).value).toBe("");
-      expect(useWordAudio().playAutoWordAudio).toHaveBeenCalledWith("I");
-      await input.trigger("keydown", { key: "Backspace", code: "Backspace" });
-      await input.setValue("");
-      expect(words()[0].text()).toBe("I");
-      await input.setValue("eat");
-      await press(code);
-      expect(store.passCurrentStatement).not.toHaveBeenCalled();
-      expect(useWordAudio().playAutoWordAudio).toHaveBeenLastCalledWith("eat");
-      await input.setValue("apples");
-      expect(store.passCurrentStatement).not.toHaveBeenCalled();
-      await press(code);
-      expect(store.passCurrentStatement).toHaveBeenCalledOnce();
-      expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(3);
-      expect(useWordAudio().playAutoWordAudio).toHaveBeenCalledTimes(2);
-      expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledOnce();
-      expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledWith("I eat apples");
-      expect(useGameMode().isAnswer()).toBe(true);
-      await press(code);
-      expect(store.passCurrentStatement).toHaveBeenCalledOnce();
-      expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(3);
-      expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledOnce();
-    },
-  );
+  it("confirms only the current token with Space", async () => {
+    const { input, words, store, press } = setup();
+    await input.setValue("I");
+    expect(words()[0].classes()).not.toContain("border-b-transparent");
+    expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
+    const width = words()[0].attributes("style");
+    await press();
+    expect(words()[0].classes()).toContain("border-b-transparent");
+    expect(words()[0].attributes("style")).toBe(width);
+    expect(words()[1].classes()).toContain("border-b-fuchsia-500");
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(useWordAudio().playAutoWordAudio).toHaveBeenCalledWith("I");
+    await input.trigger("keydown", { key: "Backspace", code: "Backspace" });
+    await input.setValue("");
+    expect(words()[0].text()).toBe("I");
+    await input.setValue("eat");
+    await press();
+    expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    expect(useWordAudio().playAutoWordAudio).toHaveBeenLastCalledWith("eat");
+    await input.setValue("apples");
+    expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    await press();
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+    expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(3);
+    expect(useWordAudio().playAutoWordAudio).toHaveBeenCalledTimes(2);
+    expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledOnce();
+    expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledWith("I eat apples");
+    expect(useGameMode().isAnswer()).toBe(true);
+    await press();
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+    expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(3);
+    expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledOnce();
+  });
 
   it.each([
     { source: "Don’t go.", drafts: ["DON'T", "GO"] },
     { source: "woman's coat", drafts: ["WOMAN’S", "coat"] },
     { source: "anti-social", drafts: ["anti", "social"] },
-  ])("normalizes each Enter-confirmed token in $source", async ({ source, drafts }) => {
+  ])("normalizes each Space-confirmed token in $source", async ({ source, drafts }) => {
     const { input, words, store, press } = setup(source);
     for (const [index, draft] of drafts.entries()) {
       await input.setValue(draft);
-      await press("Enter");
+      await press();
       expect(words()[index].classes()).toContain("border-b-transparent");
     }
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
@@ -149,14 +136,14 @@ describe("word space checking in QuestionInput", () => {
     expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledWith(source);
   });
 
-  it("synchronizes the native draft before Enter confirmation", async () => {
+  it("synchronizes the native draft before Space confirmation", async () => {
     const { input, words, store, press } = setup("I eat");
     (input.element as HTMLInputElement).value = "I";
-    await press("Enter");
+    await press();
     expect(words()[0].classes()).toContain("border-b-transparent");
     expect((input.element as HTMLInputElement).value).toBe("");
     (input.element as HTMLInputElement).value = "eat";
-    await press("Enter");
+    await press();
     expect(store.passCurrentStatement).toHaveBeenCalledOnce();
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
     expect(useCorrectSound().playCorrectSound).toHaveBeenCalledTimes(2);
@@ -216,12 +203,12 @@ describe("word space checking in QuestionInput", () => {
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
     expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
     await input.setValue("eat");
-    await press("Enter");
+    await press();
     expect(input.attributes("maxlength")).toBe("6");
     await input.setValue("applesx");
     expect((input.element as HTMLInputElement).value).toBe("apples");
     expect(words()[0].text()).toBe("eat");
-    await press("Enter");
+    await press();
     expect(store.passCurrentStatement).toHaveBeenCalledOnce();
   });
 
@@ -242,13 +229,38 @@ describe("word space checking in QuestionInput", () => {
     },
   );
 
+  it("rolls back with Enter even when the current token matches", async () => {
+    const { input, words, store, press } = setup();
+    await input.setValue("I");
+    await press("Enter");
+    expect(words()[0].classes()).not.toContain("border-b-transparent");
+    expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    expect(store.failCurrentStatement).toHaveBeenCalledOnce();
+    expect(store.failCurrentStatement).toHaveBeenCalledWith("", 0);
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(useCorrectSound().playCorrectSound).not.toHaveBeenCalled();
+    expect(useWordAudio().playAutoWordAudio).not.toHaveBeenCalled();
+  });
+
+  it("keeps the accepted prefix when Enter rolls back a matching token", async () => {
+    const { input, store, press } = setup();
+    await input.setValue("I");
+    await press();
+    await input.setValue("eat");
+    await press("Enter");
+    expect(store.failCurrentStatement).toHaveBeenCalledOnce();
+    expect(store.failCurrentStatement).toHaveBeenCalledWith("I ", 1);
+    expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    expect((input.element as HTMLInputElement).value).toBe("");
+  });
+
   it("retains single-word pronunciation help until successful confirmation", async () => {
     vi.mocked(lookupPronunciation).mockResolvedValue(["kəm", "ˈpjuː", "tər"]);
     const { input, wrapper, press } = setup("computer");
     await press("Enter");
     expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
     await input.setValue("computer");
-    await press("Enter");
+    await press();
     expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([undefined]);
   });
 
@@ -269,7 +281,7 @@ describe("word space checking in QuestionInput", () => {
     expect(useWordAudio().playAutoWordAudio).not.toHaveBeenCalled();
     expect(useWordAudio().playAutoSentenceAudio).not.toHaveBeenCalled();
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
-    await press("Enter");
+    await press();
     expect(words()[0].classes()).toContain("border-b-transparent");
   });
 

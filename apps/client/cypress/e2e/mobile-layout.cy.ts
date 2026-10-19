@@ -380,7 +380,7 @@ describe("mobile practice layout", () => {
     cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
     cy.get('input[type="text"]').clear({ force: true }).type(englishSentence, { force: true });
     cy.get('[data-testid="sentence-audio-button"]').should("not.exist");
-    cy.get('input[type="text"]').type("{enter}", { force: true });
+    cy.get('input[type="text"]').type(" ", { force: true });
     cy.get('[data-testid="answer-sentence"] [data-testid="sentence-audio-button"]')
       .scrollIntoView()
       .should("be.visible")
@@ -539,9 +539,7 @@ describe("mobile practice layout", () => {
   it("keeps at least 8px between word blocks in input and answer views", () => {
     assertWordBlockGapAtLeast(".question-input-words", 8);
 
-    cy.get('input[type="text"]')
-      .type(englishSentence, { force: true })
-      .type("{enter}", { force: true });
+    cy.get('input[type="text"]').type(englishSentence, { force: true }).type(" ", { force: true });
     cy.get(".answer-content").should("be.visible");
     assertWordBlockGapAtLeast(".answer-words", 8);
     assertNoHorizontalOverflow();
@@ -651,9 +649,7 @@ describe("mobile practice layout", () => {
   });
 
   it("keeps the answer and contents views within the viewport", () => {
-    cy.get('input[type="text"]')
-      .type(englishSentence, { force: true })
-      .type("{enter}", { force: true });
+    cy.get('input[type="text"]').type(englishSentence, { force: true }).type(" ", { force: true });
     cy.contains("再来一次").should("be.visible");
     assertNoHorizontalOverflow();
     assertPracticePageDoesNotScroll();
@@ -691,7 +687,7 @@ describe("mobile practice layout", () => {
       questionState = state;
     });
 
-    cy.get('input[type="text"]').type("{enter}", { force: true });
+    cy.get('input[type="text"]').type(" ", { force: true });
 
     cy.get(".answer-content").should(($answer) => {
       const answerFontSize = window
@@ -804,7 +800,7 @@ describe("mobile practice layout", () => {
   });
 
   it("does not change the answer view when its middle area is clicked", () => {
-    cy.get('input[type="text"]').type(englishSentence, { force: true }).type("{enter}", {
+    cy.get('input[type="text"]').type(englishSentence, { force: true }).type(" ", {
       force: true,
     });
     cy.contains("再来一次").should("be.visible");

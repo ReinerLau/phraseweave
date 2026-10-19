@@ -195,7 +195,7 @@ describe("answer availability", () => {
       expect(wrapper.find('[data-testid="show-answer-button"]').exists()).toBe(false);
       await input.setValue("Cats");
       expect(useAnswerTip().isAnswerTip()).toBe(false);
-      await input.trigger("keydown", { code: "Enter", key: "Enter" });
+      await input.trigger("keydown", { code: "Space", key: " " });
       expect(store.isStatementPassed(store.currentStatement!)).toBe(true);
       expect(useGameMode().isAnswer()).toBe(true);
     },

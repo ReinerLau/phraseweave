@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
 import { useExerciseStore } from "~/store/exercise";
+import { registerShortcut } from "~/utils/keyboardShortcuts";
 import Answer from "../Answer.vue";
 
 // Exercise the retained alternate modes independently of the temporary production restriction.
@@ -25,6 +26,15 @@ vi.mock("~/utils/keyboardShortcuts", () => ({
 }));
 
 describe("Answer", () => {
+  it("registers only Space for the next question", () => {
+    vi.mocked(registerShortcut).mockClear();
+    mount(Answer, {
+      global: { plugins: [createTestingPinia({ createSpy: vi.fn })] },
+    });
+    expect(registerShortcut).toHaveBeenCalledTimes(1);
+    expect(registerShortcut).toHaveBeenCalledWith(" ", expect.any(Function));
+  });
+
   it("shows the sentence prompt and the completed English sentence", async () => {
     const wrapper = mount(Answer, {
       global: {

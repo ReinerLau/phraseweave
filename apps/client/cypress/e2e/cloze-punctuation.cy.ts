@@ -139,7 +139,7 @@ describe("cloze punctuation", () => {
       }
       const questionRoot = $words[0].closest<HTMLElement>(".question-content")!;
       const before = Array.from($words).map((word) => contentRect(word, questionRoot));
-      cy.get('input[type="text"]').type("{enter}", { force: true });
+      cy.get('input[type="text"]').type(" ", { force: true });
       cy.get('[data-testid="answer-sentence"] .question-input-word').should(($answers) => {
         expect($answers).to.have.length(before.length);
         Array.from($answers).forEach((word, index) => {
@@ -172,15 +172,12 @@ describe("cloze punctuation", () => {
         input.setSelectionRange(input.value.length, input.value.length);
         input.dispatchEvent(new Event("input", { bubbles: true }));
       });
-    cy.get('input[type="text"]')
-      .should("have.value", punctuationAnswer)
-      .type("{enter}", { force: true });
+    cy.get('input[type="text"]').should("have.value", punctuationAnswer).type(" ", { force: true });
     cy.get('[data-testid="answer-sentence"]').should("be.visible");
   });
 
   it("switches between hyphenated blanks with space and backspace, then submits with space", () => {
     seedPunctuationExercise("anti-social,");
-    cy.window().then((window) => window.localStorage.setItem("spaceSubmitAnswer", "true"));
     cy.reload();
     cy.get('input[type="text"]').type("anti ", { force: true });
     cy.get(".question-input-word").eq(1).should("have.class", "border-b-fuchsia-500");
@@ -194,13 +191,13 @@ describe("cloze punctuation", () => {
     seedPunctuationExercise("“don’t” (eat), please.");
     cy.reload();
     cy.get(".question-input-word").should("have.length", 3);
-    cy.get('input[type="text"]').type("dont eat please{enter}", { force: true, delay: 0 });
+    cy.get('input[type="text"]').type("dont eat please ", { force: true, delay: 0 });
     cy.get(".question-content").should("be.visible");
     cy.get('input[type="text"]').should("have.value", "");
     cy.get('input[type="text"]').type("don't eat please", { force: true, delay: 0 });
     cy.get('input[type="text"]')
       .should("have.value", "don't eat please")
-      .type("{enter}", { force: true });
+      .type(" ", { force: true });
     cy.get('[data-testid="answer-sentence"]').should("be.visible");
     cy.get(".cloze-punctuation").should(($parts) => {
       expect(Array.from($parts).map((part) => part.textContent)).to.deep.equal([
@@ -326,7 +323,7 @@ describe("cloze spacing across practice views", () => {
           assertFixedPunctuation();
           cy.get(".question-input-word").then(($words) => {
             const before = Array.from($words).map((word) => word.getBoundingClientRect());
-            cy.get('input[aria-label="填写当前英文单元"]').type("{enter}", { force: true });
+            cy.get('input[aria-label="填写当前英文单元"]').type(" ", { force: true });
             cy.get(".answer-content").should("exist");
             assertFulltextWordGap(singleColumnGapEm);
             cy.get(".answer-content .question-input-word").should(($answers) => {

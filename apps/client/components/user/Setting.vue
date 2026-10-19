@@ -106,7 +106,7 @@
                 v-if="wordSpaceCheck"
                 class="mt-1 text-sm"
               >
-                空格确认当前词元；回车在匹配时确认，未匹配时回退
+                空格确认当前词元；回车只用于回退；整句答对后按空格进入下一题
               </p>
             </td>
             <td class="w-[300px] text-center">
@@ -116,18 +116,6 @@
                 class="toggle toggle-secondary"
                 :checked="wordSpaceCheck"
                 @change="toggleWordSpaceCheck"
-              />
-            </td>
-          </tr>
-          <tr class="hover">
-            <td class="label-text">开启空格提交答案</td>
-            <td class="w-[300px] text-center">
-              <input
-                type="checkbox"
-                class="toggle toggle-secondary"
-                :checked="useSpace"
-                :disabled="wordSpaceCheck"
-                @change="toggleUseSpaceSubmitAnswer"
               />
             </td>
           </tr>
@@ -198,7 +186,6 @@ import Message from "~/components/main/Message/useMessage";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { SHORTCUT_KEY_TYPES, useShortcutKeyMode } from "~/composables/user/shortcutKey";
 import { useKeyboardSound } from "~/composables/user/sound";
-import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useWordSpaceCheck } from "~/composables/user/wordSpaceCheck";
 import { useTtsStatus } from "~/composables/useTtsStatus";
 import { clearWordAudioCache } from "~/composables/useWordAudio";
@@ -238,7 +225,6 @@ const dialogBoxRef = ref<HTMLElement | null>(null);
 // };
 const { autoNextQuestion, toggleAutoQuestion } = useAutoNextQuestion();
 const { keyboardSound, toggleKeyboardSound } = useKeyboardSound();
-const { useSpace, toggleUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { wordSpaceCheck, toggleWordSpaceCheck } = useWordSpaceCheck();
 const {
   showModal,
