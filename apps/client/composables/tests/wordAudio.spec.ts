@@ -10,8 +10,11 @@ import { useSummary } from "~/composables/main/summary";
 import {
   clearWordAudioCache,
   disposeWordAudio,
+  playAutoSentenceAudio,
+  playAutoWordAudio,
   playSentenceAudio,
   playWordAudio,
+  stopAudioOnNavigation,
   stopWordAudio,
   useWordAudio,
 } from "~/composables/useWordAudio";
@@ -219,6 +222,69 @@ describe("word audio playback", () => {
     await clearWordAudioCache();
     expect(deleteWordAudioCache).toHaveBeenCalledOnce();
     expect(useWordAudio().loadingElement.value).toBeUndefined();
+  });
+});
+
+describe("automatic correct-answer audio", () => {
+  it("plays words and sentences without owning a button's active state", async () => {
+    await playAutoWordAudio("hello");
+    expect(fetchWordAudio).toHaveBeenCalledWith("hello", expect.any(AbortSignal));
+    expect(useWordAudio().activeElement.value).toBeUndefined();
+    expect(useWordAudio().loadingElement.value).toBeUndefined();
+
+    await playAutoSentenceAudio("Hello world.");
+    expect(fetchSentenceAudio).toHaveBeenCalledWith("Hello world.", expect.any(AbortSignal));
+    expect(useWordAudio().activeSentence.value).toBe("Hello world.");
+    expect(useWordAudio().activeElement.value).toBeUndefined();
+    expect(useWordAudio().loadingElement.value).toBeUndefined();
+  });
+
+  it("skips non-speakable words and blank sentences", async () => {
+    await playAutoWordAudio("123");
+    await playAutoWordAudio("two words");
+    await playAutoSentenceAudio("   ");
+    expect(fetchWordAudio).not.toHaveBeenCalled();
+    expect(fetchSentenceAudio).not.toHaveBeenCalled();
+  });
+
+  it("restarts identical automatic sentences instead of toggling them", async () => {
+    await playAutoSentenceAudio("Hello world.");
+    await playAutoSentenceAudio("Hello world.");
+    expect(fetchSentenceAudio).toHaveBeenCalledTimes(2);
+    expect(useWordAudio().activeSentence.value).toBe("Hello world.");
+  });
+
+  it("keeps automatic sentence feedback through navigation", async () => {
+    const pending = deferred<Blob>();
+    vi.mocked(fetchSentenceAudio).mockReturnValueOnce(pending.promise);
+    const play = playAutoSentenceAudio("Hello world.");
+    const signal = vi.mocked(fetchSentenceAudio).mock.calls[0][1];
+
+    stopAudioOnNavigation();
+    expect(signal.aborted).toBe(false);
+
+    pending.resolve(new Blob(["audio"]));
+    await play;
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(useWordAudio().activeSentence.value).toBe("Hello world.");
+  });
+
+  it("still stops automatic words and manual sentences on navigation", async () => {
+    const wordRequest = deferred<Blob>();
+    vi.mocked(fetchWordAudio).mockReturnValueOnce(wordRequest.promise);
+    void playAutoWordAudio("hello");
+    const wordSignal = vi.mocked(fetchWordAudio).mock.calls[0][1];
+    stopAudioOnNavigation();
+    expect(wordSignal.aborted).toBe(true);
+    wordRequest.resolve(new Blob(["word"]));
+
+    const sentenceRequest = deferred<Blob>();
+    vi.mocked(fetchSentenceAudio).mockReturnValueOnce(sentenceRequest.promise);
+    void playSentenceAudio("Hello world.", document.createElement("button"));
+    const sentenceSignal = vi.mocked(fetchSentenceAudio).mock.calls[0][1];
+    stopAudioOnNavigation();
+    expect(sentenceSignal.aborted).toBe(true);
+    sentenceRequest.resolve(new Blob(["sentence"]));
   });
 });
 

@@ -7,6 +7,7 @@ import { useContent } from "~/components/main/Contents/useContents";
 import { useAnswerTip } from "~/composables/main/answerTip";
 import { useExerciseNavigation } from "~/composables/main/exerciseNavigation";
 import { useGameMode } from "~/composables/main/game";
+import { useWordAudio } from "~/composables/useWordAudio";
 import { lookupPronunciation } from "~/services/pronunciation";
 import { useExerciseStore } from "~/store/exercise";
 import QuestionInput from "../QuestionInput.vue";
@@ -15,6 +16,20 @@ import QuestionInput from "../QuestionInput.vue";
 vi.mock("~/utils/practiceModes", () => ({
   practiceModeAvailability: { progressive: true, single: true },
 }));
+
+vi.mock("~/composables/useWordAudio", () => {
+  const playAutoWordAudio = vi.fn();
+  const playAutoSentenceAudio = vi.fn();
+  return {
+    useWordAudio: () => ({
+      loadingElement: undefined,
+      playAutoWordAudio,
+      playAutoSentenceAudio,
+    }),
+    findWordUnderInput: vi.fn(),
+    playWordUnderInput: vi.fn(),
+  };
+});
 
 vi.mock("~/services/pronunciation", () => ({ lookupPronunciation: vi.fn() }));
 
@@ -34,7 +49,10 @@ describe("QuestionInput", () => {
     vi.unstubAllGlobals();
   });
 
-  function mountQuestionInput(english = "I eat") {
+  function mountQuestionInput(
+    english = "I eat",
+    context: { contextBefore?: string; contextAfter?: string } = {},
+  ) {
     const pinia = createTestingPinia({ createSpy: vi.fn });
     const courseStore = useExerciseStore(pinia);
     courseStore.currentStatement = {
@@ -43,6 +61,7 @@ describe("QuestionInput", () => {
       english,
       chinese: "我吃",
       soundmark: "/aɪ iːt/",
+      ...context,
     };
 
     const wrapper = mount(QuestionInput, {
@@ -459,6 +478,18 @@ describe("QuestionInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("don'");
     await submitAnswer(input, "don't");
     expect(useExerciseStore().passCurrentStatement).toHaveBeenCalledOnce();
+  });
+
+  it("auto-plays the containing sentence when a unit is answered correctly", async () => {
+    vi.clearAllMocks();
+    const { input } = mountQuestionInput("apples", {
+      contextBefore: "I eat ",
+      contextAfter: ".",
+    });
+    await submitAnswer(input, "apples");
+    expect(useExerciseStore().passCurrentStatement).toHaveBeenCalledOnce();
+    expect(useWordAudio().playAutoSentenceAudio).toHaveBeenCalledWith("I eat apples.");
+    expect(useWordAudio().playAutoWordAudio).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(

@@ -50,17 +50,16 @@ const isLoading = ref(true);
 const loadError = ref("");
 const route = useRoute();
 const coursesStore = useExerciseStore();
-const { audioError, stopWordAudio, disposeWordAudio } = useWordAudio();
+const { audioError, stopAudioOnNavigation, stopWordAudio, disposeWordAudio } = useWordAudio();
 watch(
   () => [
     coursesStore.currentStatement?.id,
     coursesStore.statementIndex,
-    coursesStore.learningMode,
-    coursesStore.practiceView,
     coursesStore.fulltextCompleted,
   ],
-  stopWordAudio,
+  stopAudioOnNavigation,
 );
+watch(() => [coursesStore.learningMode, coursesStore.practiceView], stopWordAudio);
 const { showQuestion } = useGameMode();
 const practiceViewportHeight = ref<number>();
 

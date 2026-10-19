@@ -11,7 +11,12 @@ vi.mock("vue-router", () => ({
 vi.mock("~/store/exercise", () => ({ useExerciseStore: () => ({ setup: mocks.setup }) }));
 vi.mock("~/composables/main/game", () => ({ useGameMode: () => ({ showQuestion: vi.fn() }) }));
 vi.mock("~/composables/useWordAudio", () => ({
-  useWordAudio: () => ({ stopWordAudio: vi.fn(), disposeWordAudio: mocks.dispose }),
+  useWordAudio: () => ({
+    audioError: undefined,
+    stopAudioOnNavigation: vi.fn(),
+    stopWordAudio: vi.fn(),
+    disposeWordAudio: mocks.dispose,
+  }),
 }));
 vi.mock("~/services/pronunciation", () => ({ preloadPronunciations: mocks.preload }));
 
