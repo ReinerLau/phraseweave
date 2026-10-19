@@ -20,6 +20,16 @@ vi.mock("~/utils/practiceModes", () => ({
   practiceModeAvailability: { progressive: true, single: true },
 }));
 
+vi.mock("~/composables/useWordAudio", () => ({
+  useWordAudio: () => ({
+    loadingElement: undefined,
+    playAutoWordAudio: vi.fn(),
+    playAutoSentenceAudio: vi.fn(),
+  }),
+  findWordUnderInput: vi.fn(),
+  playWordUnderInput: vi.fn(),
+}));
+
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
   saveLocalExerciseProgress: vi.fn().mockResolvedValue(undefined),
