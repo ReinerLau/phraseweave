@@ -15,6 +15,7 @@ let player: HTMLAudioElement | undefined;
 let controller: AbortController | undefined;
 let objectUrl: string | undefined;
 let sequence = 0;
+let autoSentencePlaying = false;
 
 // Unlock the same media element during the tap, before awaiting the network.
 const SILENCE =
@@ -27,6 +28,7 @@ export function stopWordAudio() {
   loadingElement.value = undefined;
   activeSentence.value = undefined;
   activeElement.value = undefined;
+  autoSentencePlaying = false;
   if (player) {
     player.onended = null;
     player.onerror = null;
@@ -58,9 +60,33 @@ export function playSentenceAudio(text: string, element: HTMLElement) {
   return playAudio(text, element, "sentence");
 }
 
-async function playAudio(text: string, element: HTMLElement, kind: "word" | "sentence") {
+/** Play correct-answer feedback without borrowing a button's active state. */
+export function playAutoWordAudio(text: string) {
+  if (!isSpeakableWord(text)) return;
+  return playAudio(text, undefined, "word");
+}
+
+/** Play the containing sentence after a correct unit and let it survive navigation. */
+export function playAutoSentenceAudio(text: string) {
+  if (!text.trim()) return;
+  return playAudio(text, undefined, "sentence", { autoSentence: true });
+}
+
+/** Keep automatic sentence feedback playing while the next question or summary appears. */
+export function stopAudioOnNavigation() {
+  if (autoSentencePlaying) return;
+  stopWordAudio();
+}
+
+async function playAudio(
+  text: string,
+  element: HTMLElement | undefined,
+  kind: "word" | "sentence",
+  options: { autoSentence?: boolean } = {},
+) {
   stopWordAudio();
   if (kind === "sentence") activeSentence.value = text;
+  autoSentencePlaying = kind === "sentence" && options.autoSentence === true;
   activeElement.value = element;
   const request = sequence;
   const abort = new AbortController();
@@ -127,6 +153,9 @@ export function useWordAudio() {
     activeElement,
     playSentenceAudio,
     playWordAudio,
+    playAutoSentenceAudio,
+    playAutoWordAudio,
+    stopAudioOnNavigation,
     stopWordAudio,
     disposeWordAudio,
     clearWordAudioCache,

@@ -113,7 +113,7 @@ let hintSequence = 0;
 let phoneticHintStage: "idle" | "pending" | "shown" | "unavailable" = "idle";
 
 const courseStore = useExerciseStore();
-const { loadingElement } = useWordAudio();
+const { loadingElement, playAutoSentenceAudio, playAutoWordAudio } = useWordAudio();
 const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInputCursorPosition } =
   useQuestionInput();
 
@@ -355,13 +355,17 @@ function handleWordConfirmation(unmatchedAction: "feedback" | "help" = "feedback
   if (isAnswerTip() || !userInputWords.some((word) => word.isActive)) return;
   cancelWordFeedback();
   setInputValue(inputEl.value?.value ?? inputValue.value);
+  const activeWordIndex = userInputWords.findIndex((word) => word.isActive);
   const result = confirmCurrentWord();
   if (result === "unmatched") {
     if (unmatchedAction === "help") handleWordHelp();
     else wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
-  } else if (result === "confirmed" || result === "complete") {
+  } else if (result === "confirmed") {
     void playCorrectSound();
-    if (result === "complete") handleAnswerRight();
+    void playAutoWordAudio(courseStore.words[activeWordIndex] ?? "");
+  } else if (result === "complete") {
+    void playCorrectSound();
+    handleAnswerRight();
   }
 }
 
@@ -399,10 +403,12 @@ function handleAnswerRight() {
   cancelErrorReset();
   cancelWordFeedback();
   clearPhoneticHint();
+  const sentence = courseStore.originalSentence;
   courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
     courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时
   }
+  void playAutoSentenceAudio(sentence);
 
   if (isAutoNextQuestion()) {
     const completed = courseStore.advanceAfterCorrect();
