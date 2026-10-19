@@ -30,16 +30,12 @@
           <p class="py-1 leading-7">
             看到
             <span class="text-fuchsia-500">紫色下划线</span>
-            亮起，输入单词，按下空格键
-            <span class="text-gray-500">（Space ␣）</span>
-            向后切换单词，待输入完成后再按下回车键
-            <span class="text-gray-500">（Enter ⏎）</span>
-            来提交题目
+            亮起，输入单词。逐词空格检查模式下，空格确认当前词元；普通整句输入模式下，在最后一个词输入完成后按空格提交整句。回车只用于回退。
           </p>
           <p class="py-1 leading-7">
             题目提交后若出现
             <span class="text-red-500">红色</span>
-            单词和下划线显示，代表这部分单词存在错误。直接修改错误单词，按下回车键重新提交即可。
+            单词和下划线显示，代表这部分单词存在错误。直接修改错误单词，再按空格重新提交/确认即可。
           </p>
           <p class="py-1 leading-7">验证通过后会显示填好的英文原句。</p>
           <h3 class="py-2 text-base font-semibold">答题小技巧</h3>
@@ -54,7 +50,7 @@
           </p>
           <p class="py-1">
             <button class="instruction-btn">next</button>
-            <span class="text-gray-500">（或快捷键 Enter）</span>
+            <span class="text-gray-500">（或快捷键 Space ␣）</span>
             下一题，冲冲冲霸占榜首！🏄‍♂️
           </p>
 
@@ -67,8 +63,8 @@
           </p>
           <h3 class="py-2 text-base font-semibold">用户设置页面</h3>
           <p class="py-1 leading-7">
-            右上角图标进入 User Info 切换到设置页面，自定义快捷键、空格提交及答对后自动下一题等选项
-            😊
+            右上角图标进入 User Info
+            切换到设置页面，自定义快捷键、逐词空格检查及答对后自动下一题等选项 😊
             <i
               class="mx-2 inline h-8 w-1 animate-wink bg-slate-900 p-[2px] text-sm dark:bg-white"
             ></i>

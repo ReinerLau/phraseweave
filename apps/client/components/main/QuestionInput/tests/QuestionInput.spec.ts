@@ -79,22 +79,36 @@ describe("QuestionInput", () => {
   ) {
     (input.element as HTMLInputElement).focus();
     await input.setValue(value);
+    await input.trigger("keydown", { code: "Space", key: " " });
+  }
+
+  async function rollbackAnswer(
+    input: ReturnType<typeof mountQuestionInput>["input"],
+    value: string,
+  ) {
+    (input.element as HTMLInputElement).focus();
+    await input.setValue(value);
     await input.trigger("keydown", { code: "Enter", key: "Enter" });
   }
 
-  it("keeps correct prefixes and cancels a pending recovery when the prefix is corrected", async () => {
-    const { input, wrapper, store } = mountQuestionInput("I like apples very much");
-    await submitAnswer(input, "I lik");
+  it("cancels a pending recovery when the full answer is submitted with space in time", async () => {
+    const { input, store } = mountQuestionInput("I like apples very much");
+    await rollbackAnswer(input, "I lik");
     expect(vi.getTimerCount()).toBe(1);
-    await submitAnswer(input, "I like");
+    await submitAnswer(input, "I like apples very much");
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(300);
-    expect((input.element as HTMLInputElement).value).toBe("I like");
-    expect((input.element as HTMLInputElement).selectionStart).toBe(6);
-    expect(wrapper.findAll(".question-input-word")[1].classes()).toContain("border-b-fuchsia-500");
-    expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(0);
     expect(store.failCurrentStatement).not.toHaveBeenCalled();
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back with Enter instead of submitting a correct answer", async () => {
+    const { input, store } = mountQuestionInput("I eat");
+    await rollbackAnswer(input, "I eat");
     expect(store.passCurrentStatement).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).toHaveBeenCalledWith("I ", 1);
+    expect((input.element as HTMLInputElement).value).toBe("");
   });
 
   it.each([
@@ -127,7 +141,7 @@ describe("QuestionInput", () => {
     "limits feedback and recovery to the current word for '$value'",
     async ({ english, value, snapshot, index, errors }) => {
       const { input, wrapper, store } = mountQuestionInput(english);
-      await submitAnswer(input, value);
+      await rollbackAnswer(input, value);
       expect(wrapper.findAll(".question-input-word.border-b-red-500")).toHaveLength(errors);
       await vi.advanceTimersByTimeAsync(300);
       expect(store.failCurrentStatement).toHaveBeenCalledWith(snapshot, index);
@@ -137,7 +151,7 @@ describe("QuestionInput", () => {
 
   it("freezes the current word boundary even if typing continues during feedback", async () => {
     const { input, store } = mountQuestionInput("I like apples very much");
-    await submitAnswer(input, "I like ");
+    await rollbackAnswer(input, "I like ");
     await input.setValue("I like apples very");
     await vi.advanceTimersByTimeAsync(300);
     expect(store.failCurrentStatement).toHaveBeenCalledWith("I like ", 2);
@@ -147,7 +161,7 @@ describe("QuestionInput", () => {
     const { input, wrapper } = mountQuestionInput("computer");
     const width = wrapper.get(".question-input-word").attributes("style");
     expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
-    await submitAnswer(input, "x");
+    await rollbackAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(299);
     expect(wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
@@ -155,7 +169,7 @@ describe("QuestionInput", () => {
     expect(wrapper.find('[data-testid="phonetic-hint"]').exists()).toBe(false);
     expect((input.element as HTMLInputElement).value).toBe("");
     expect(wrapper.get(".question-input-word").attributes("style")).toBe(width);
-    await submitAnswer(input, "x");
+    await rollbackAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(300);
     expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
     await submitAnswer(input, "computer");
@@ -164,20 +178,20 @@ describe("QuestionInput", () => {
 
   it("does not hint phrases, decomposable words, or unknown words", async () => {
     const phrase = mountQuestionInput("two words");
-    await submitAnswer(phrase.input, "x");
+    await rollbackAnswer(phrase.input, "x");
     await vi.advanceTimersByTimeAsync(300);
     expect(lookupPronunciation).not.toHaveBeenCalled();
     phrase.wrapper.unmount();
     const word = mountQuestionInput("computer");
     const store = useExerciseStore();
     Object.defineProperty(store, "canDecomposeCurrentUnit", { configurable: true, value: true });
-    await submitAnswer(word.input, "x");
+    await rollbackAnswer(word.input, "x");
     await vi.advanceTimersByTimeAsync(300);
     expect(lookupPronunciation).not.toHaveBeenCalled();
     word.wrapper.unmount();
     vi.mocked(lookupPronunciation).mockResolvedValueOnce(undefined);
     const unknown = mountQuestionInput("xyzxyzunknown");
-    await submitAnswer(unknown.input, "x");
+    await rollbackAnswer(unknown.input, "x");
     await vi.advanceTimersByTimeAsync(300);
     expect(unknown.wrapper.emitted("hint-change")?.at(-1)?.[0]).toBeUndefined();
   });
@@ -190,7 +204,7 @@ describe("QuestionInput", () => {
       }),
     );
     const { input, wrapper } = mountQuestionInput("computer");
-    await submitAnswer(input, "x");
+    await rollbackAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(300);
     useExerciseStore().currentStatement = { id: "next", order: 2, english: "night" };
     await wrapper.vm.$nextTick();
@@ -202,7 +216,7 @@ describe("QuestionInput", () => {
         resolve = done;
       }),
     );
-    await submitAnswer(input, "x");
+    await rollbackAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(300);
     await submitAnswer(input, "night");
     resolve(["old"]);
@@ -221,7 +235,7 @@ describe("QuestionInput", () => {
       statementIndex: 0,
       statements: [store.currentStatement!],
     };
-    await submitAnswer(input, "x");
+    await rollbackAnswer(input, "x");
     await vi.advanceTimersByTimeAsync(300);
     expect(wrapper.emitted("hint-change")?.at(-1)).toEqual([["kəm", "ˈpjuː", "tər"]]);
     store.currentCourse.practiceView = "fulltext";
@@ -467,7 +481,7 @@ describe("QuestionInput", () => {
       sentence.replace("-", " ").replaceAll(",", ""),
     );
     expect(punctuation()).toEqual(["-", ",", ",", ","]);
-    await input.trigger("keydown", { code: "Enter", key: "Enter" });
+    await input.trigger("keydown", { code: "Space", key: " " });
     expect(useExerciseStore().passCurrentStatement).toHaveBeenCalledOnce();
     expect(useExerciseStore().failCurrentStatement).not.toHaveBeenCalled();
   });

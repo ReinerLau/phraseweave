@@ -90,7 +90,6 @@ import {
 import { useSummary } from "~/composables/main/summary";
 import { useAutoNextQuestion } from "~/composables/user/autoNext";
 import { useKeyboardSound } from "~/composables/user/sound";
-import { useSpaceSubmitAnswer } from "~/composables/user/submitKey";
 import { useWordSpaceCheck } from "~/composables/user/wordSpaceCheck";
 import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composables/useWordAudio";
 import { lookupPronunciation } from "~/services/pronunciation";
@@ -119,7 +118,6 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 
 const { showAnswer, isQuestion } = useGameMode();
 const { showSummary, showModal } = useSummary();
-const { isUseSpaceSubmitAnswer } = useSpaceSubmitAnswer();
 const { wordSpaceCheck, isWordSpaceCheckEnabled } = useWordSpaceCheck();
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
@@ -138,7 +136,7 @@ let wordFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
 const {
   inputValue,
   userInputWords,
-  submitAnswer,
+  rollbackAnswer,
   setInputValue,
   clearInput,
   handleKeyboardInput,
@@ -351,15 +349,14 @@ function cancelWordFeedback() {
   clearWordFeedback();
 }
 
-function handleWordConfirmation(unmatchedAction: "feedback" | "help" = "feedback") {
+function handleWordConfirmation() {
   if (isAnswerTip() || !userInputWords.some((word) => word.isActive)) return;
   cancelWordFeedback();
   setInputValue(inputEl.value?.value ?? inputValue.value);
   const activeWordIndex = userInputWords.findIndex((word) => word.isActive);
   const result = confirmCurrentWord();
   if (result === "unmatched") {
-    if (unmatchedAction === "help") handleWordHelp();
-    else wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
+    wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
   } else if (result === "confirmed") {
     void playCorrectSound();
     void playAutoWordAudio(courseStore.words[activeWordIndex] ?? "");
@@ -367,6 +364,12 @@ function handleWordConfirmation(unmatchedAction: "feedback" | "help" = "feedback
     void playCorrectSound();
     handleAnswerRight();
   }
+}
+
+function handleWordRollback() {
+  if (isAnswerTip() || !userInputWords.some((word) => word.isActive)) return;
+  // Enter is a rollback key only: matched drafts are discarded and reviewed too.
+  handleWordHelp();
 }
 
 function handleWordHelp() {
@@ -489,24 +492,23 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     e.stopPropagation();
     if (e.repeat) return;
-    handleWordConfirmation(e.code === "Enter" ? "help" : "feedback");
+    if (e.code === "Enter") handleWordRollback();
+    else handleWordConfirmation();
     return;
   }
 
   if (e.code === "Enter" && !isComposing.value) {
     e.preventDefault();
     e.stopPropagation();
-    if (submitAnswer(handleAnswerRight, handleAnswerError) === "continue") cancelErrorReset();
+    rollbackAnswer(handleAnswerError);
     return;
   }
 
-  handleKeyboardInput(e, {
-    useSpaceSubmitAnswer: {
-      enable: isUseSpaceSubmitAnswer(),
-      rightCallback: handleAnswerRight,
-      errorCallback: handleAnswerError,
-    },
+  const result = handleKeyboardInput(e, {
+    rightCallback: handleAnswerRight,
+    errorCallback: handleAnswerError,
   });
+  if (result === "continue") cancelErrorReset();
 }
 
 function displayedWord(index: number, target: string) {

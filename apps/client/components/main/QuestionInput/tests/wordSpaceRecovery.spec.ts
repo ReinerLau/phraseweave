@@ -105,7 +105,7 @@ describe("word space checking recovery", () => {
       const wrapper = mount(QuestionInput, { global: { plugins: [pinia] } });
       const input = wrapper.get("input");
 
-      async function confirmWord(word: string, code = "Enter") {
+      async function confirmWord(word: string, code = "Space") {
         await input.setValue(word);
         await input.trigger("keydown", { code, key: code === "Space" ? " " : "Enter" });
       }

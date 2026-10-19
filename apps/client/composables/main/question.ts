@@ -266,20 +266,34 @@ export function useInput({
     return "incorrect";
   }
 
-  function handleSpaceSubmitAnswer(
-    useSpaceSubmitAnswer: KeyboardInputOptions["useSpaceSubmitAnswer"],
-  ) {
-    if (useSpaceSubmitAnswer?.enable) {
-      submitAnswer(useSpaceSubmitAnswer.rightCallback, useSpaceSubmitAnswer.errorCallback);
-    }
+  function rollbackAnswer(wrongCallback?: IncorrectAnswerCallback) {
+    const submittedInput = inputValue.value;
+    const activeWordIndex = userInputWords.findIndex((word) => word.isActive);
+    const lastWordIndex =
+      activeWordIndex >= 0
+        ? activeWordIndex
+        : Math.min(submittedInput.split(separator).length - 1, userInputWords.length - 1);
+
+    // Enter never submits: keep the same current-word boundary as submission,
+    // then always enter the existing recovery path, even when the answer is correct.
+    markIncorrectWord(lastWordIndex);
+    // A wrong input keeps its typed snapshot so every error through the boundary is
+    // reviewed. A matching input is rolled back at the current word by treating that
+    // word as unfilled instead of being treated as complete.
+    const rollbackInput = userInputWords.some((word) => word.incorrect)
+      ? submittedInput
+      : [...userInputWords.slice(0, lastWordIndex).map((word) => word.userInput), ""].join(
+          separator,
+        );
+
+    resetAllWordActive();
+    wrongCallback?.(rollbackInput, lastWordIndex);
+    return "incorrect";
   }
 
   interface KeyboardInputOptions {
-    useSpaceSubmitAnswer?: {
-      enable: boolean;
-      rightCallback?: () => void;
-      errorCallback?: IncorrectAnswerCallback;
-    };
+    rightCallback?: () => void;
+    errorCallback?: IncorrectAnswerCallback;
   }
 
   function handleKeyboardInput(e: KeyboardEvent, options?: KeyboardInputOptions) {
@@ -289,12 +303,11 @@ export function useInput({
       return;
     }
 
-    // 在最后一个单词位置启用空格提交
+    // 空格是唯一的提交键：仅当最后一个词元已激活时提交整句。
     if (e.code === "Space" && lastWordIsActive()) {
       e.preventDefault();
       e.stopPropagation(); // 阻止事件冒泡
-      handleSpaceSubmitAnswer(options?.useSpaceSubmitAnswer);
-      return;
+      return submitAnswer(options?.rightCallback, options?.errorCallback);
     }
 
     inputChangedCallback?.(e);
@@ -310,6 +323,7 @@ export function useInput({
     inputValue,
     userInputWords,
     submitAnswer,
+    rollbackAnswer,
     setInputValue,
     clearInput,
     handleKeyboardInput,
