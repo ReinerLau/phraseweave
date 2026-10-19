@@ -101,20 +101,25 @@ describe("submitted-answer recovery", () => {
       const wrapper = mount(QuestionInput, { global: { plugins: [pinia] } });
       const input = wrapper.get('input[type="text"]');
 
-      async function submit(value: string) {
+      async function rollback(value: string) {
         await input.setValue(value);
         await input.trigger("keydown", { code: "Enter", key: "Enter" });
       }
 
+      async function submitCorrect(value: string) {
+        await input.setValue(value);
+        await input.trigger("keydown", { code: "Space", key: " " });
+      }
+
       const prefix = pneumonicSentence.slice(0, pneumonicSentence.indexOf("pneumonic"));
-      await submit(prefix.trimEnd());
+      await input.setValue(prefix.trimEnd());
       await vi.advanceTimersByTimeAsync(300);
       expect(store.currentStatement?.unitId).toBe("0:29");
       expect(store.isRecovering).toBe(false);
       expect(store.statementIndex).toBe(anchor);
       expect((input.element as HTMLInputElement).value).toBe(prefix.trimEnd());
 
-      await submit(partial ? prefix : pneumonicSentence.replace("pneumonic", "x"));
+      await rollback(partial ? prefix : pneumonicSentence.replace("pneumonic", "x"));
       await vi.advanceTimersByTimeAsync(299);
       expect(store.currentStatement?.unitId).toBe("0:29");
       await vi.advanceTimersByTimeAsync(1);
@@ -124,8 +129,8 @@ describe("submitted-answer recovery", () => {
       expect(store.canDecomposeCurrentUnit).toBe(false);
       expect(saveLocalExerciseProgress).not.toHaveBeenCalled();
 
-      async function submitCorrect(answer: string, next: string) {
-        await submit(answer);
+      async function submitCorrectAnswer(answer: string, next: string) {
+        await submitCorrect(answer);
         if (!autoNext) {
           expect(useGameMode().isAnswer()).toBe(true);
           useExerciseNavigation().goToNextQuestion();
@@ -135,24 +140,24 @@ describe("submitted-answer recovery", () => {
         expect((input.element as HTMLInputElement).value).toBe("");
         if (next !== "next") expect(store.statementIndex).toBe(anchor);
       }
-      await submitCorrect("pneumonic", "0:28");
+      await submitCorrectAnswer("pneumonic", "0:28");
       const combination = store.currentStatement!.english;
-      await submit(combination.slice(0, combination.indexOf("plague")).trimEnd());
+      await input.setValue(combination.slice(0, combination.indexOf("plague")).trimEnd());
       await vi.advanceTimersByTimeAsync(300);
       expect(store.currentStatement?.unitId).toBe("0:28");
       expect(store.isRecovering).toBe(true);
       expect(store.statementIndex).toBe(anchor);
-      await submit(
+      await rollback(
         partial
           ? combination.slice(0, combination.indexOf("plague"))
           : combination.replace("plague", "x"),
       );
       await vi.advanceTimersByTimeAsync(300);
       expect(store.currentStatement?.unitId).toBe("0:4");
-      await submitCorrect("plague", "0:25");
-      await submitCorrect(store.currentStatement!.english, "0:28");
-      await submitCorrect(store.currentStatement!.english, "0:29");
-      await submitCorrect(pneumonicSentence, "next");
+      await submitCorrectAnswer("plague", "0:25");
+      await submitCorrectAnswer(store.currentStatement!.english, "0:28");
+      await submitCorrectAnswer(store.currentStatement!.english, "0:29");
+      await submitCorrectAnswer(pneumonicSentence, "next");
       expect(store.isRecovering).toBe(false);
       expect(store.statementIndex).toBe(anchor + 1);
       expect(store.currentCourse?.passedUnitIds).toEqual([

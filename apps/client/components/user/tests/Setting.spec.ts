@@ -16,34 +16,28 @@ enableAutoUnmount(afterEach);
 describe("experimental word space checking setting", () => {
   beforeEach(() => {
     localStorage.removeItem("wordSpaceCheck");
-    localStorage.setItem("spaceSubmitAnswer", "true");
   });
   afterEach(() => {
     localStorage.removeItem("wordSpaceCheck");
-    localStorage.removeItem("spaceSubmitAnswer");
   });
 
-  it("defaults off, persists across mounts, and preserves the legacy space-submit preference", async () => {
+  it("defaults off, persists across mounts, and documents the new key mapping", async () => {
     let wrapper = mount(Setting);
     const experimental = wrapper.get<HTMLInputElement>("#word-space-check");
     const section = wrapper
       .findAll("section")
       .find((section) => section.text().includes("答题设置"))!;
-    const legacy = section.findAll<HTMLInputElement>("input")[1];
     expect(experimental.element.checked).toBe(false);
-    expect(legacy.element.disabled).toBe(false);
-    expect(legacy.element.checked).toBe(true);
+    expect(section.text()).not.toContain("开启空格提交答案");
     await experimental.setValue(true);
-    expect(section.text()).toContain("空格确认当前词元；回车在匹配时确认，未匹配时回退");
-    expect(legacy.element.disabled).toBe(true);
+    expect(section.text()).toContain(
+      "空格确认当前词元；回车只用于回退；整句答对后按空格进入下一题",
+    );
     expect(localStorage.getItem("wordSpaceCheck")).toBe("true");
     wrapper.unmount();
     wrapper = mount(Setting);
     expect(wrapper.get<HTMLInputElement>("#word-space-check").element.checked).toBe(true);
     await wrapper.get("#word-space-check").setValue(false);
-    expect(localStorage.getItem("spaceSubmitAnswer")).toBe("true");
-    expect(
-      wrapper.findAll("section")[2].findAll<HTMLInputElement>("input")[1].element.disabled,
-    ).toBe(false);
+    expect(localStorage.getItem("wordSpaceCheck")).toBe("false");
   });
 });

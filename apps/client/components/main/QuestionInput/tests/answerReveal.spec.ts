@@ -70,11 +70,12 @@ describe.each([false, true])("keyboard answer hints with word checking: %s", (wo
     const input = wrapper.get("input");
     const enter = (extra = {}) =>
       input.trigger("keydown", { code: "Enter", key: "Enter", ...extra });
-    return { store, wrapper, input, enter };
+    const confirm = () => input.trigger("keydown", { code: "Space", key: " " });
+    return { store, wrapper, input, enter, confirm };
   }
 
   it("waits for pronunciation, reveals on another empty Enter, and resumes typing", async () => {
-    const { input, wrapper, store, enter } = setup();
+    const { input, wrapper, store, enter, confirm } = setup();
     await enter();
     if (!wordChecking) {
       await vi.advanceTimersByTimeAsync(299);
@@ -95,7 +96,7 @@ describe.each([false, true])("keyboard answer hints with word checking: %s", (wo
     expect(store.advanceAfterCorrect).not.toHaveBeenCalled();
     await input.setValue("computer");
     expect(useAnswerTip().isAnswerTip()).toBe(false);
-    await enter();
+    await confirm();
     expect(store.passCurrentStatement).toHaveBeenCalledOnce();
   });
 
