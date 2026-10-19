@@ -277,6 +277,43 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             start, end = unit["span"]["start"], unit["span"]["end"]
             self.assertEqual(unit["text"], planned["sentence"][start:end])
 
+    def test_blocked_quote_parse_retries_raw_sentence_for_full_span_sources(self):
+        sentence = (
+            "My future self had given me a few pieces of advice: “Consult Nanahoshi,” "
+            "“Write Eris a letter,” and “Doubt the Man-God without opposing him.”"
+        )
+        plan, traces = generate_plan(sentence, self.nlp)
+        self.assertIsNotNone(traces[0]["sources"][-1])
+        self.assertEqual(_validate_plan(plan, self.nlp), plan)
+        self.assertTrue(
+            all(token["text"] not in {'"', "“", "”"} for token in traces[0]["tree_tokens"])
+        )
+
+        payload = json.loads(
+            render_phraseweave(
+                plan,
+                {"sentences": [{"sentence_chinese": "未来的我给了我几条建议"}]},
+                traces,
+            )
+        )
+        rows = payload["statements"]
+        by_id = {row["unit_id"]: row for row in rows}
+        final = rows[-1]
+        self.assertEqual(final["english"], sentence)
+        self.assertTrue(final["source_unit_ids"])
+        self.assertTrue(all(unit_id in by_id for row in rows for unit_id in row["source_unit_ids"]))
+
+        # The failed word must be reachable through the exported source graph.
+        reachable: set[str] = set()
+        pending = [final["unit_id"]]
+        while pending:
+            unit_id = pending.pop()
+            if unit_id in reachable:
+                continue
+            reachable.add(unit_id)
+            pending.extend(by_id[unit_id]["source_unit_ids"])
+        self.assertIn("had", {by_id[unit_id]["english"] for unit_id in reachable})
+
     def test_quote_projection_keeps_word_boundaries_and_single_quotes(self):
         plan = self.plan('She said"hello"today.')
         self.assertEqual(plan["sentences"][0]["sentence"], 'She said"hello"today.')
