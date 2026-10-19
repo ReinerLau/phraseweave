@@ -11,7 +11,7 @@ SPACY_VERSION = "3.8.7"
 MODEL_DISTRIBUTION = "en-core-web-sm"
 MODEL_VERSION = "3.8.0"
 PLAN_SCHEMA_VERSION = 3
-ALGORITHM_VERSION = 7
+ALGORITHM_VERSION = 8
 PHRASEWEAVE_SCHEMA_VERSION = 4
 DOUBLE_QUOTES = frozenset({'"', "“", "”"})
 
@@ -241,6 +241,60 @@ def _build_sentence(
     return units, trace
 
 
+def _drop_double_quote_tokens(
+    tokens: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep the trace's dependency tree aligned with the quote-free contract."""
+    removed = {token["index"] for token in tokens if token["text"] in DOUBLE_QUOTES}
+    if not removed:
+        return list(tokens)
+    head_by_index = {token["index"]: token["head_index"] for token in tokens}
+    kept = [token for token in tokens if token["index"] not in removed]
+    index_map = {token["index"]: index for index, token in enumerate(kept)}
+
+    def resolved_head(index: int) -> int:
+        seen: set[int] = set()
+        while index in removed and index not in seen:
+            seen.add(index)
+            next_index = head_by_index.get(index, index)
+            if next_index == index:
+                break
+            index = next_index
+        return index
+
+    for token in kept:
+        old_index = token["index"]
+        token["head_index"] = index_map.get(
+            resolved_head(token["head_index"]), index_map[old_index]
+        )
+        token["index"] = index_map[old_index]
+    return kept
+
+
+def _build_sentence_with_raw_quotes(
+    nlp: Any,
+    sentence: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
+    """Retry a blocked sentence with quotes so the full span still has sources.
+
+    Quotes are removed for segmentation because they change sentence boundaries.
+    They can also make spaCy attach a whole quoted tail to an earlier noun, which
+    blocks the final full-span combination. In that case only, parse the already
+    isolated sentence with its original quotes; if it yields a complete sentence
+    source list, use that derivation instead.
+    """
+    if not any(quote in sentence for quote in DOUBLE_QUOTES):
+        return None
+    document = nlp(sentence)
+    if len(list(document.sents)) != 1:
+        return None
+    units, trace = _build_sentence(document[:], sentence, 0, list(range(len(sentence))))
+    if not trace["sources"] or trace["sources"][-1] is None:
+        return None
+    trace["tree_tokens"] = _drop_double_quote_tokens(trace["tree_tokens"])
+    return units, trace
+
+
 def generate_plan(text: str, nlp: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     original = text.strip()
     clean_text, offsets = _syntax_text(original)
@@ -284,6 +338,10 @@ def generate_plan(text: str, nlp: Any) -> tuple[dict[str, Any], list[dict[str, A
             source_start += len(raw_sentence) - len(raw_sentence.lstrip())
             sentence = raw_sentence.strip()
             units, trace = _build_sentence(sentence_span, sentence, source_start, offsets)
+            if trace["sources"] and trace["sources"][-1] is None:
+                fallback = _build_sentence_with_raw_quotes(nlp, sentence)
+                if fallback is not None:
+                    units, trace = fallback
             sentences.append({"sentence": sentence, "units": units})
             traces.append({"sentence": sentence, "units": units, **trace})
     if not sentences:
