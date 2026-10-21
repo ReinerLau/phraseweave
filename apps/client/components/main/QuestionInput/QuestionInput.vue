@@ -55,6 +55,7 @@
         aria-label="填写当前英文单元"
         :maxlength="inputMaxLength"
         v-model="inputValue"
+        @input="clearWordHover"
         @keydown="handleKeydown"
         @beforeinput="handleBeforeInput"
         @focus="handleInputFocus"
