@@ -347,7 +347,7 @@ describe("visible word interaction", () => {
     expect(useAnswerTip().isAnswerTip()).toBe(false);
   });
 
-  it("hovers only visible input words and refreshes the hit after typing", async () => {
+  it("clears a hovered word while typing and restores it on pointer movement", async () => {
     const pinia = createTestingPinia({ createSpy: vi.fn });
     useExerciseStore(pinia).currentStatement = { id: "1", order: 1, english: "hello world" };
     const wrapper = mount(QuestionInput, { attachTo: document.body, global: { plugins: [pinia] } });
@@ -362,7 +362,11 @@ describe("visible word interaction", () => {
     await hover();
     expect(highlighted()).toEqual([]); // Hidden answers are not hover targets.
     await input.setValue("hell world");
-    expect(highlighted()).toEqual(["hell"]); // Pointer has not moved.
+    expect(highlighted()).toEqual([]); // Typing clears the stationary pointer's hover.
+    await hover();
+    expect(highlighted()).toEqual(["hell"]);
+    await input.setValue("hello world");
+    expect(highlighted()).toEqual([]);
     hitTest.mockReturnValue([input.element, words[1].element]);
     await hover();
     expect(highlighted()).toEqual(["world"]);
@@ -370,6 +374,8 @@ describe("visible word interaction", () => {
     expect(highlighted()).toEqual([]); // Hovered second word is now blank.
     useAnswerTip().showAnswerTip();
     await wrapper.vm.$nextTick();
+    expect(highlighted()).toEqual([]);
+    await hover();
     expect(highlighted()).toEqual(["world"]);
     await input.trigger("pointermove", { pointerType: "touch", clientX: 10, clientY: 10 });
     expect(highlighted()).toEqual([]);
