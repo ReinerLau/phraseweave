@@ -102,6 +102,10 @@ describe("sentence token replay", () => {
     expect(store.isRecovering).toBe(false);
     await press("Enter");
     expect(wordTexts()).toEqual(["I", "like", "apples"]);
+    const wordsDuringHint = wrapper.findAll(".question-input-word");
+    expect(wordsDuringHint[0].classes()).toContain("border-b-transparent");
+    expect(wordsDuringHint[1].classes()).toContain("border-b-transparent");
+    expect(wordsDuringHint[2].classes()).toContain("text-gray-400");
     await answer("apples");
     expect(wordTexts()).toEqual(["", "", ""]);
     expect(store.statementIndex).toBe(0);
