@@ -302,7 +302,7 @@ function getWordsClassNames(index: number) {
   const word = userInputWords[index];
 
   // 答案提示文字使用占位符样式，但聚焦时仍高亮当前输入位置。
-  if (isAnswerTip()) {
+  if (isWordAnswerTip(index)) {
     if (word.isActive && focusing.value) {
       return "text-gray-400 border-b-fuchsia-500 dark:text-gray-500 dark:border-b-fuchsia-500";
     }
@@ -550,9 +550,11 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 function displayedWord(index: number, target: string) {
-  return isAnswerTip() && (!isSentenceReplayMode() || hintedWordIndex.value === index)
-    ? target
-    : userInputWords[index]?.userInput ?? "";
+  return isWordAnswerTip(index) ? target : userInputWords[index]?.userInput ?? "";
+}
+
+function isWordAnswerTip(index: number) {
+  return isAnswerTip() && (!isSentenceReplayMode() || hintedWordIndex.value === index);
 }
 
 function handleWordClick(event: MouseEvent) {
