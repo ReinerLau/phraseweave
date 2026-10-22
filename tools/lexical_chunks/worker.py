@@ -9,13 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
-from split_lexical_chunks import (
-    ConfigurationError,
-    generate_plan,
-    load_syntax_model,
-    render_markdown,
-    render_phraseweave,
-)
+from sentence_review import render_markdown, render_phraseweave, split_sentences
 
 
 def _read_request() -> Mapping[str, Any]:
@@ -37,7 +31,7 @@ def _build_outputs(
 ) -> list[dict[str, str]]:
     timestamp = (created_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
     suffix = timestamp.strftime("%Y%m%dT%H%M%S%fZ")
-    stem = "text.review.learning-units"
+    stem = "text.sentence-review"
     outputs = []
     if output_format in {"markdown", "both"}:
         outputs.append({"name": f"{stem}-{suffix}.md", "content": markdown})
@@ -59,25 +53,17 @@ def _generate(payload: Mapping[str, Any]) -> None:
     if provider not in TRANSLATION_PROVIDERS:
         raise ValueError("Choose a supported translation provider.")
 
-    nlp = load_syntax_model()
-    plan, traces = generate_plan(text, nlp)
-    sentences = [item["sentence"] for item in plan["sentences"]]
+    sentences = split_sentences(text)
     chinese = translate_sentences(sentences, provider, lambda message: _emit({"progress": message}))
     if len(chinese) != len(sentences) or any(not line for line in chinese):
         raise RuntimeError("The translation engine did not return one prompt for each sentence.")
-    translations = {
-        "sentences": [
-            {"sentence_chinese": line} for line in chinese
-        ]
-    }
-
     markdown = (
-        render_markdown(plan, translations, traces)
+        render_markdown(sentences, chinese)
         if output_format in {"markdown", "both"}
         else ""
     )
     phraseweave = (
-        render_phraseweave(plan, translations, traces)
+        render_phraseweave(sentences, chinese)
         if output_format in {"phraseweave", "both"}
         else ""
     )
@@ -104,7 +90,7 @@ def main() -> int:
         else:
             raise ValueError("Unsupported worker action.")
         return 0
-    except (ConfigurationError, OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         _emit({"ok": False, "error": str(error)})
         return 1
 

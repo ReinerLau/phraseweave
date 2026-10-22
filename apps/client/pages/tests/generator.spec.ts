@@ -337,7 +337,7 @@ describe("generator capture preview", () => {
     mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
     await mount();
     expect(wrapper!.text()).toContain("当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。");
-    expect(button("生成学习单元").attributes("disabled")).toBeDefined();
+    expect(button("生成整句练习").attributes("disabled")).toBeDefined();
     await submit();
     expect(mocks.start).not.toHaveBeenCalled();
   });
@@ -366,10 +366,10 @@ describe("generator capture preview", () => {
       initialization: { state: "starting", message: "Starting" },
     });
     await mount();
-    expect(button("生成学习单元").attributes("disabled")).toBeDefined();
+    expect(button("生成整句练习").attributes("disabled")).toBeDefined();
     await wrapper!.find('button[aria-label="刷新本地服务连接"]').trigger("click");
     await flushPromises();
-    expect(button("生成学习单元").attributes("disabled")).toBeUndefined();
+    expect(button("生成整句练习").attributes("disabled")).toBeUndefined();
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
@@ -385,12 +385,12 @@ describe("generator capture preview", () => {
     await submit();
     await submit();
     expect(mocks.start).toHaveBeenCalledTimes(1);
-    expect(button("生成学习单元").attributes("disabled")).toBeDefined();
+    expect(button("生成整句练习").attributes("disabled")).toBeDefined();
     expect(
       wrapper!.findAll("select").every((select) => select.attributes("disabled") !== undefined),
     ).toBe(true);
     accept({ id: "job-1" });
     await flushPromises();
-    expect(button("生成学习单元").attributes("disabled")).toBeUndefined();
+    expect(button("生成整句练习").attributes("disabled")).toBeUndefined();
   });
 });
