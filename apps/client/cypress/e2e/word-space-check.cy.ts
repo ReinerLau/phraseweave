@@ -172,15 +172,15 @@ function seedWordSpaceExercise(fulltext = false) {
   );
 }
 
-describe("word space checking", () => {
-  it("opens the experiment from homepage settings and returns to practice", () => {
+describe("sentence token replay", () => {
+  it("uses word confirmation even when the legacy setting is false", () => {
     cy.intercept("GET", "http://127.0.0.1:8765/api/tts/status", {
       state: "ready",
       message: "准备完成",
     });
     cy.visit("/", {
       onBeforeLoad(window) {
-        window.localStorage.removeItem("wordSpaceCheck");
+        window.localStorage.setItem("wordSpaceCheck", "false");
         window.localStorage.setItem("keyboardSoundEnabled", "false");
         window.localStorage.setItem("autoNextQuestion", "false");
       },
@@ -188,12 +188,7 @@ describe("word space checking", () => {
     seedWordSpaceExercise();
     cy.contains("a", "设置").should("be.visible").click();
     cy.location("pathname").should("equal", "/user/info");
-    cy.get("#word-space-check").should("not.be.checked").check();
-    cy.contains("空格确认当前词元；回车只用于回退；整句答对后按空格进入下一题").should(
-      "be.visible",
-    );
-    cy.reload();
-    cy.get("#word-space-check").should("be.checked");
+    cy.get("#word-space-check").should("not.exist");
     cy.contains("a", "返回练习清单").click();
     cy.location("pathname").should("equal", "/");
     cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
@@ -201,22 +196,29 @@ describe("word space checking", () => {
     cy.get(".question-input-word").eq(0).should("have.class", "border-b-transparent");
   });
 
-  it("rolls back with Enter even for a matching token and advances with Space", () => {
+  it("shows only the requested word and replays the sentence after help", () => {
     cy.visit("/course-pack");
     seedWordSpaceExercise(true);
     cy.window().then((window) => {
-      window.localStorage.setItem("wordSpaceCheck", "true");
+      window.localStorage.setItem("wordSpaceCheck", "false");
       window.localStorage.setItem("keyboardSoundEnabled", "false");
       window.localStorage.setItem("autoNextQuestion", "false");
     });
     cy.visit(`/game/${wordSpacePack}/${wordSpaceCourse}`);
     const input = 'input[aria-label="填写当前英文单元"]';
 
-    cy.get(input).type("don't", { force: true });
+    cy.get(input).type("don't ", { force: true });
+    cy.get(input).type("{enter}", { force: true });
+    cy.get('[data-testid="phonetic-hint"]').should("be.visible");
     cy.get(input).type("{enter}", { force: true });
     cy.get(input).should("have.value", "");
-    cy.get(".question-input-word").eq(0).should("not.have.class", "border-b-transparent");
+    cy.get(".question-input-word").eq(0).should("have.text", "don't");
+    cy.get(".question-input-word").eq(1).should("have.text", "eat");
 
+    cy.get(input).type("eat", { force: true }).type(" ", { force: true });
+    cy.get(".question-input-word").eq(0).should("have.text", "");
+    cy.get(".question-input-word").eq(1).should("have.text", "");
+    cy.get('[data-testid="answer-sentence"]').should("not.exist");
     cy.get(input).type("don't", { force: true }).type(" ", { force: true });
     cy.get(input).type("eat", { force: true }).type(" ", { force: true });
     cy.get('[data-testid="answer-sentence"]').should("be.visible");

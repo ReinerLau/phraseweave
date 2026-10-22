@@ -1,6 +1,6 @@
 # PhraseWeave browser extension
 
-This Chrome extension adds the selected-text action **导入 PhraseWeave**. It opens `http://127.0.0.1:3000/generator` in a new Chrome tab with the selected text in the URL fragment. The Web UI reads and clears the fragment and prefills an editable text area. Choose the export format, then click **生成学习单元** to generate and preview the result. Opening the page never starts generation automatically. Click **保存并进入练习** to save and start practicing.
+This Chrome extension adds the selected-text action **导入 PhraseWeave**. It opens `http://127.0.0.1:3000/generator` in a new Chrome tab with the selected text in the URL fragment. The Web UI reads and clears the fragment and prefills an editable text area. Choose the export format, then click **生成整句练习** to generate and preview the result. Opening the page never starts generation automatically. Click **保存并进入练习** to save and start practicing.
 
 ## Setup
 

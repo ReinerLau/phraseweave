@@ -55,6 +55,7 @@ for (const name of [
   "tts_worker.py",
   "model_runtime.py",
   "split_lexical_chunks.py",
+  "sentence_review.py",
   "worker.py",
   "pyproject.toml",
   "uv.lock",
