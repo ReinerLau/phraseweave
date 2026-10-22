@@ -26,21 +26,21 @@
             开启你的第一节课！
           </p>
           <h3 class="py-2 text-base font-semibold">答题页面</h3>
-          <p class="py-1 leading-7">阅读完整原句的中文提示，在英文原句的空缺处填入当前学习单元。</p>
+          <p class="py-1 leading-7">阅读完整原句的中文提示，从头逐词复现英文原句。</p>
           <p class="py-1 leading-7">
             看到
             <span class="text-fuchsia-500">紫色下划线</span>
-            亮起，输入单词。逐词空格检查模式下，空格确认当前词元；普通整句输入模式下，在最后一个词输入完成后按空格提交整句。回车只用于回退。
+            亮起，输入当前词元并按空格确认。答错时修改当前词元；回车用于提示当前词元。
           </p>
           <p class="py-1 leading-7">
-            题目提交后若出现
+            按空格后若出现
             <span class="text-red-500">红色</span>
-            单词和下划线显示，代表这部分单词存在错误。直接修改错误单词，再按空格重新提交/确认即可。
+            单词和下划线显示，代表当前词元有误。修改后再按空格确认即可。
           </p>
           <p class="py-1 leading-7">验证通过后会显示填好的英文原句。</p>
           <h3 class="py-2 text-base font-semibold">答题小技巧</h3>
           <p class="p-1 leading-7">
-            不会时按回车回退复习。到单词后先看音标提示，保持输入为空再按回车查看答案；没有可用音标时，再次空白回车也能查看。开始输入会自动收起答案。
+            不会时按回车查看当前词元的音节，再按一次回车查看该词元答案。输入正确后，本句会清空并从头重打；后面的词元不会提前显示。
           </p>
           <h3 class="py-2 text-base font-semibold">答案页面</h3>
           <p class="py-1 leading-7">答案下方的按钮</p>
@@ -63,8 +63,7 @@
           </p>
           <h3 class="py-2 text-base font-semibold">用户设置页面</h3>
           <p class="py-1 leading-7">
-            右上角图标进入 User Info
-            切换到设置页面，自定义快捷键、逐词空格检查及答对后自动下一题等选项 😊
+            右上角图标进入 User Info 切换到设置页面，自定义快捷键及答对后自动下一题等选项 😊
             <i
               class="mx-2 inline h-8 w-1 animate-wink bg-slate-900 p-[2px] text-sm dark:bg-white"
             ></i>

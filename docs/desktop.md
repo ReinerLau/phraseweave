@@ -54,7 +54,7 @@ pnpm desktop:make:mac
 
 安装 npm CLI，并从 GitHub Release 下载扩展 ZIP，解压到固定目录。在 `chrome://extensions` 开启开发者模式，加载已解压的扩展；更新扩展后重新加载即可。无需桌面应用或 Native Messaging 宿主，不再需要 `phraseweave extension install`。
 
-先在终端运行 `phraseweave` 并保持运行，再选择英文文本，右键点击「导入 PhraseWeave」。扩展在新的 Chrome 标签页打开固定地址 `http://127.0.0.1:3000/generator`，通过 URL 片段携带选中文本；页面读取后清除片段，并预填可编辑的输入框，不自动生成。选择导出格式后，点击「生成学习单元」；公网翻译需要联网，英文原句会发送至 Bilibili。Markdown 和 PhraseWeave JSON 统一使用复习题序：组合学习单元前重放直接来源。先查看预览，确认后点击「保存并进入练习」才写入共享练习库并打开练习。预览只保留在页面中，刷新后需要重新导入。
+先在终端运行 `phraseweave` 并保持运行，再选择英文文本，右键点击「导入 PhraseWeave」。扩展在新的 Chrome 标签页打开固定地址 `http://127.0.0.1:3000/generator`，通过 URL 片段携带选中文本；页面读取后清除片段，并预填可编辑的输入框，不自动生成。选择导出格式后，点击「生成整句练习」；公网翻译需要联网，英文原句会发送至 Bilibili。Markdown 和 PhraseWeave JSON 均按原句顺序导出，每句只生成一条完整原句记录。先查看预览，确认后点击「保存并进入练习」才写入共享练习库并打开练习。预览只保留在页面中，刷新后需要重新导入。
 
 扩展只打开浏览器标签页，不会自动启动服务。服务未运行时，Chrome 无法连接该页面；先运行 `phraseweave` 后重新导入即可。之前安装的宿主注册不影响新版扩展，新版不会使用它们，不需要重新安装桌面启动器。
 

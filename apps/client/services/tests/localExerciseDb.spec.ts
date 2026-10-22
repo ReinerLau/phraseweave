@@ -16,6 +16,27 @@ const firstUnit = {
 };
 
 describe("normalizeExerciseImport", () => {
+  it("imports sentence-only schema 4 exports without source units", () => {
+    const [pack] = normalizeExerciseImport({
+      schema_version: 4,
+      statements: [
+        { ...firstUnit, english: "Birdsong is good.", context_after: "" },
+        {
+          english: "Birds sing.",
+          context_before: "",
+          context_after: "",
+          sentence_chinese: "鸟在歌唱。",
+          unit_id: "1:0",
+          source_unit_ids: [],
+        },
+      ],
+    });
+    expect(pack.courses[0].statements.map((statement) => statement.english)).toEqual([
+      "Birdsong is good.",
+      "Birds sing.",
+    ]);
+  });
+
   it("converts a schema 4 cloze backup into a local course pack", () => {
     const [coursePack] = normalizeExerciseImport(
       { schema_version: 4, statements: [firstUnit] },

@@ -1,5 +1,7 @@
-## 🧩 lexical-chunks 学习单元生成
+## 整句逐词复现
 
-`lexical-chunks` 使用固定 spaCy 模型分句并生成依存树，再按原文邻接关系逐层组合英文学习单元。生成器先输出每个非标点词，随后把已经完成的子短语从近到远接到中心词；同层左右分支先分别输出，再合并并继续向外扩展。模型为每个完整原句提供一条中文提示，学习者在英文原句中填入当前单元。
+粘贴英文后，本地生成器按句拆分原文，并使用 Index-Translate 为每句生成中文提示。新生成文件只包含完整原句；PhraseWeave JSON 沿用 schema 4，也可导出 Markdown。
 
-英文计划使用 schema 3；Markdown 显示整句中文提示、英文挖空、依存树和组合说明，PhraseWeave JSON 使用 schema 4。运行方式、标点处理及计划结构见[工具接口](docs/lexical-chunks-tooling.md)，策略取舍见 [ADR 0012](docs/adr/0012-adjacent-subtree-closure.md)。
+练习从完整原句开始，空格确认当前词元。不会时按回车先看当前词元的音节，再按一次查看该词元答案；答对后从句首重新输入，包括刚获提示的词元。后续词元不会提前显示。已保存的旧语块练习继续可用，当前只练其中的完整原句。
+
+旧 spaCy 语块生成器与回退练习实现保留备用，当前生成与练习入口不调用。行为与兼容约定见 [ADR 0030](docs/adr/0030-sentence-token-replay.md)。

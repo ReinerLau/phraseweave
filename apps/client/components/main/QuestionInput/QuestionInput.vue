@@ -18,7 +18,7 @@
             :class="[
               getWordsClassNames(token.wordIndex),
               {
-                'fixed-underline': isWordSpaceCheckEnabled(),
+                'fixed-underline': isCurrentWordMode(),
                 'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
                 'speech-hover': hoveredWordIndex === token.wordIndex,
                 'speech-loading':
@@ -96,6 +96,7 @@ import { findWordUnderInput, playWordUnderInput, useWordAudio } from "~/composab
 import { lookupPronunciation } from "~/services/pronunciation";
 import { isSpeakableWord } from "~/services/wordAudio";
 import { useExerciseStore } from "~/store/exercise";
+import { practiceModeAvailability } from "~/utils/practiceModes";
 import ClozeText from "./ClozeText.vue";
 import {
   getInputWordWidthEm,
@@ -111,6 +112,8 @@ defineProps<{ inline?: boolean }>();
 const emit = defineEmits<{ "hint-change": [syllables: string[] | undefined] }>();
 let hintSequence = 0;
 let phoneticHintStage: "idle" | "pending" | "shown" | "unavailable" = "idle";
+const hintedWordIndex = ref<number>();
+let helpRequested = false;
 
 const courseStore = useExerciseStore();
 const { loadingElement, playAutoSentenceAudio, playAutoWordAudio } = useWordAudio();
@@ -120,6 +123,9 @@ const { inputEl, focusing, focusInput, blurInput, setInputCursorPosition, getInp
 const { showAnswer, isQuestion } = useGameMode();
 const { showSummary, showModal } = useSummary();
 const { wordSpaceCheck, isWordSpaceCheckEnabled } = useWordSpaceCheck();
+// The retained alternate practice path can still exercise its original input setting.
+const isCurrentWordMode = () => !practiceModeAvailability.progressive || isWordSpaceCheckEnabled();
+const isSentenceReplayMode = () => !practiceModeAvailability.progressive;
 const { isKeyboardSoundEnabled } = useKeyboardSound();
 const { checkPlayTypingSound, playTypingSound } = useTypingSound();
 const { playCorrectSound } = useCorrectSound();
@@ -151,13 +157,11 @@ const {
   inputChangedCallback,
   getInputWordWidth,
   getInputWordCapacity,
-  isWordSpaceCheckEnabled,
+  isWordSpaceCheckEnabled: isCurrentWordMode,
 });
 const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 const inputMaxLength = computed(() =>
-  isWordSpaceCheckEnabled()
-    ? userInputWords.find((word) => word.isActive)?.text.length ?? 0
-    : undefined,
+  isCurrentWordMode() ? userInputWords.find((word) => word.isActive)?.text.length ?? 0 : undefined,
 );
 
 // Re-check after visible text changes, even when the pointer stays still.
@@ -192,13 +196,20 @@ onUnmounted(() => {
 function clearPhoneticHint() {
   hintSequence++;
   phoneticHintStage = "idle";
+  hintedWordIndex.value = undefined;
+  helpRequested = false;
   emit("hint-change", undefined);
 }
 
 async function showPhoneticHint() {
-  if (courseStore.canDecomposeCurrentUnit || phoneticHintStage !== "idle") return;
-  const word = courseStore.words[0];
-  if (courseStore.words.length !== 1 || !isSpeakableWord(word)) {
+  if (
+    (!isSentenceReplayMode() && courseStore.canDecomposeCurrentUnit) ||
+    phoneticHintStage !== "idle"
+  )
+    return;
+  const activeIndex = userInputWords.findIndex((word) => word.isActive);
+  const word = courseStore.words[isSentenceReplayMode() ? activeIndex : 0];
+  if ((!isSentenceReplayMode() && courseStore.words.length !== 1) || !isSpeakableWord(word)) {
     phoneticHintStage = "unavailable";
     return;
   }
@@ -218,7 +229,7 @@ async function showPhoneticHint() {
 watch(
   () => inputValue.value,
   (val) => {
-    if (isWordSpaceCheckEnabled()) cancelWordFeedback();
+    if (isCurrentWordMode()) cancelWordFeedback();
     const sanitizedValue = sanitizeQuestionInput(val);
     if (isAnswerTip() && containsAllowedQuestionCharacter(sanitizedValue)) {
       hiddenAnswerTip();
@@ -246,8 +257,10 @@ watch(isAnswerTip, (isVisible) => {
   if (isVisible) {
     cancelErrorReset();
     cancelWordFeedback();
-    clearPhoneticHint();
-    clearInput();
+    if (!isSentenceReplayMode()) {
+      clearPhoneticHint();
+      clearInput();
+    }
   }
 });
 
@@ -289,7 +302,7 @@ function getWordsClassNames(index: number) {
   const word = userInputWords[index];
 
   // 答案提示文字使用占位符样式，但聚焦时仍高亮当前输入位置。
-  if (isAnswerTip()) {
+  if (isWordAnswerTip(index)) {
     if (word.isActive && focusing.value) {
       return "text-gray-400 border-b-fuchsia-500 dark:text-gray-500 dark:border-b-fuchsia-500";
     }
@@ -301,7 +314,7 @@ function getWordsClassNames(index: number) {
     return "text-[#202020] border-b-transparent dark:text-gray-50";
   }
 
-  if (isWordSpaceCheckEnabled() && word.incorrect) {
+  if (isCurrentWordMode() && word.incorrect) {
     return "text-red-500 border-b-red-500";
   }
 
@@ -358,6 +371,15 @@ function handleWordConfirmation() {
   const result = confirmCurrentWord();
   if (result === "unmatched") {
     wordFeedbackTimer = setTimeout(cancelWordFeedback, ERROR_FEEDBACK_DURATION_MS);
+  } else if (
+    isSentenceReplayMode() &&
+    helpRequested &&
+    (result === "confirmed" || result === "complete")
+  ) {
+    void playCorrectSound();
+    clearPhoneticHint();
+    hiddenAnswerTip();
+    clearInput();
   } else if (result === "confirmed") {
     void playCorrectSound();
     void playAutoWordAudio(courseStore.words[activeWordIndex] ?? "");
@@ -374,6 +396,19 @@ function handleWordRollback() {
 }
 
 function handleWordHelp() {
+  if (isSentenceReplayMode()) {
+    if (phoneticHintStage === "pending" || isAnswerTip()) return;
+    cancelWordFeedback();
+    helpRequested = true;
+    setInputValue("");
+    if (phoneticHintStage === "shown" || phoneticHintStage === "unavailable") {
+      hintedWordIndex.value = userInputWords.findIndex((word) => word.isActive);
+      showAnswerTip();
+    } else {
+      void showPhoneticHint();
+    }
+    return;
+  }
   const request = getWordHelpRequest();
   if (!request) return;
   cancelWordFeedback();
@@ -386,7 +421,7 @@ function handleWordHelp() {
 // Soft keyboards can insert a space without dispatching a keydown event.
 function handleBeforeInput(event: Event) {
   const inputEvent = event as InputEvent;
-  if (!isWordSpaceCheckEnabled() || isComposing.value || inputEvent.isComposing) return;
+  if (!isCurrentWordMode() || isComposing.value || inputEvent.isComposing) return;
   if (inputEvent.inputType === "insertText" && inputEvent.data === " ") {
     event.preventDefault();
     handleWordConfirmation();
@@ -454,6 +489,7 @@ function handleKeydown(e: KeyboardEvent) {
     if (e.repeat || !isQuestion() || showModal.value || courseStore.fulltextCompleted) return;
     const draft = sanitizeQuestionInput(inputEl.value?.value ?? inputValue.value);
     if (
+      !isSentenceReplayMode() &&
       courseStore.currentStatement &&
       !courseStore.canDecomposeCurrentUnit &&
       !draft.trim() &&
@@ -466,6 +502,7 @@ function handleKeydown(e: KeyboardEvent) {
     }
     // Keep a pending lookup (and legacy feedback timer) alive until help is ready.
     if (
+      !isSentenceReplayMode() &&
       !courseStore.canDecomposeCurrentUnit &&
       !draft.trim() &&
       (phoneticHintStage === "pending" || errorResetTimer !== undefined)
@@ -489,7 +526,7 @@ function handleKeydown(e: KeyboardEvent) {
     }
   }
 
-  if (isWordSpaceCheckEnabled() && (e.code === "Space" || e.code === "Enter")) {
+  if (isCurrentWordMode() && (e.code === "Space" || e.code === "Enter")) {
     e.preventDefault();
     e.stopPropagation();
     if (e.repeat) return;
@@ -513,7 +550,11 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 function displayedWord(index: number, target: string) {
-  return isAnswerTip() ? target : userInputWords[index]?.userInput ?? "";
+  return isWordAnswerTip(index) ? target : userInputWords[index]?.userInput ?? "";
+}
+
+function isWordAnswerTip(index: number) {
+  return isAnswerTip() && (!isSentenceReplayMode() || hintedWordIndex.value === index);
 }
 
 function handleWordClick(event: MouseEvent) {

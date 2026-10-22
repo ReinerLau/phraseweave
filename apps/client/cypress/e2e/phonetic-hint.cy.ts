@@ -119,7 +119,8 @@ function assertLayout(sameLine = false) {
   });
 }
 
-describe("sentence-end phonetic spelling hint and original sentence audio", () => {
+// This exercises the retained word-only recovery path, which has no production entry point.
+describe.skip("legacy sentence-end phonetic spelling hint and original sentence audio", () => {
   for (const [width, fulltext, dark] of [
     [1440, false, false],
     [1440, false, true],
