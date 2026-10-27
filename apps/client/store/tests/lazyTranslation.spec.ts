@@ -57,33 +57,58 @@ describe("lazy sentence practice", () => {
   async function setup() {
     const store = useExerciseStore();
     await store.setup("pack", "course");
+    await flushPromises();
     return store;
   }
 
-  it("translates each reached step, resumes it and reviews whole sentences", async () => {
-    let store = await setup();
+  it("shows the course shell before the first translation completes", async () => {
+    let finishCurrent!: (value: { chinese: string }) => void;
+    vi.mocked(translatePracticeStep).mockImplementation(async (text) => {
+      if (text === "Read this")
+        return new Promise((resolve) => {
+          finishCurrent = resolve;
+        });
+      return { chinese: `译：${text}` };
+    });
+    const store = useExerciseStore();
+    await store.setup("pack", "course");
+    expect(store.currentCourse?.id).toBe("course");
+    expect(store.currentPracticeText).toBe("Read this");
+    expect(store.translationLoading).toBe(true);
+    expect(store.translationReady).toBe(false);
     expect(translatePracticeStep).toHaveBeenCalledTimes(1);
-    expect(translatePracticeStep).toHaveBeenLastCalledWith("Read this");
+    finishCurrent({ chinese: "读这个" });
+    await flushPromises();
+    expect(store.translationReady).toBe(true);
+    expect(translatePracticeStep).toHaveBeenLastCalledWith("then write.");
+  });
+
+  it("prefetches only the next step, resumes it and reviews whole sentences", async () => {
+    let store = await setup();
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "Read this",
+      "then write.",
+    ]);
     expect(store.currentStatement?.sentenceChinese).toBe("译：Read this");
     expect(store.currentPracticeText).toBe("Read this");
     store.passCurrentStatement();
     expect(store.advanceAfterCorrect()).toBe(false);
     await flushPromises();
-    expect(translatePracticeStep).toHaveBeenLastCalledWith("then write.");
+    expect(translatePracticeStep).toHaveBeenLastCalledWith("Read this, then write.");
     expect(course.resumeStepIndex).toBe(1);
 
     setActivePinia(createPinia());
     store = await setup();
-    expect(translatePracticeStep).toHaveBeenCalledTimes(2);
+    expect(translatePracticeStep).toHaveBeenCalledTimes(3);
     expect(store.currentPracticeText).toBe("then write.");
     store.passCurrentStatement();
     store.advanceAfterCorrect();
     await flushPromises();
-    expect(translatePracticeStep).toHaveBeenLastCalledWith("Read this, then write.");
+    expect(translatePracticeStep).toHaveBeenLastCalledWith("Birds sing.");
     store.passCurrentStatement();
     store.advanceAfterCorrect();
     await flushPromises();
-    expect(translatePracticeStep).toHaveBeenLastCalledWith("Birds sing.");
+    expect(translatePracticeStep).toHaveBeenCalledTimes(4);
     expect(store.precedingSentences[0].chinese).toBe("译：Read this, then write.");
     store.passCurrentStatement();
     expect(store.advanceAfterCorrect()).toBe(true);
@@ -103,7 +128,9 @@ describe("lazy sentence practice", () => {
     await store.ensureCurrentTranslation();
     expect(store.translationError).toBe("");
     expect(store.currentStatement?.sentenceChinese).toBe("译：Read this");
-    expect(translatePracticeStep).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(translatePracticeStep).mock.calls.filter(([text]) => text === "Read this"),
+    ).toHaveLength(1);
   });
 
   it("revisits a passed sentence as a whole and returns to the unfinished segment", async () => {
@@ -141,5 +168,117 @@ describe("lazy sentence practice", () => {
     await store.ensureCurrentTranslation();
     expect(store.currentStatement?.sentenceChinese).toBe("读这个");
     expect(store.translationError).toBe("");
+  });
+
+  it("joins an in-flight prefetch and blocks answering until it is saved", async () => {
+    let finishNext!: (value: { chinese: string }) => void;
+    vi.mocked(translatePracticeStep).mockImplementation(async (text) => {
+      if (text === "then write.")
+        return new Promise((resolve) => {
+          finishNext = resolve;
+        });
+      return { chinese: `译：${text}` };
+    });
+    const store = await setup();
+    expect(store.translationReady).toBe(true);
+    expect(store.translationLoading).toBe(false);
+    expect(translatePracticeStep).toHaveBeenCalledTimes(2);
+
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    const joined = store.ensureCurrentTranslation();
+    expect(store.currentPracticeText).toBe("then write.");
+    expect(store.translationLoading).toBe(true);
+    expect(store.translationReady).toBe(false);
+    expect(store.checkCorrect("then write.")).toBe(false);
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.currentPracticeText).toBe("then write.");
+    expect(translatePracticeStep).toHaveBeenCalledTimes(2);
+
+    finishNext({ chinese: "然后写。" });
+    await joined;
+    await flushPromises();
+    expect(store.translationReady).toBe(true);
+    expect(store.currentStatement?.sentenceChinese).toBe("然后写。");
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "Read this",
+      "then write.",
+      "Read this, then write.",
+    ]);
+  });
+
+  it("keeps a background failure silent until that step becomes current", async () => {
+    let nextAttempts = 0;
+    vi.mocked(translatePracticeStep).mockImplementation(async (text) => {
+      if (text === "then write." && ++nextAttempts <= 2) throw new Error("请求超时");
+      return { chinese: `译：${text}` };
+    });
+    const store = await setup();
+    expect(store.translationError).toBe("");
+    expect(store.translationReady).toBe(true);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.translationError).toBe("请求超时");
+    expect(store.translationReady).toBe(false);
+    await store.ensureCurrentTranslation();
+    expect(store.translationError).toBe("");
+    expect(store.translationReady).toBe(true);
+    expect(nextAttempts).toBe(3);
+  });
+
+  it("retries a failed prefetch write without translating that step twice", async () => {
+    let nextWrites = 0;
+    vi.mocked(saveLocalExerciseTranslation).mockImplementation(
+      async (_pack, _course, _index, step) => {
+        if (step === 1 && ++nextWrites === 1) throw new Error("保存失败");
+      },
+    );
+    const store = await setup();
+    expect(store.translationError).toBe("");
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.translationReady).toBe(true);
+    expect(nextWrites).toBe(2);
+    expect(
+      vi.mocked(translatePracticeStep).mock.calls.filter(([text]) => text === "then write."),
+    ).toHaveLength(1);
+  });
+
+  it("prefetches only whole sentences after completing the first pass", async () => {
+    course.completionCount = 1;
+    course.resumeStatementIndex = null;
+    const store = await setup();
+    expect(store.currentPracticeText).toBe("Read this, then write.");
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "Read this, then write.",
+      "Birds sing.",
+    ]);
+  });
+
+  it("uses a saved next-step translation without requesting it again", async () => {
+    course.statements[0].stepTranslations = { 1: "然后写。" };
+    const store = await setup();
+    expect(store.currentStatement?.sentenceChinese).toBe("译：Read this");
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "Read this",
+    ]);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.currentStatement?.sentenceChinese).toBe("然后写。");
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "Read this",
+      "Read this, then write.",
+    ]);
+  });
+
+  it("does not prefetch translations for an old comma-segment course", async () => {
+    course.practiceSequence = "comma-segments-v1";
+    for (const statement of course.statements) statement.sentenceChinese = "旧练习译文";
+    await setup();
+    expect(translatePracticeStep).not.toHaveBeenCalled();
   });
 });

@@ -89,6 +89,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   const translationLoading = ref(false);
   const translationError = ref("");
   const fetchedTranslations = new Map<string, string>();
+  const pendingTranslations = new Map<string, Promise<string>>();
   let translationRequest = 0;
   const fulltextCompleted = ref(false);
   const isRecovering = computed(() => recoveryUnitId.value !== undefined);
@@ -107,6 +108,9 @@ export const useExerciseStore = defineStore("exercise", () => {
   let pendingProgressWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
   const isLazy = computed(() => currentCourse.value?.practiceSequence === "lazy-comma-segments-v1");
+  const translationReady = computed(
+    () => !isLazy.value || Boolean(currentStatement.value?.sentenceChinese?.trim()),
+  );
   function lazySpans(index = statementIndex.value) {
     const sentence = currentCourse.value?.statements[index]?.english ?? "";
     return practiceSpans(sentence);
@@ -241,6 +245,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   function canJumpToStatement(index: number) {
     const statement = baseStatements.value[index];
     return (
+      translationReady.value &&
       Number.isInteger(index) &&
       statement !== undefined &&
       index !== questionIndex.value &&
@@ -249,23 +254,24 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   function toSpecificStatement(index: number) {
+    if (!translationReady.value) return false;
     if (isFulltext.value && !canJumpToStatement(index)) return false;
     setQuestionIndex(index, !isFulltext.value);
     return true;
   }
 
   function toPreviousStatement() {
-    if (isFulltext.value) return;
+    if (isFulltext.value || !translationReady.value) return;
     setQuestionIndex(questionIndex.value - 1, true);
   }
 
   function toNextStatement() {
-    if (isFulltext.value) return;
+    if (isFulltext.value || !translationReady.value) return;
     setQuestionIndex(questionIndex.value + 1, true);
   }
 
   function resetStatementIndex() {
-    if (isFulltext.value) return;
+    if (isFulltext.value || !translationReady.value) return;
     setQuestionIndex(0, true);
   }
 
@@ -374,6 +380,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   /** Returns true only after the final base question has been answered. */
   function advanceAfterCorrect(): boolean {
+    if (!translationReady.value) return false;
     // Historic unit passes and an answer panel cannot unlock the next fulltext question.
     if (isFulltext.value && (!currentAnswerAccepted.value || fulltextCompleted.value)) return false;
     currentAnswerAccepted.value = false;
@@ -432,7 +439,11 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function checkCorrect(input: string) {
     const statement = currentStatement.value;
-    return statement !== undefined && checkClozeAnswer(statement.english, input);
+    return (
+      translationReady.value &&
+      statement !== undefined &&
+      checkClozeAnswer(statement.english, input)
+    );
   }
 
   function isStatementPassed(statement: Statement) {
@@ -442,7 +453,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   function passCurrentStatement() {
     const course = currentCourse.value;
     const statement = currentStatement.value;
-    if (!course || !statement) return;
+    if (!course || !statement || !translationReady.value) return;
 
     currentAnswerAccepted.value = true;
 
@@ -485,6 +496,9 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   async function setup(coursePackId: string, courseId: string) {
+    translationRequest++;
+    translationLoading.value = false;
+    translationError.value = "";
     const coursePack = await getLocalExercise(coursePackId);
     const course = coursePack?.courses.find((item) => item.id === courseId);
     if (!course) throw new Error("本地找不到该练习卡片");
@@ -586,36 +600,30 @@ export const useExerciseStore = defineStore("exercise", () => {
     refreshCurrentStatement();
     if (!practiceModeAvailability.progressive || !practiceModeAvailability.single)
       persistProgress();
-    if (isLazy.value) await ensureCurrentTranslation();
+    if (isLazy.value) void ensureCurrentTranslation();
   }
 
-  async function ensureCurrentTranslation() {
-    if (!isLazy.value) return;
-    const course = currentCourse.value;
-    const base = course?.statements[statementIndex.value];
-    if (!course || !base) return;
-    const index = statementIndex.value;
-    const step = lazyStepIndex.value;
-    const request = ++translationRequest;
-    const key = `${course.coursePackId}:${course.id}:${base.id}:${step}`;
-    translationError.value = "";
+  function translationKey(course: Course, index: number, step: number) {
+    return `${course.coursePackId}:${course.id}:${course.statements[index].id}:${step}`;
+  }
+
+  function loadStepTranslation(course: Course, index: number, step: number): Promise<string> {
+    const base = course.statements[index];
     const cached = base.stepTranslations?.[step];
-    if (cached) {
-      translationLoading.value = false;
-      refreshCurrentStatement();
-      return;
-    }
-    translationLoading.value = true;
-    try {
+    if (cached) return Promise.resolve(cached);
+    const key = translationKey(course, index, step);
+    const pending = pendingTranslations.get(key);
+    if (pending) return pending;
+    const task = (async () => {
       let chinese = fetchedTranslations.get(key);
       if (!chinese) {
-        const [start, end] = lazySpans(index)[step];
+        const [start, end] = practiceSpans(base.english)[step];
         const result = await translatePracticeStep(base.english.slice(start, end));
         chinese = result.chinese.trim();
         if (!chinese) throw new Error("翻译服务返回空译文，请重试。");
         fetchedTranslations.set(key, chinese);
       }
-      const whole = step === lazySpans(index).length - 1;
+      const whole = step === practiceSpans(base.english).length - 1;
       await saveLocalExerciseTranslation(
         course.coursePackId,
         course.id,
@@ -626,7 +634,68 @@ export const useExerciseStore = defineStore("exercise", () => {
       );
       base.stepTranslations = { ...base.stepTranslations, [step]: chinese };
       if (whole) base.sentenceChinese = chinese;
-      if (request === translationRequest) refreshCurrentStatement();
+      return chinese;
+    })();
+    pendingTranslations.set(key, task);
+    void task
+      .finally(() => {
+        if (pendingTranslations.get(key) === task) pendingTranslations.delete(key);
+      })
+      .catch(() => {});
+    return task;
+  }
+
+  function nextLazyStep(index: number, step: number): [number, number] | undefined {
+    const course = currentCourse.value;
+    if (!course) return;
+    const lastStep = lazySpans(index).length - 1;
+    if (step < lastStep) return [index, step + 1];
+    const nextIndex = questionIndices.value[questionIndices.value.indexOf(index) + 1];
+    if (nextIndex === undefined) return;
+    const nextLastStep = lazySpans(nextIndex).length - 1;
+    if (
+      lazyReview() ||
+      (course.resumeStatementIndex !== index && course.resumeStatementIndex !== nextIndex)
+    )
+      return [nextIndex, nextLastStep];
+    if (course.resumeStatementIndex === index) return [nextIndex, 0];
+    return [nextIndex, Math.min(course.resumeStepIndex ?? 0, nextLastStep)];
+  }
+
+  function prefetchNextTranslation(course: Course, index: number, step: number) {
+    if (
+      currentCourse.value !== course ||
+      statementIndex.value !== index ||
+      lazyStepIndex.value !== step
+    )
+      return;
+    const next = nextLazyStep(index, step);
+    if (next) void loadStepTranslation(course, next[0], next[1]).catch(() => {});
+  }
+
+  async function ensureCurrentTranslation() {
+    if (!isLazy.value) return;
+    const course = currentCourse.value;
+    const base = course?.statements[statementIndex.value];
+    if (!course || !base) return;
+    const index = statementIndex.value;
+    const step = lazyStepIndex.value;
+    const request = ++translationRequest;
+    translationError.value = "";
+    const cached = base.stepTranslations?.[step];
+    if (cached) {
+      translationLoading.value = false;
+      currentStatement.value!.sentenceChinese = cached;
+      prefetchNextTranslation(course, index, step);
+      return;
+    }
+    translationLoading.value = true;
+    try {
+      const chinese = await loadStepTranslation(course, index, step);
+      if (request === translationRequest) {
+        currentStatement.value!.sentenceChinese = chinese;
+        prefetchNextTranslation(course, index, step);
+      }
     } catch (error) {
       if (request === translationRequest)
         translationError.value = error instanceof Error ? error.message : "翻译失败，请重试。";
@@ -641,6 +710,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     currentStatement,
     translationLoading,
     translationError,
+    translationReady,
     ensureCurrentTranslation,
     learningMode,
     canUseSentenceFirst,

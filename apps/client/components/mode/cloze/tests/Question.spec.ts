@@ -156,6 +156,36 @@ describe("answer availability", () => {
     hideContents();
   });
 
+  it("shows lazy translation status in the prompt and locks input until ready", async () => {
+    const { store, wrapper } = await setup();
+    store.currentCourse!.practiceSequence = "lazy-comma-segments-v1";
+    store.currentStatement!.sentenceChinese = "";
+    store.translationLoading = true;
+    await wrapper.vm.$nextTick();
+    const prompt = wrapper.get('[data-testid="question-prompt"]').element;
+    const input = wrapper.get('input[aria-label="填写当前英文单元"]');
+    expect(wrapper.get('[data-testid="question-prompt"]').text()).toContain("正在翻译当前题");
+    expect(input.attributes("disabled")).toBeDefined();
+    expect(store.advanceAfterCorrect()).toBe(false);
+
+    store.translationLoading = false;
+    store.translationError = "请求超时";
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[data-testid="question-prompt"]').element).toBe(prompt);
+    expect(wrapper.get('[role="alert"]').text()).toBe("请求超时");
+    const retry = vi.spyOn(store, "ensureCurrentTranslation").mockResolvedValue(undefined);
+    await wrapper.get('[data-testid="question-prompt"] button').trigger("click");
+    expect(retry).toHaveBeenCalledOnce();
+    expect(input.attributes("disabled")).toBeDefined();
+
+    store.translationError = "";
+    store.currentStatement!.sentenceChinese = "猫安静地睡觉。";
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[data-testid="question-prompt"]').element).toBe(prompt);
+    expect(wrapper.get('[data-testid="question-prompt"]').text()).toBe("猫安静地睡觉。");
+    expect(input.attributes("disabled")).toBeUndefined();
+  });
+
   it("updates a query read before course setup and after reloading the same current unit", async () => {
     const store = useExerciseStore();
     expect(store.canDecomposeCurrentUnit).toBe(false);
