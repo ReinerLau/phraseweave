@@ -3,9 +3,9 @@
     <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
-        <h1 class="mt-1 text-3xl font-bold">整句逐词练习生成器</h1>
+        <h1 class="mt-1 text-3xl font-bold">分段与整句练习生成器</h1>
         <p class="mt-2 max-w-2xl text-sm opacity-75">
-          在本机分句，并使用 Index-Translate 生成整句中文提示。英文原句会发送至 Bilibili。
+          在本机分句并按逗号分段，分别翻译各段与整句。英文内容会发送至 Bilibili。
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -133,7 +133,7 @@
           type="submit"
           :disabled="!canGenerate"
         >
-          生成整句练习
+          生成分段练习
         </button>
         <p class="text-sm opacity-70">
           <template v-if="!serviceConnected"
@@ -406,7 +406,7 @@ function receiveCaptureText(text: string) {
     return;
   }
   englishText.value = text;
-  captureStatus.value = "选中文本已填入下方，可编辑文本并选择导出格式，再点击“生成整句练习”。";
+  captureStatus.value = "选中文本已填入下方，可编辑文本并选择导出格式，再点击“生成分段练习”。";
 }
 
 async function connectService() {

@@ -17,12 +17,14 @@
         data-testid="cloze-sentence"
       >
         <SpeakableText
+          v-if="!courseStore.isCommaSegmentQuestion"
           class="cloze-context"
           :text="courseStore.currentStatement?.contextBefore"
         /><MainQuestionInput
           inline
           @hint-change="updatePhoneticHint"
         /><SpeakableText
+          v-if="!courseStore.isCommaSegmentQuestion"
           class="cloze-context"
           :text="courseStore.currentStatement?.contextAfter"
         /><span
