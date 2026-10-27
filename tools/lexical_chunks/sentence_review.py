@@ -1,4 +1,4 @@
-"""Split source text into sentences and export sentence-only practice."""
+"""Split source text into sentences and comma-segment practice."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import re
 from collections.abc import Sequence
 
 SCHEMA_VERSION = 4
+PRACTICE_SEQUENCE = "comma-segments-v1"
 ABBREVIATIONS = frozenset(
     {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc", "e.g", "i.e"}
 )
@@ -83,28 +84,66 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def render_markdown(sentences: Sequence[str], chinese: Sequence[str]) -> str:
-    lines = ["# 整句逐词复现", ""]
-    for index, (sentence, prompt) in enumerate(zip(sentences, chinese, strict=True), start=1):
-        lines.extend([f"## 第 {index} 句", "", f"中文提示：{prompt}", "", sentence, ""])
+def practice_spans(sentence: str) -> list[tuple[int, int]]:
+    """Return clauses with words, then the complete sentence."""
+    segments: list[tuple[int, int]] = []
+
+    def append_segment(start: int, end: int) -> None:
+        while start < end and sentence[start].isspace():
+            start += 1
+        while end > start and sentence[end - 1].isspace():
+            end -= 1
+        if any(character.isalnum() for character in sentence[start:end]):
+            segments.append((start, end))
+
+    start = 0
+    for index, character in enumerate(sentence):
+        if character != "," or (
+            index > 0 and index + 1 < len(sentence)
+            and sentence[index - 1].isdigit() and sentence[index + 1].isdigit()
+        ):
+            continue
+        append_segment(start, index)
+        start = index + 1
+    append_segment(start, len(sentence))
+    return segments + [(0, len(sentence))] if len(segments) > 1 else [(0, len(sentence))]
+
+
+def render_markdown(sentences: Sequence[str], chinese: Sequence[Sequence[str]]) -> str:
+    lines = ["# 逗号分段与整句复现", ""]
+    for index, (sentence, prompts) in enumerate(zip(sentences, chinese, strict=True), start=1):
+        spans = practice_spans(sentence)
+        if len(prompts) != len(spans):
+            raise ValueError("Translation count does not match practice spans.")
+        lines.extend([f"## 第 {index} 句", ""])
+        for step, ((start, end), prompt) in enumerate(zip(spans, prompts, strict=True), start=1):
+            label = "整句" if step == len(spans) else f"第 {step} 段"
+            lines.extend([f"### {label}", "", f"中文提示：{prompt}", "", sentence[start:end], ""])
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_phraseweave(sentences: Sequence[str], chinese: Sequence[str]) -> str:
-    statements = [
-        {
-            "english": sentence,
-            "context_before": "",
-            "context_after": "",
-            "sentence_chinese": prompt,
-            "unit_id": f"{index}:0",
-            "source_unit_ids": [],
-        }
-        for index, (sentence, prompt) in enumerate(zip(sentences, chinese, strict=True))
-    ]
+def render_phraseweave(sentences: Sequence[str], chinese: Sequence[Sequence[str]]) -> str:
+    statements = []
+    for index, (sentence, prompts) in enumerate(zip(sentences, chinese, strict=True)):
+        spans = practice_spans(sentence)
+        if len(prompts) != len(spans):
+            raise ValueError("Translation count does not match practice spans.")
+        for step, ((start, end), prompt) in enumerate(zip(spans, prompts, strict=True)):
+            statements.append({
+                "english": sentence[start:end],
+                "context_before": sentence[:start],
+                "context_after": sentence[end:],
+                "sentence_chinese": prompt,
+                "unit_id": f"{index}:{step}",
+                "source_unit_ids": [],
+            })
     return (
         json.dumps(
-            {"schema_version": SCHEMA_VERSION, "statements": statements},
+            {
+                "schema_version": SCHEMA_VERSION,
+                "practice_sequence": PRACTICE_SEQUENCE,
+                "statements": statements,
+            },
             ensure_ascii=False,
             indent=2,
         )

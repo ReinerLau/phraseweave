@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
-from sentence_review import render_markdown, render_phraseweave, split_sentences
+from sentence_review import practice_spans, render_markdown, render_phraseweave, split_sentences
 
 
 def _read_request() -> Mapping[str, Any]:
@@ -54,9 +54,20 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Choose a supported translation provider.")
 
     sentences = split_sentences(text)
-    chinese = translate_sentences(sentences, provider, lambda message: _emit({"progress": message}))
-    if len(chinese) != len(sentences) or any(not line for line in chinese):
-        raise RuntimeError("The translation engine did not return one prompt for each sentence.")
+    spans_by_sentence = [practice_spans(sentence) for sentence in sentences]
+    texts = [
+        sentence[start:end]
+        for sentence, spans in zip(sentences, spans_by_sentence, strict=True)
+        for start, end in spans
+    ]
+    translated = translate_sentences(texts, provider, lambda message: _emit({"progress": message}))
+    if len(translated) != len(texts) or any(not line for line in translated):
+        raise RuntimeError("The translation engine did not return one prompt for each practice step.")
+    chinese = []
+    offset = 0
+    for spans in spans_by_sentence:
+        chinese.append(translated[offset:offset + len(spans)])
+        offset += len(spans)
     markdown = (
         render_markdown(sentences, chinese)
         if output_format in {"markdown", "both"}

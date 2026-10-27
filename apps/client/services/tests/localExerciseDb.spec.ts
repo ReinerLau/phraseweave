@@ -35,6 +35,19 @@ describe("normalizeExerciseImport", () => {
       "Birdsong is good.",
       "Birds sing.",
     ]);
+    expect(pack.courses[0].practiceSequence).toBeUndefined();
+  });
+
+  it("keeps the new practice sequence on import without changing legacy files", () => {
+    const [pack] = normalizeExerciseImport({
+      schema_version: 4,
+      practice_sequence: "comma-segments-v1",
+      statements: [{ ...firstUnit, english: "Birdsong is good.", context_after: "" }],
+    });
+    expect(pack.courses[0].practiceSequence).toBe("comma-segments-v1");
+    expect(
+      normalizeExerciseImport(JSON.parse(JSON.stringify([pack])))[0].courses[0].practiceSequence,
+    ).toBe("comma-segments-v1");
   });
 
   it("converts a schema 4 cloze backup into a local course pack", () => {

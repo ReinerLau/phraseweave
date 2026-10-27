@@ -16,6 +16,7 @@
       data-testid="answer-sentence"
     >
       <SpeakableText
+        v-if="!courseStore.isCommaSegmentQuestion"
         class="cloze-context"
         :text="courseStore.currentStatement?.contextBefore"
       />
@@ -40,9 +41,10 @@
         ></span>
       </div>
       <SpeakableText
+        v-if="!courseStore.isCommaSegmentQuestion"
         class="cloze-context"
         :text="courseStore.currentStatement?.contextAfter"
-      /><SentenceAudioButton :text="courseStore.originalSentence" />
+      /><SentenceAudioButton :text="courseStore.currentPracticeText" />
     </div>
     <div
       v-if="courseStore.currentStatement?.soundmark"

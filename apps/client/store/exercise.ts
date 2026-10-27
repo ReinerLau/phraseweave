@@ -49,6 +49,8 @@ export interface Course {
   statements: Statement[];
   coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
+  /** Identifies the comma-segment sequence generated for new exercises. */
+  practiceSequence?: "comma-segments-v1";
   /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
   /** Unfinished base question in the original statements; null after completing a run. */
@@ -62,6 +64,14 @@ export interface Course {
 
 function unitPassKey(statement: Statement) {
   return statement.unitId ? `unit:${statement.unitId}` : `statement:${statement.id}`;
+}
+
+function hasFinishedFirstPass(course: Course) {
+  return (
+    course.completionCount > 0 ||
+    course.resumeStatementIndex === null ||
+    course.learningMode === "sentence-first"
+  );
 }
 
 export const useExerciseStore = defineStore("exercise", () => {
@@ -164,6 +174,19 @@ export const useExerciseStore = defineStore("exercise", () => {
     if (!statement) return "";
     return (statement.contextBefore ?? "") + statement.english + (statement.contextAfter ?? "");
   });
+  const isCommaSegmentQuestion = computed(() => {
+    const course = currentCourse.value;
+    const group = sentenceGroups.value?.[currentSentenceIndex.value];
+    return (
+      course?.practiceSequence === "comma-segments-v1" &&
+      group !== undefined &&
+      currentStatement.value !== undefined &&
+      currentStatement.value?.id !== course.statements[group.end].id
+    );
+  });
+  const currentPracticeText = computed(() =>
+    isCommaSegmentQuestion.value ? currentStatement.value?.english ?? "" : originalSentence.value,
+  );
 
   const clozeTokens = computed(() => tokenizeClozeText(currentStatement.value?.english ?? ""));
   const words = computed(() =>
@@ -333,7 +356,13 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   function doAgain() {
-    if (currentCourse.value) currentCourse.value.sentenceFirstStartIndex = undefined;
+    if (currentCourse.value) {
+      const course = currentCourse.value;
+      course.sentenceFirstStartIndex = undefined;
+      if (course.practiceSequence === "comma-segments-v1") {
+        course.learningMode = hasFinishedFirstPass(course) ? "sentence-first" : "progressive";
+      }
+    }
     setQuestionIndex(0, true);
     updateActiveCourseMap(currentCourse.value?.coursePackId!, currentCourse.value?.id!);
   }
@@ -385,6 +414,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
     coursePack.courses[currentIndex].completionCount += 1;
     await saveLocalExercise(coursePack);
+    course.completionCount = coursePack.courses[currentIndex].completionCount;
 
     return { nextCourse: coursePack.courses[currentIndex + 1] };
   }
@@ -402,7 +432,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     ) {
       throw new Error("该练习缺少原句分组或完整中文提示，请重新生成以使用整句优先和全文模式。");
     }
-    if (!practiceModeAvailability.progressive) {
+    if (!practiceModeAvailability.progressive && course.practiceSequence !== "comma-segments-v1") {
       course.learningMode = "sentence-first";
       course.sentenceFirstStartIndex = undefined;
     }
@@ -413,6 +443,15 @@ export const useExerciseStore = defineStore("exercise", () => {
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
       : 0;
     currentCourse.value = course;
+    if (course.practiceSequence === "comma-segments-v1") {
+      const completedRun = course.resumeStatementIndex === null;
+      course.learningMode = hasFinishedFirstPass(course) ? "sentence-first" : "progressive";
+      course.sentenceFirstStartIndex = undefined;
+      if (completedRun) {
+        course.statementIndex = sentenceFirstIndices(groups ?? [])[0] ?? 0;
+        course.resumeStatementIndex = course.statementIndex;
+      }
+    }
     if (course.practiceView !== "fulltext" || !canUseFulltext.value) course.practiceView = "single";
     currentAnswerAccepted.value = false;
     fulltextCompleted.value = false;
@@ -489,6 +528,8 @@ export const useExerciseStore = defineStore("exercise", () => {
     isAnsweringBaseUnit,
     words,
     originalSentence,
+    isCommaSegmentQuestion,
+    currentPracticeText,
     clozeTokens,
     totalQuestionsCount,
     setup,

@@ -96,6 +96,103 @@ describe("temporary practice mode restriction", () => {
     expect(store.baseStatements.map((unit) => unit.id)).toEqual(["0:2", "1:2"]);
   });
 
+  it("starts new comma practice with isolated parts and reviews whole sentences after completion", async () => {
+    course.practiceSequence = "comma-segments-v1";
+    course.statements = [
+      {
+        id: "part-a",
+        order: 1,
+        english: "Read this",
+        contextBefore: "",
+        contextAfter: ", then write.",
+        sentenceChinese: "读这个",
+        unitId: "0:0",
+        sourceUnitIds: [],
+      },
+      {
+        id: "part-b",
+        order: 2,
+        english: "then write.",
+        contextBefore: "Read this, ",
+        contextAfter: "",
+        sentenceChinese: "然后写。",
+        unitId: "0:1",
+        sourceUnitIds: [],
+      },
+      {
+        id: "whole-a",
+        order: 3,
+        english: "Read this, then write.",
+        contextBefore: "",
+        contextAfter: "",
+        sentenceChinese: "读这个，然后写。",
+        unitId: "0:2",
+        sourceUnitIds: [],
+      },
+      {
+        id: "whole-b",
+        order: 4,
+        english: "Birds sing.",
+        contextBefore: "",
+        contextAfter: "",
+        sentenceChinese: "鸟在歌唱。",
+        unitId: "1:0",
+        sourceUnitIds: [],
+      },
+    ];
+    let store = await setup();
+    expect(store.learningMode).toBe("progressive");
+    expect(store.baseStatements.map((unit) => unit.id)).toEqual([
+      "part-a",
+      "part-b",
+      "whole-a",
+      "whole-b",
+    ]);
+    expect(store.isCommaSegmentQuestion).toBe(true);
+    expect(store.currentPracticeText).toBe("Read this");
+    store.doAgain();
+    expect(store.learningMode).toBe("progressive");
+    expect(store.currentStatement?.id).toBe("part-a");
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(false);
+    expect(store.currentPracticeText).toBe("then write.");
+    await flushPromises();
+
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.statementIndex).toBe(1);
+    expect(store.learningMode).toBe("progressive");
+    for (const next of ["whole-a", "whole-b"]) {
+      store.passCurrentStatement();
+      expect(store.advanceAfterCorrect()).toBe(false);
+      expect(store.currentStatement?.id).toBe(next);
+    }
+    expect(store.isCommaSegmentQuestion).toBe(false);
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(true);
+    await store.completeCourse();
+    store.doAgain();
+    expect(store.learningMode).toBe("sentence-first");
+    expect(store.baseStatements.map((unit) => unit.id)).toEqual(["whole-a", "whole-b"]);
+    expect(store.currentStatement?.id).toBe("whole-a");
+    expect(store.currentPracticeText).toBe("Read this, then write.");
+
+    course.resumeStatementIndex = null;
+    course.statementIndex = 3;
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.learningMode).toBe("sentence-first");
+    expect(store.currentStatement?.id).toBe("whole-a");
+    expect(store.resumeQuestionIndex).toBe(0);
+
+    course.completionCount = 0;
+    course.resumeStatementIndex = 2;
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.learningMode).toBe("sentence-first");
+    expect(store.currentStatement?.id).toBe("whole-a");
+  });
+
   it("keeps recovery within the sentence, resumes after reload, settles and restarts", async () => {
     let store = await setup();
     expect(store.advanceAfterCorrect()).toBe(false);

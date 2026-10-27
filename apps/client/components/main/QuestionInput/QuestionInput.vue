@@ -442,7 +442,7 @@ function handleAnswerRight() {
   cancelErrorReset();
   cancelWordFeedback();
   clearPhoneticHint();
-  const sentence = courseStore.originalSentence;
+  const sentence = courseStore.currentPracticeText;
   courseStore.passCurrentStatement();
   if (courseStore.isAnsweringBaseUnit) {
     courseTimer.timeEnd(String(courseStore.statementIndex)); // 回退题计入原题耗时
