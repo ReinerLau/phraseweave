@@ -34,6 +34,11 @@ interface LexicalChunksBackup {
   practice_sequence?: "comma-segments-v1";
   statements: LexicalChunksStatementV4[];
 }
+interface LazySentenceBackup {
+  schema_version: 5;
+  practice_sequence: "lazy-comma-segments-v1";
+  statements: Omit<LexicalChunksStatementV4, "sentence_chinese">[];
+}
 
 export interface ExerciseImportOptions {
   title?: string;
@@ -247,12 +252,25 @@ export function mergeLocalExerciseProgress(
               sentenceFirstStartIndex: previous.sentenceFirstStartIndex,
               practiceView: previous.practiceView,
               resumeStatementIndex: previous.resumeStatementIndex,
+              resumeStepIndex: previous.resumeStepIndex,
             }
           : { statementIndex: Math.max(previous.statementIndex ?? 0, course.statementIndex ?? 0) }),
         completionCount: Math.max(previous.completionCount ?? 0, course.completionCount ?? 0),
         passedUnitIds: [
           ...new Set([...(previous.passedUnitIds ?? []), ...(course.passedUnitIds ?? [])]),
         ],
+        statements:
+          course.practiceSequence === "lazy-comma-segments-v1"
+            ? course.statements.map((statement, index) => ({
+                ...statement,
+                stepTranslations: {
+                  ...statement.stepTranslations,
+                  ...previous.statements[index]?.stepTranslations,
+                },
+                sentenceChinese:
+                  previous.statements[index]?.sentenceChinese || statement.sentenceChinese,
+              }))
+            : course.statements,
       };
     }),
   };
@@ -267,6 +285,7 @@ export async function saveLocalExerciseProgress(
     sentenceFirstStartIndex: number | null;
     practiceView?: PracticeView;
     resumeStatementIndex?: number | null;
+    resumeStepIndex?: number;
   },
 ) {
   if (typeof window === "undefined") return;
@@ -289,6 +308,7 @@ export async function saveLocalExerciseProgress(
         if (state.resumeStatementIndex !== undefined) {
           course.resumeStatementIndex = state.resumeStatementIndex;
         }
+        if (state.resumeStepIndex !== undefined) course.resumeStepIndex = state.resumeStepIndex;
       }
       store.put(coursePack);
     };
@@ -301,6 +321,51 @@ export async function saveLocalExerciseProgress(
     statementIndex,
     ...state,
   });
+}
+
+export async function saveLocalExerciseTranslation(
+  coursePackId: string,
+  courseId: string,
+  statementIndex: number,
+  stepIndex: number,
+  chinese: string,
+  whole: boolean,
+) {
+  if (typeof window === "undefined") return;
+  if (!usesSharedStorage()) {
+    const database = await openDatabase();
+    const transaction = database.transaction(PACK_STORE, "readwrite");
+    const done = transactionComplete(transaction);
+    const store = transaction.objectStore(PACK_STORE);
+    const request = store.get(coursePackId);
+    request.onsuccess = () => {
+      const pack = request.result as ExerciseResponse | undefined;
+      const statement = pack?.courses.find((course) => course.id === courseId)?.statements[
+        statementIndex
+      ];
+      if (!pack || !statement) {
+        transaction.abort();
+        return;
+      }
+      statement.stepTranslations = { ...statement.stepTranslations, [stepIndex]: chinese };
+      if (whole) statement.sentenceChinese = chinese;
+      store.put(pack);
+    };
+    await done;
+    return;
+  }
+  await migrateLegacyData();
+  await localRequest(
+    `/api/local-exercises/${encodeURIComponent(coursePackId)}/translations`,
+    "PUT",
+    {
+      courseId,
+      statementIndex,
+      stepIndex,
+      chinese,
+      whole,
+    },
+  );
 }
 
 export async function saveLocalExerciseUnitPassed(
@@ -392,8 +457,13 @@ export function normalizeExerciseImport(
     return title ? [{ ...coursePacks[0], title }] : coursePacks;
   }
 
-  if (!isLexicalChunksBackup(value)) throw new Error("旧版练习请重新生成后导入");
-  if (!value.statements.every(isLexicalChunksStatementV4)) {
+  if (!isLexicalChunksBackup(value) && !isLazySentenceBackup(value))
+    throw new Error("旧版练习请重新生成后导入");
+  if (
+    !value.statements.every(
+      value.schema_version === 5 ? isLazySentenceStatement : isLexicalChunksStatementV4,
+    )
+  ) {
     throw new Error("备份文件包含无效练习");
   }
   if (!hasValidSources(value.statements)) {
@@ -410,7 +480,7 @@ export function normalizeExerciseImport(
     english: statement.english,
     contextBefore: statement.context_before,
     contextAfter: statement.context_after,
-    sentenceChinese: statement.sentence_chinese,
+    sentenceChinese: "sentence_chinese" in statement ? statement.sentence_chinese : undefined,
     unitId: statement.unit_id,
     sourceUnitIds: statement.source_unit_ids,
   }));
@@ -487,8 +557,9 @@ function isExerciseResponse(value: unknown): value is ExerciseResponse {
             statement.english.trim().length > 0 &&
             typeof statement.contextBefore === "string" &&
             typeof statement.contextAfter === "string" &&
-            typeof statement.sentenceChinese === "string" &&
-            statement.sentenceChinese.trim().length > 0,
+            (course.practiceSequence === "lazy-comma-segments-v1" ||
+              (typeof statement.sentenceChinese === "string" &&
+                statement.sentenceChinese.trim().length > 0)),
         ),
     )
   );
@@ -502,6 +573,36 @@ function isLexicalChunksBackup(value: unknown): value is LexicalChunksBackup {
     (backup.practice_sequence === undefined || backup.practice_sequence === "comma-segments-v1") &&
     Array.isArray(backup.statements) &&
     backup.statements.length > 0
+  );
+}
+
+function isLazySentenceBackup(value: unknown): value is LazySentenceBackup {
+  if (!value || typeof value !== "object") return false;
+  const backup = value as Partial<LazySentenceBackup>;
+  return (
+    backup.schema_version === 5 &&
+    backup.practice_sequence === "lazy-comma-segments-v1" &&
+    Array.isArray(backup.statements) &&
+    backup.statements.length > 0
+  );
+}
+
+function isLazySentenceStatement(
+  value: unknown,
+): value is LazySentenceBackup["statements"][number] {
+  if (!value || typeof value !== "object") return false;
+  const statement = value as Partial<LazySentenceBackup["statements"][number]>;
+  return (
+    typeof statement.english === "string" &&
+    statement.english.trim().length > 0 &&
+    typeof statement.context_before === "string" &&
+    typeof statement.context_after === "string" &&
+    statement.context_before === "" &&
+    statement.context_after === "" &&
+    typeof statement.unit_id === "string" &&
+    statement.unit_id.length > 0 &&
+    Array.isArray(statement.source_unit_ids) &&
+    statement.source_unit_ids.length === 0
   );
 }
 
@@ -523,9 +624,11 @@ function isLexicalChunksStatementV4(value: unknown): value is LexicalChunksState
   );
 }
 
-function hasValidSources(statements: LexicalChunksStatementV4[]): boolean {
+function hasValidSources(
+  statements: Array<LexicalChunksStatementV4 | LazySentenceBackup["statements"][number]>,
+): boolean {
   const firstById = new Map<string, number>();
-  const canonical = new Map<string, LexicalChunksStatementV4>();
+  const canonical = new Map<string, (typeof statements)[number]>();
   statements.forEach((statement, index) => {
     if (!firstById.has(statement.unit_id)) {
       firstById.set(statement.unit_id, index);
@@ -538,7 +641,8 @@ function hasValidSources(statements: LexicalChunksStatementV4[]): boolean {
       statement.english === first.english &&
       statement.context_before === first.context_before &&
       statement.context_after === first.context_after &&
-      statement.sentence_chinese === first.sentence_chinese &&
+      ("sentence_chinese" in statement ? statement.sentence_chinese : undefined) ===
+        ("sentence_chinese" in first ? first.sentence_chinese : undefined) &&
       JSON.stringify(statement.source_unit_ids) === JSON.stringify(first.source_unit_ids);
     const sources = statement.source_unit_ids;
     const sourceOrderValid =

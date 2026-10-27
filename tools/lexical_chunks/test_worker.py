@@ -23,59 +23,54 @@ class InMemoryOutputTests(TestCase):
 class SentenceGenerationTests(TestCase):
     def test_generation_exports_one_whole_statement_per_sentence_without_commas(self):
         with (
-            patch("worker.translate_sentences", return_value=["猫在睡觉。", "鸟在歌唱。"]) as translate,
+            patch("worker.translate_sentences") as translate,
             patch("worker.model_status", return_value={"model_downloaded": False}),
             patch("worker._emit") as emit,
         ):
             _generate({"text": "The cat sleeps. Birds sing!", "format": "both"})
 
-        self.assertEqual(translate.call_args.args[0], ["The cat sleeps.", "Birds sing!"])
+        translate.assert_not_called()
         markdown, phraseweave = emit.call_args.args[0]["outputs"]
-        self.assertIn("中文提示：猫在睡觉。", markdown["content"])
+        self.assertIn("The cat sleeps.", markdown["content"])
+        self.assertNotIn("中文提示", markdown["content"])
+        self.assertEqual(json.loads(phraseweave["content"])["schema_version"], 5)
         rows = json.loads(phraseweave["content"])["statements"]
         self.assertEqual([row["english"] for row in rows], ["The cat sleeps.", "Birds sing!"])
-        self.assertEqual([row["unit_id"] for row in rows], ["0:0", "1:0"])
+        self.assertEqual([row["unit_id"] for row in rows], ["0:whole", "1:whole"])
+        self.assertTrue(all("sentence_chinese" not in row for row in rows))
         self.assertTrue(all(row["source_unit_ids"] == [] for row in rows))
         self.assertTrue(all(row["context_before"] == row["context_after"] == "" for row in rows))
 
-    def test_generation_translates_each_comma_part_and_the_whole_independently(self):
+    def test_generation_does_not_split_or_translate_comma_parts(self):
         source = "Read this, then write, and check. Birds sing!"
-        prompts = ["读这个", "然后写", "并检查", "读这个，然后写，并检查。", "鸟儿歌唱。"]
         with (
-            patch("worker.translate_sentences", return_value=prompts) as translate,
+            patch("worker.translate_sentences") as translate,
             patch("worker._emit") as emit,
         ):
             _generate({"text": source, "format": "both"})
-        self.assertEqual(translate.call_args.args[0], [
-            "Read this", "then write", "and check.",
-            "Read this, then write, and check.", "Birds sing!",
-        ])
+        translate.assert_not_called()
         outputs = emit.call_args.args[0]["outputs"]
         rows = json.loads(outputs[1]["content"])["statements"]
-        self.assertEqual([row["sentence_chinese"] for row in rows], prompts)
-        self.assertEqual(len(rows), 5)
+        self.assertEqual([row["english"] for row in rows],
+                         ["Read this, then write, and check.", "Birds sing!"])
+        self.assertEqual(len(rows), 2)
 
-    def test_invalid_provider_is_rejected_before_sentence_split(self):
-        with patch("worker.split_sentences") as split:
-            with self.assertRaisesRegex(ValueError, "supported translation provider"):
-                _generate({"text": "Text.", "format": "both", "translationProvider": "unknown"})
-        split.assert_not_called()
+    def test_generation_ignores_translation_provider(self):
+        with patch("worker.translate_sentences") as translate, patch("worker._emit"):
+            _generate({"text": "Text.", "format": "both", "translationProvider": "unknown"})
+        translate.assert_not_called()
 
-    def test_public_failure_does_not_emit_partial_exports(self):
+    def test_single_step_failure_does_not_emit_translation(self):
         with (
             patch("worker._read_request", return_value={
-                "action": "generate", "text": "Text.", "format": "both",
+                "action": "translate", "text": "Text.",
                 "translationProvider": "index-translate",
             }),
             patch("worker.translate_sentences", side_effect=RuntimeError("第 1 句翻译失败")) as translate,
-            patch("worker.render_markdown") as markdown,
-            patch("worker.render_phraseweave") as phraseweave,
             patch("worker._emit") as emit,
         ):
             self.assertEqual(main(), 1)
         self.assertEqual(translate.call_args.args[1], "index-translate")
-        markdown.assert_not_called()
-        phraseweave.assert_not_called()
         emit.assert_called_once_with({"ok": False, "error": "第 1 句翻译失败"})
 
 

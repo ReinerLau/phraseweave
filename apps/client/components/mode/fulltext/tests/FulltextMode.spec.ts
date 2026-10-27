@@ -114,6 +114,16 @@ describe("FulltextMode", () => {
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
   });
 
+  it("uses a neutral mask for untranslated pending sentences", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.statements[1].sentenceChinese = undefined;
+    mount(FulltextMode, { global: { plugins: [pinia], stubs: { ModeClozeMode: true } } });
+    await flushPromises();
+    expect(vi.mocked(measureChineseMasks).mock.calls.at(-1)?.[1][1].chinese).toBe(
+      "待练内容暂未翻译，进入此句后显示",
+    );
+  });
+
   it("offers audio only after submitting a correct answer and on completed sentences", async () => {
     const { pinia, store } = setup();
     const wrapper = mount(FulltextMode, {

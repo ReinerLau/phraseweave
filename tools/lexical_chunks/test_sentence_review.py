@@ -1,10 +1,22 @@
 import json
 from unittest import TestCase
 
-from sentence_review import practice_spans, render_markdown, render_phraseweave, split_sentences
+from sentence_review import (practice_spans, render_lazy_markdown, render_lazy_phraseweave,
+                             render_markdown, render_phraseweave, split_sentences)
 
 
 class SentenceReviewTests(TestCase):
+    def test_lazy_export_contains_only_whole_english_sentences(self):
+        sentences = ["Read this, then write.", "Birds sing!"]
+        payload = json.loads(render_lazy_phraseweave(sentences))
+        self.assertEqual(payload["schema_version"], 5)
+        self.assertEqual(payload["practice_sequence"], "lazy-comma-segments-v1")
+        self.assertEqual([row["english"] for row in payload["statements"]], sentences)
+        self.assertTrue(all("sentence_chinese" not in row for row in payload["statements"]))
+        markdown = render_lazy_markdown(sentences)
+        self.assertIn("Read this, then write.", markdown)
+        self.assertNotIn("### 第", markdown)
+
     def test_splits_punctuation_quotes_and_paragraphs(self):
         source = '“Go now!” She left?\n\nHe stayed.'
         self.assertEqual(split_sentences(source), ['“Go now!”', 'She left?', 'He stayed.'])

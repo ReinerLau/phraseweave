@@ -96,13 +96,13 @@ class CompletedJobEndpointTests(TestCase):
         self.assertEqual(body["translationProviders"], ["local", "index-translate"])
         self.assertIsInstance(body["modelDownloaded"], bool)
 
-    def test_unknown_provider_is_rejected_without_starting_a_job(self):
+    def test_unknown_provider_is_rejected_without_translating(self):
         connection = HTTPConnection("127.0.0.1", self.port)
         try:
-            with patch("local_service.INITIALIZATION", {"state": "ready"}), patch("local_service._generate") as worker:
+            with patch("local_service.INITIALIZATION", {"state": "ready"}), patch("local_service._run_worker") as worker:
                 connection.request(
-                    "POST", "/api/generate",
-                    body=json.dumps({"text": "Text.", "format": "both", "translationProvider": "unknown"}),
+                    "POST", "/api/translate",
+                    body=json.dumps({"text": "Text.", "translationProvider": "unknown"}),
                     headers={"Origin": "http://localhost:3000", "Content-Type": "application/json"},
                 )
                 response = connection.getresponse()
@@ -112,6 +112,25 @@ class CompletedJobEndpointTests(TestCase):
             connection.close()
         self.assertEqual(response.status, 400)
         self.assertIn("supported translation provider", body["error"])
+
+    def test_translate_returns_one_prompt(self):
+        connection = HTTPConnection("127.0.0.1", self.port)
+        try:
+            with patch("local_service.INITIALIZATION", {"state": "ready"}), patch(
+                "local_service._run_worker", return_value={"chinese": "读这个"}
+            ) as worker:
+                connection.request(
+                    "POST", "/api/translate",
+                    body=json.dumps({"text": "Read this"}),
+                    headers={"Origin": "http://localhost:3000", "Content-Type": "application/json"},
+                )
+                response = connection.getresponse()
+                body = json.loads(response.read())
+        finally:
+            connection.close()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body, {"chinese": "读这个"})
+        worker.assert_called_once_with({"text": "Read this", "action": "translate"})
 
 
 class ExerciseProgressEndpointTests(TestCase):
@@ -161,6 +180,28 @@ class ExerciseProgressEndpointTests(TestCase):
         status, body = self.request("GET", "/api/local-exercises/pack")
         self.assertEqual(status, 200)
         return body["item"]["courses"][0]
+
+    def test_lazy_translation_and_step_cursor_are_saved_without_replacing_other_data(self):
+        self.pack["courses"][0]["practiceSequence"] = "lazy-comma-segments-v1"
+        self.pack["courses"][0]["statements"][0]["english"] = "Read this, then write."
+        self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+        status, _ = self.request("PUT", "/api/local-exercises/pack/translations", {
+            "courseId": "course", "statementIndex": 0, "stepIndex": 2,
+            "chinese": "完整译文", "whole": True,
+        })
+        self.assertEqual(status, 200)
+        status, _ = self.request("PUT", "/api/local-exercises/pack/progress", {
+            "courseId": "course", "statementIndex": 0,
+            "learningMode": "sentence-first", "sentenceFirstStartIndex": None,
+            "resumeStatementIndex": 0, "resumeStepIndex": 1,
+        })
+        self.assertEqual(status, 200)
+        course = self.stored_course()
+        self.assertEqual(course["resumeStepIndex"], 1)
+        self.assertEqual(course["statements"][0]["stepTranslations"], {"2": "完整译文"})
+        self.assertEqual(course["statements"][0]["sentenceChinese"], "完整译文")
+        self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+        self.assertEqual(self.stored_course()["statements"][0]["sentenceChinese"], "完整译文")
 
     def test_switch_and_restart_atomically_save_a_lower_cursor_and_mode(self):
         self.assertEqual(self.progress(3, "sentence-first", 3)[0], 200)
