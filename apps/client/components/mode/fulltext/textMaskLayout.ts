@@ -5,16 +5,16 @@ export interface MaskLine {
   height: number;
 }
 
-export interface ChineseMaskLayout {
+export interface TextMaskLayout {
   height: number;
   lines: MaskLine[];
 }
 
 /** Measure with the browser's line breaking, then retain only line rectangles. */
-export function measureChineseMasks(
+export function measureTextMasks(
   container: HTMLElement,
-  sentences: { id: string; chinese: string }[],
-): Record<string, ChineseMaskLayout> {
+  sentences: { id: string; text: string; english?: boolean }[],
+): Record<string, TextMaskLayout> {
   const document = container.ownerDocument;
   const styles = document.defaultView!.getComputedStyle(container);
   const probe = document.createElement("div");
@@ -41,11 +41,12 @@ export function measureChineseMasks(
   const paragraphs = sentences.map((sentence) => {
     const paragraph = document.createElement("p");
     paragraph.style.margin = "0";
-    paragraph.textContent = sentence.chinese;
+    if (sentence.english) paragraph.classList.add("practice-english");
+    paragraph.textContent = sentence.text;
     probe.append(paragraph);
     return paragraph;
   });
-  const result: Record<string, ChineseMaskLayout> = {};
+  const result: Record<string, TextMaskLayout> = {};
   document.body.append(probe);
   try {
     for (const [index, paragraph] of paragraphs.entries()) {

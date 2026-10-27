@@ -75,15 +75,15 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-import type { ChineseMaskLayout } from "./chineseMaskLayout";
+import type { TextMaskLayout } from "./textMaskLayout";
 import SentenceAudioButton from "~/components/main/SentenceAudioButton.vue";
 import SpeakableText from "~/components/SpeakableText.vue";
 import { useExerciseStore } from "~/store/exercise";
-import { measureChineseMasks } from "./chineseMaskLayout";
+import { measureTextMasks } from "./textMaskLayout";
 
 const courseStore = useExerciseStore();
 const scrollEl = ref<HTMLElement>();
-const maskLayouts = ref<Record<string, ChineseMaskLayout>>({});
+const maskLayouts = ref<Record<string, TextMaskLayout>>({});
 let resizeObserver: ResizeObserver | undefined;
 let measureFrame: number | undefined;
 let measuredWidth = -1;
@@ -93,16 +93,18 @@ function measureMasks() {
   const scroll = scrollEl.value;
   if (!scroll || scroll.clientWidth <= 0) return;
   measuredWidth = scroll.clientWidth;
-  maskLayouts.value = measureChineseMasks(
+  maskLayouts.value = measureTextMasks(
     scroll,
-    courseStore.sentences.map((sentence, index) => ({
-      id: sentence.id,
-      chinese:
+    courseStore.sentences.map((sentence, index) => {
+      const english =
         courseStore.currentCourse?.practiceSequence === "lazy-comma-segments-v1" &&
-        index > courseStore.currentSentenceIndex
-          ? "待练内容暂未翻译，进入此句后显示"
-          : sentence.chinese || "待练内容暂未翻译，进入此句后显示",
-    })),
+        index > courseStore.currentSentenceIndex;
+      return {
+        id: sentence.id,
+        text: english ? sentence.english : sentence.chinese || "待练内容暂未翻译，进入此句后显示",
+        english,
+      };
+    }),
   );
 }
 
