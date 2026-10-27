@@ -31,6 +31,7 @@ interface LexicalChunksStatementV4 {
 
 interface LexicalChunksBackup {
   schema_version: 4;
+  practice_sequence?: "comma-segments-v1";
   statements: LexicalChunksStatementV4[];
 }
 
@@ -429,6 +430,7 @@ export function normalizeExerciseImport(
           coursePackId,
           completionCount: 0,
           statementIndex: 0,
+          practiceSequence: value.practice_sequence,
           passedUnitIds: [],
           statements,
         },
@@ -496,7 +498,10 @@ function isLexicalChunksBackup(value: unknown): value is LexicalChunksBackup {
   if (!value || typeof value !== "object") return false;
   const backup = value as Partial<LexicalChunksBackup>;
   return (
-    backup.schema_version === 4 && Array.isArray(backup.statements) && backup.statements.length > 0
+    backup.schema_version === 4 &&
+    (backup.practice_sequence === undefined || backup.practice_sequence === "comma-segments-v1") &&
+    Array.isArray(backup.statements) &&
+    backup.statements.length > 0
   );
 }
 

@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
+import Question from "~/components/mode/cloze/Question.vue";
 import { useExerciseStore } from "~/store/exercise";
 import { registerShortcut } from "~/utils/keyboardShortcuts";
 import Answer from "../Answer.vue";
@@ -100,5 +101,59 @@ describe("Answer", () => {
       "anti-social,",
       "please...",
     ]);
+  });
+
+  it("shows only the current comma segment and reads that segment", async () => {
+    const pinia = createTestingPinia({ createSpy: vi.fn });
+    const courseStore = useExerciseStore(pinia);
+    const statements = [
+      {
+        id: "part",
+        order: 1,
+        english: "then write.",
+        contextBefore: "Read this, ",
+        contextAfter: "",
+        sentenceChinese: "然后写。",
+        unitId: "0:0",
+        sourceUnitIds: [] as [],
+      },
+      {
+        id: "whole",
+        order: 2,
+        english: "Read this, then write.",
+        contextBefore: "",
+        contextAfter: "",
+        sentenceChinese: "读这个，然后写。",
+        unitId: "0:1",
+        sourceUnitIds: [] as [],
+      },
+    ];
+    courseStore.currentCourse = {
+      id: "course",
+      title: "练习",
+      order: 1,
+      coursePackId: "pack",
+      completionCount: 0,
+      statementIndex: 0,
+      practiceView: "fulltext",
+      practiceSequence: "comma-segments-v1",
+      learningMode: "progressive",
+      statements,
+    };
+    courseStore.statementIndex = 0;
+    courseStore.currentStatement = statements[0];
+    const question = mount(Question, {
+      global: { plugins: [pinia], stubs: { MainQuestionInput: true } },
+    });
+    const answer = mount(Answer, { global: { plugins: [pinia] } });
+    expect(courseStore.isCommaSegmentQuestion).toBe(true);
+    expect(question.get('[data-testid="question-prompt"]').text()).toBe("然后写。");
+    expect(question.find(".cloze-context").exists()).toBe(false);
+    expect(answer.find(".cloze-context").exists()).toBe(false);
+    expect(answer.findAll(".question-input-word").map((word) => word.text())).toEqual([
+      "then",
+      "write",
+    ]);
+    expect(answer.findComponent({ name: "SentenceAudioButton" }).props("text")).toBe("then write.");
   });
 });

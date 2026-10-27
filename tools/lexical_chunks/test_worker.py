@@ -21,7 +21,7 @@ class InMemoryOutputTests(TestCase):
 
 
 class SentenceGenerationTests(TestCase):
-    def test_generation_exports_one_whole_statement_per_sentence(self):
+    def test_generation_exports_one_whole_statement_per_sentence_without_commas(self):
         with (
             patch("worker.translate_sentences", return_value=["猫在睡觉。", "鸟在歌唱。"]) as translate,
             patch("worker.model_status", return_value={"model_downloaded": False}),
@@ -37,6 +37,23 @@ class SentenceGenerationTests(TestCase):
         self.assertEqual([row["unit_id"] for row in rows], ["0:0", "1:0"])
         self.assertTrue(all(row["source_unit_ids"] == [] for row in rows))
         self.assertTrue(all(row["context_before"] == row["context_after"] == "" for row in rows))
+
+    def test_generation_translates_each_comma_part_and_the_whole_independently(self):
+        source = "Read this, then write, and check. Birds sing!"
+        prompts = ["读这个", "然后写", "并检查", "读这个，然后写，并检查。", "鸟儿歌唱。"]
+        with (
+            patch("worker.translate_sentences", return_value=prompts) as translate,
+            patch("worker._emit") as emit,
+        ):
+            _generate({"text": source, "format": "both"})
+        self.assertEqual(translate.call_args.args[0], [
+            "Read this", "then write", "and check.",
+            "Read this, then write, and check.", "Birds sing!",
+        ])
+        outputs = emit.call_args.args[0]["outputs"]
+        rows = json.loads(outputs[1]["content"])["statements"]
+        self.assertEqual([row["sentence_chinese"] for row in rows], prompts)
+        self.assertEqual(len(rows), 5)
 
     def test_invalid_provider_is_rejected_before_sentence_split(self):
         with patch("worker.split_sentences") as split:
