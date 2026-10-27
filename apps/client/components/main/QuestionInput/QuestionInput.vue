@@ -53,6 +53,7 @@
         :class="{ 'cursor-pointer': hoveredWordIndex !== undefined }"
         type="text"
         aria-label="填写当前英文单元"
+        :disabled="!courseStore.translationReady"
         :maxlength="inputMaxLength"
         v-model="inputValue"
         @input="clearWordHover"
@@ -78,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 import { courseTimer } from "~/composables/courses/courseTimer";
 import { useAnswerTip } from "~/composables/main/answerTip";
@@ -281,6 +282,13 @@ watch(
     hiddenAnswerTip();
     clearInput();
     focusInput();
+  },
+);
+
+watch(
+  () => courseStore.translationReady,
+  (ready) => {
+    if (ready) void nextTick(focusInput);
   },
 );
 

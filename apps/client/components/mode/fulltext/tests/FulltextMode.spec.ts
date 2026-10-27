@@ -124,6 +124,26 @@ describe("FulltextMode", () => {
     );
   });
 
+  it("keeps pending masks and scroll stable when the next lazy sentence is prefetched", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.practiceSequence = "lazy-comma-segments-v1";
+    store.currentCourse!.statements[1].sentenceChinese = undefined;
+    const wrapper = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    const scroll = wrapper.get('[data-testid="fulltext-scroll"]').element as HTMLElement;
+    scroll.scrollTop = 420;
+    store.currentCourse!.statements[1].sentenceChinese = "预取的下一句译文会比占位文字长很多。";
+    await flushPromises();
+    expect(vi.mocked(measureChineseMasks).mock.calls.at(-1)?.[1][1].chinese).toBe(
+      "待练内容暂未翻译，进入此句后显示",
+    );
+    expect(wrapper.get('[data-testid="fulltext-scroll"]').element).toBe(scroll);
+    expect(scroll.scrollTop).toBe(420);
+    expect(wrapper.get('[data-sentence-id="row-1"]').text()).not.toContain("预取的下一句译文");
+  });
+
   it("offers audio only after submitting a correct answer and on completed sentences", async () => {
     const { pinia, store } = setup();
     const wrapper = mount(FulltextMode, {

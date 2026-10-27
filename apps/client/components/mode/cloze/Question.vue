@@ -9,8 +9,28 @@
       <div
         class="question-prompt dark:text-gray-50"
         data-testid="question-prompt"
+        :aria-busy="courseStore.translationLoading || undefined"
       >
-        {{ courseStore.currentStatement?.sentenceChinese }}
+        <span
+          v-if="courseStore.translationError"
+          class="inline-flex flex-wrap items-center gap-2 text-base text-red-600 dark:text-red-300"
+        >
+          <span role="alert">{{ courseStore.translationError }}</span>
+          <button
+            class="btn btn-outline btn-sm"
+            type="button"
+            @click="courseStore.ensureCurrentTranslation()"
+          >
+            重试翻译
+          </button>
+        </span>
+        <span
+          v-else-if="courseStore.translationLoading"
+          role="status"
+          class="text-base text-slate-500 dark:text-slate-300"
+          >正在翻译当前题…</span
+        >
+        <template v-else>{{ courseStore.currentStatement?.sentenceChinese }}</template>
       </div>
       <div
         class="question-sentence practice-english dark:text-gray-50"
@@ -81,6 +101,7 @@ watch(
     scheduleQuestionFontSize();
   },
 );
+watch(() => courseStore.currentStatement?.sentenceChinese, scheduleQuestionFontSize);
 
 function updatePhoneticHint(syllables: string[] | undefined) {
   phoneticSyllables.value = syllables;
@@ -128,7 +149,7 @@ function fitQuestionFontSize() {
 }
 
 function scheduleQuestionFontSize() {
-  if (courseStore.isFulltext) return;
+  if (courseStore.isFulltext || !courseStore.translationReady) return;
   if (fitFrame !== undefined) {
     window.cancelAnimationFrame(fitFrame);
   }
@@ -172,6 +193,7 @@ onUnmounted(() => {
 
 .question-prompt {
   margin: 0 0 0.5em;
+  min-height: 1.25em;
   font-size: inherit;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -213,5 +235,9 @@ onUnmounted(() => {
   line-height: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.fulltext-flow .question-prompt {
+  min-height: 1.625em;
 }
 </style>

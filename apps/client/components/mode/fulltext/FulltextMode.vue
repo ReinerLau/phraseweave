@@ -95,9 +95,13 @@ function measureMasks() {
   measuredWidth = scroll.clientWidth;
   maskLayouts.value = measureChineseMasks(
     scroll,
-    courseStore.sentences.map((sentence) => ({
+    courseStore.sentences.map((sentence, index) => ({
       id: sentence.id,
-      chinese: sentence.chinese || "待练内容暂未翻译，进入此句后显示",
+      chinese:
+        courseStore.currentCourse?.practiceSequence === "lazy-comma-segments-v1" &&
+        index > courseStore.currentSentenceIndex
+          ? "待练内容暂未翻译，进入此句后显示"
+          : sentence.chinese || "待练内容暂未翻译，进入此句后显示",
     })),
   );
 }
