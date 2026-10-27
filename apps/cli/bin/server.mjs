@@ -151,7 +151,7 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
               url.pathname === "/api/local-exercise-catalog" ||
               /^\/api\/local-exercises\/[^/]+$/.test(url.pathname))) ||
           (request.method === "PUT" &&
-            (/^\/api\/local-exercises\/[^/]+(?:\/progress|\/passed-units)?$/.test(url.pathname) ||
+            (/^\/api\/local-exercises\/[^/]+(?:\/progress|\/passed-units|\/translations)?$/.test(url.pathname) ||
               url.pathname === "/api/local-exercise-catalog")) ||
           (request.method === "POST" && url.pathname === "/api/local-exercises/migrate") ||
           (request.method === "DELETE" && /^\/api\/local-exercises\/[^/]+$/.test(url.pathname));
@@ -162,6 +162,7 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
           (request.method === "DELETE" && url.pathname === "/api/tts/cache") ||
           (request.method === "GET" && url.pathname === "/api/status") ||
           (request.method === "POST" && url.pathname === "/api/generate") ||
+          (request.method === "POST" && url.pathname === "/api/translate") ||
           ((request.method === "GET" || request.method === "DELETE") &&
             url.pathname.startsWith("/api/jobs/") &&
             JOB_ID.test(url.pathname.slice(10))) ||
