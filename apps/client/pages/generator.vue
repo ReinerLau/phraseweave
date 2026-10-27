@@ -5,7 +5,7 @@
         <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
         <h1 class="mt-1 text-3xl font-bold">分段与整句练习生成器</h1>
         <p class="mt-2 max-w-2xl text-sm opacity-75">
-          在本机分句并按逗号分段，分别翻译各段与整句。英文内容会发送至 Bilibili。
+          在本机分句并生成英文练习；练到对应题目时才拆逗号并翻译。练习时英文内容会发送至 Bilibili。
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -139,11 +139,8 @@
           <template v-if="!serviceConnected"
             >请先启动本地服务；连接失败后点击上方刷新按钮。</template
           >
-          <template v-else-if="!supportsPublicTranslation"
-            >当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。</template
-          >
           <template v-else-if="!serviceReady">请等待本地服务完成初始化。</template>
-          <template v-else>需要联网；英文原句会发送至 Bilibili。</template>
+          <template v-else>生成无需联网；练习到对应题目时需要联网翻译。</template>
         </p>
       </div>
     </form>
@@ -275,11 +272,7 @@
 import { navigateTo, useRoute } from "#app";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-import type {
-  GeneratorJob,
-  GeneratorOutput,
-  TranslationProvider,
-} from "~/services/generatorClient";
+import type { GeneratorJob, GeneratorOutput } from "~/services/generatorClient";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import {
   consumeCapture,
@@ -307,7 +300,6 @@ const selectedText =
   typeof window === "undefined"
     ? null
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
-const translationProvider: TranslationProvider = "index-translate";
 const supportsPublicTranslation = ref(false);
 const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
@@ -343,7 +335,6 @@ const serviceReady = computed(
   () =>
     serviceConnected.value &&
     runtimeReady.value &&
-    supportsPublicTranslation.value &&
     initializationState.value === "ready" &&
     !initializationError.value,
 );
@@ -424,14 +415,12 @@ async function connectService() {
       serviceMessage.value = status.initialization.error || "本地生成引擎初始化失败。";
     } else if (status.initialization?.state === "downloading") {
       serviceMessage.value = status.initialization.message;
-    } else if (!supportsPublicTranslation.value) {
-      serviceMessage.value = "当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。";
     } else if (!serviceReady.value) {
       serviceMessage.value = isLocalPackage()
         ? "本地服务尚未完成初始化，请稍候。"
         : "本地服务尚未完成初始化，请查看启动服务的终端。";
     } else {
-      serviceMessage.value = "本地生成引擎已就绪，翻译使用 Index-Translate 公网服务。";
+      serviceMessage.value = "本地生成引擎已就绪，练习时按题使用 Index-Translate 翻译。";
     }
   } catch {
     serviceConnected.value = false;
@@ -445,14 +434,12 @@ async function connectService() {
   } finally {
     connecting.value = false;
     const refreshDelay = isLocalPackage()
-      ? supportsPublicTranslation.value && !serviceReady.value && !initializationError.value
+      ? !serviceReady.value && !initializationError.value
         ? 1500
         : undefined
       : serviceReady.value
         ? 10000
-        : supportsPublicTranslation.value
-          ? 3000
-          : undefined;
+        : 3000;
     if (!disposed && refreshDelay !== undefined && !statusTimer) {
       statusTimer = setTimeout(() => {
         statusTimer = undefined;
@@ -478,7 +465,6 @@ async function refreshService() {
 async function startJob(payload: {
   text: string;
   format: OutputFormat;
-  translationProvider: TranslationProvider;
 }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   outputFiles.value = [];
@@ -504,7 +490,6 @@ async function generate() {
     await startJob({
       text: englishText.value,
       format: outputFormat.value,
-      translationProvider,
     });
   } finally {
     submitting.value = false;

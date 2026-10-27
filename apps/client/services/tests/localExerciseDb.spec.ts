@@ -16,6 +16,24 @@ const firstUnit = {
 };
 
 describe("normalizeExerciseImport", () => {
+  it("imports untranslated schema 5 sentences for lazy practice", () => {
+    const [pack] = normalizeExerciseImport({
+      schema_version: 5,
+      practice_sequence: "lazy-comma-segments-v1",
+      statements: [
+        {
+          english: "Read this, then write.",
+          context_before: "",
+          context_after: "",
+          unit_id: "0:whole",
+          source_unit_ids: [],
+        },
+      ],
+    });
+    expect(pack.courses[0].practiceSequence).toBe("lazy-comma-segments-v1");
+    expect(pack.courses[0].statements[0].sentenceChinese).toBeUndefined();
+    expect(normalizeExerciseImport([pack])[0].courses[0].statements).toHaveLength(1);
+  });
   it("imports sentence-only schema 4 exports without source units", () => {
     const [pack] = normalizeExerciseImport({
       schema_version: 4,

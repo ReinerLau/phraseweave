@@ -39,20 +39,19 @@ const text = "The cat sleeps.";
 const outputs = [
   {
     name: "units.md",
-    content:
-      "# 学习单元\n\n中文提示：猫在睡觉。\n\n| 步骤 | 英文 |\n| --- | --- |\n| 1 | The cat |",
+    content: "# 原句复现练习\n\n## 第 1 句\n\nThe cat sleeps.\n",
   },
   {
     name: "units.json",
     content: JSON.stringify({
-      schema_version: 4,
+      schema_version: 5,
+      practice_sequence: "lazy-comma-segments-v1",
       statements: [
         {
-          english: "The cat",
+          english: "The cat sleeps.",
           context_before: "",
-          context_after: " sleeps.",
-          sentence_chinese: "猫在睡觉。",
-          unit_id: "0:0",
+          context_after: "",
+          unit_id: "0:whole",
           source_unit_ids: [],
         },
       ],
@@ -130,12 +129,11 @@ describe("generator capture preview", () => {
     expect(mocks.start).toHaveBeenCalledWith({
       text,
       format: "both",
-      translationProvider: "index-translate",
     });
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("");
-    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
-    expect(wrapper!.text()).toContain("The cat");
+    expect(wrapper!.text()).toContain("The cat sleeps.");
+    expect(wrapper!.text()).not.toContain("中文提示：猫在睡觉。");
     expect(wrapper!.text()).toContain("下载 units.md");
     expect(wrapper!.text()).toContain("下载 units.json");
     expect(button("保存并进入练习")).toBeDefined();
@@ -205,7 +203,7 @@ describe("generator capture preview", () => {
     await button("保存并进入练习").trigger("click");
     await flushPromises();
     expect(wrapper!.text()).toContain("保存失败");
-    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect((wrapper!.find('input[type="text"]').element as HTMLInputElement).value).toBe(
       "重试名称",
@@ -222,10 +220,10 @@ describe("generator capture preview", () => {
     mocks.job.mockResolvedValueOnce({
       id: "job-1",
       state: "failed",
-      error: "Index-Translate 第 1 句请求超时（30 秒），请重试。",
+      error: "分句失败，请重试。",
     });
     await mountAndGenerate();
-    expect(wrapper!.text()).toContain("Index-Translate 第 1 句请求超时");
+    expect(wrapper!.text()).toContain("分句失败");
     expect(mocks.save).not.toHaveBeenCalled();
     expect(wrapper!.find("textarea").element.value).toBe(text);
     await submit();
@@ -234,9 +232,8 @@ describe("generator capture preview", () => {
     expect(mocks.start).toHaveBeenLastCalledWith({
       text,
       format: "both",
-      translationProvider: "index-translate",
     });
-    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
@@ -303,43 +300,44 @@ describe("generator capture preview", () => {
     expect(mocks.start).toHaveBeenCalledWith({
       text,
       format: "both",
-      translationProvider: "index-translate",
     });
-    expect(wrapper!.text()).toContain("中文提示：猫在睡觉。");
+    expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it("submits edited selection with public translation and the chosen export format", async () => {
+  it("submits edited selection with the chosen export format", async () => {
     await mount();
     await wrapper!.find("textarea").setValue("The dog runs.");
     const selects = wrapper!.findAll("select");
     expect(selects).toHaveLength(1);
     await selects[0].setValue("markdown");
-    expect(wrapper!.text()).toContain("英文原句会发送至 Bilibili");
+    expect(wrapper!.text()).toContain("生成无需联网");
     await submit();
     expect(mocks.start).toHaveBeenCalledWith({
       text: "The dog runs.",
       format: "markdown",
-      translationProvider: "index-translate",
     });
   });
 
-  it("ignores the saved provider preference and always uses public translation", async () => {
+  it("ignores the saved provider preference during generation", async () => {
     window.localStorage.setItem("phraseweave.translationProvider", "local");
     await mount();
     await submit();
-    expect(mocks.start.mock.calls[0][0].translationProvider).toBe("index-translate");
+    expect(mocks.start.mock.calls[0][0].translationProvider).toBeUndefined();
     expect(window.localStorage.getItem("phraseweave.translationProvider")).toBe("local");
   });
 
-  it("disables generation when the service does not advertise public translation", async () => {
-    mocks.status.mockResolvedValue({ runtimeReady: true, modelDownloaded: true });
+  it("allows offline generation when the service does not advertise public translation", async () => {
+    mocks.status.mockResolvedValue({
+      runtimeReady: true,
+      modelDownloaded: true,
+      initialization: { state: "ready", message: "Ready" },
+    });
     await mount();
-    expect(wrapper!.text()).toContain("当前本地服务不支持公网翻译，请升级 PhraseWeave 后重试。");
-    expect(button("生成分段练习").attributes("disabled")).toBeDefined();
+    expect(button("生成分段练习").attributes("disabled")).toBeUndefined();
     await submit();
-    expect(mocks.start).not.toHaveBeenCalled();
+    expect(mocks.start).toHaveBeenCalledOnce();
   });
 
   it("prefills legacy captures without generating and removes the consumed URL", async () => {

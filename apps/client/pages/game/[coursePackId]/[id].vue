@@ -5,14 +5,22 @@
       height: practiceViewportHeight ? `${practiceViewportHeight}px` : '100dvh',
     }"
   >
-    <template v-if="isLoading">
+    <template v-if="isLoading || coursesStore.translationLoading">
       <Loading></Loading>
     </template>
     <div
-      v-else-if="loadError"
+      v-else-if="loadError || coursesStore.translationError"
       class="flex flex-col items-center gap-4 px-4 py-8"
     >
-      <p role="alert">{{ loadError }}</p>
+      <p role="alert">{{ loadError || coursesStore.translationError }}</p>
+      <button
+        v-if="coursesStore.translationError"
+        class="btn btn-primary"
+        type="button"
+        @click="coursesStore.ensureCurrentTranslation()"
+      >
+        重试翻译
+      </button>
       <NuxtLink
         href="/course-pack"
         class="btn btn-primary"

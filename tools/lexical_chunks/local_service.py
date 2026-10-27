@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR, TRANSLATION_PROVIDERS
+from sentence_review import practice_spans
 from tts import AudioCache, KokoroRuntime
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -218,7 +219,7 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
         ):
             # Full-pack writes (e.g. completion) must not restore a stale mode or cursor.
             course["statementIndex"] = previous.get("statementIndex", 0)
-            for key in ("learningMode", "sentenceFirstStartIndex", "practiceView", "resumeStatementIndex"):
+            for key in ("learningMode", "sentenceFirstStartIndex", "practiceView", "resumeStatementIndex", "resumeStepIndex"):
                 course.pop(key, None)
                 if key in previous:
                     course[key] = previous[key]
@@ -237,6 +238,14 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
             *(previous_units if isinstance(previous_units, list) else []),
             *(current_units if isinstance(current_units, list) else []),
         ]))
+        if course.get("practiceSequence") == "lazy-comma-segments-v1":
+            for statement, old_statement in zip(course.get("statements", []), previous.get("statements", [])):
+                statement["stepTranslations"] = {
+                    **statement.get("stepTranslations", {}),
+                    **old_statement.get("stepTranslations", {}),
+                }
+                if old_statement.get("sentenceChinese"):
+                    statement["sentenceChinese"] = old_statement["sentenceChinese"]
     return merged
 
 
@@ -438,6 +447,25 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json({"importedPacks": imported_packs, "importedCatalog": imported_catalog})
             return
+        if urlparse(self.path).path == "/api/translate":
+            if INITIALIZATION["state"] != "ready":
+                self._json({"error": INITIALIZATION.get("error") or "Translation engine is initializing."}, 503)
+                return
+            try:
+                payload = self._body()
+                if payload.get("translationProvider", "index-translate") != "index-translate":
+                    raise ValueError("Choose a supported translation provider.")
+                if not isinstance(payload.get("text"), str) or not payload["text"].strip() or len(payload["text"]) > 30_000:
+                    raise ValueError("Choose one nonempty practice step under 30,000 characters.")
+                result = _run_worker({**payload, "action": "translate"})
+            except (ValueError, json.JSONDecodeError) as error:
+                self._json({"error": str(error)}, 400)
+                return
+            except (RuntimeError, OSError) as error:
+                self._json({"error": str(error)}, 503)
+                return
+            self._json({"chinese": result["chinese"]})
+            return
         if INITIALIZATION["state"] != "ready":
             self._json({"error": INITIALIZATION.get("error") or "Generator is initializing."}, 503)
             return
@@ -446,8 +474,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = self._body()
-            if payload.get("translationProvider", "local") not in TRANSLATION_PROVIDERS:
-                raise ValueError("Choose a supported translation provider.")
         except (ValueError, json.JSONDecodeError) as error:
             self._json({"error": str(error)}, 400)
             return
@@ -497,12 +523,15 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(course_pack, dict) or course_pack.get("id") != exercise_id:
                         raise ValueError("Course pack id does not match the request.")
                     _save_course_pack(database, course_pack)
-                elif len(tail) == 2 and tail[1] in {"progress", "passed-units"}:
+                elif len(tail) == 2 and tail[1] in {"progress", "passed-units", "translations"}:
                     row = database.execute(
                         "SELECT data FROM course_packs WHERE id = ?", (exercise_id,)
                     ).fetchone()
                     if not row:
-                        self._json({"ok": True})
+                        if tail[1] == "translations":
+                            self._json({"error": "Exercise was not found."}, 404)
+                        else:
+                            self._json({"ok": True})
                         return
                     course_pack = json.loads(row[0])
                     course_id = payload.get("courseId")
@@ -511,9 +540,31 @@ class Handler(BaseHTTPRequestHandler):
                         None,
                     )
                     if course is None:
-                        self._json({"ok": True})
+                        if tail[1] == "translations":
+                            self._json({"error": "Course was not found."}, 404)
+                        else:
+                            self._json({"ok": True})
                         return
-                    if tail[1] == "progress":
+                    if tail[1] == "translations":
+                        statement_index = payload.get("statementIndex")
+                        step_index = payload.get("stepIndex")
+                        chinese = payload.get("chinese")
+                        statements = course.get("statements", [])
+                        if (course.get("practiceSequence") != "lazy-comma-segments-v1"
+                            or not isinstance(statement_index, int) or isinstance(statement_index, bool)
+                            or statement_index < 0 or statement_index >= len(statements)
+                            or not isinstance(step_index, int) or isinstance(step_index, bool)
+                            or step_index < 0
+                            or not isinstance(chinese, str) or not chinese.strip()):
+                            raise ValueError("Practice translation is invalid.")
+                        spans = practice_spans(statements[statement_index].get("english", ""))
+                        if step_index >= len(spans) or (payload.get("whole") is True) != (step_index == len(spans) - 1):
+                            raise ValueError("Practice translation step is invalid.")
+                        translations = statements[statement_index].setdefault("stepTranslations", {})
+                        translations[str(step_index)] = chinese.strip()
+                        if payload.get("whole") is True:
+                            statements[statement_index]["sentenceChinese"] = chinese.strip()
+                    elif tail[1] == "progress":
                         index = payload.get("statementIndex")
                         if not isinstance(index, int) or isinstance(index, bool) or index < 0:
                             raise ValueError("Statement index is invalid.")
@@ -549,6 +600,17 @@ class Handler(BaseHTTPRequestHandler):
                             ):
                                 raise ValueError("Resume statement index is invalid.")
                             course["resumeStatementIndex"] = resume_index
+                        if "resumeStepIndex" in payload:
+                            step_index = payload["resumeStepIndex"]
+                            resume_index = course.get("resumeStatementIndex")
+                            if resume_index is None:
+                                resume_index = index
+                            statements = course.get("statements", [])
+                            if (not isinstance(step_index, int) or isinstance(step_index, bool)
+                                or not isinstance(resume_index, int) or resume_index < 0 or resume_index >= len(statements)
+                                or step_index < 0 or step_index >= len(practice_spans(statements[resume_index].get("english", "")))):
+                                raise ValueError("Resume step index is invalid.")
+                            course["resumeStepIndex"] = step_index
                     else:
                         unit_key = payload.get("unitKey")
                         if not isinstance(unit_key, str) or not unit_key:

@@ -93,7 +93,13 @@ function measureMasks() {
   const scroll = scrollEl.value;
   if (!scroll || scroll.clientWidth <= 0) return;
   measuredWidth = scroll.clientWidth;
-  maskLayouts.value = measureChineseMasks(scroll, courseStore.sentences);
+  maskLayouts.value = measureChineseMasks(
+    scroll,
+    courseStore.sentences.map((sentence) => ({
+      id: sentence.id,
+      chinese: sentence.chinese || "待练内容暂未翻译，进入此句后显示",
+    })),
+  );
 }
 
 function scheduleMaskMeasurement() {
