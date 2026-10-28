@@ -10,15 +10,15 @@ import { useAnswerTip } from "~/composables/main/answerTip";
 import { useGameMode } from "~/composables/main/game";
 import { useSummary } from "~/composables/main/summary";
 import { useExerciseStore } from "~/store/exercise";
-import { measureChineseMasks } from "../chineseMaskLayout";
 import FulltextMode from "../FulltextMode.vue";
+import { measureTextMasks } from "../textMaskLayout";
 
 // Exercise the retained alternate modes independently of the temporary production restriction.
 vi.mock("~/utils/practiceModes", () => ({
   practiceModeAvailability: { progressive: true, single: true },
 }));
 
-vi.mock("../chineseMaskLayout", () => ({ measureChineseMasks: vi.fn() }));
+vi.mock("../textMaskLayout", () => ({ measureTextMasks: vi.fn() }));
 
 vi.mock("~/services/localExerciseDb", () => ({
   saveLocalExerciseProgress: vi.fn().mockResolvedValue(undefined),
@@ -36,7 +36,7 @@ describe("FulltextMode", () => {
       queueMicrotask(() => callback(0));
       return 1;
     });
-    vi.mocked(measureChineseMasks).mockImplementation((_container, sentences) =>
+    vi.mocked(measureTextMasks).mockImplementation((_container, sentences) =>
       Object.fromEntries(
         sentences.map((sentence) => [
           sentence.id,
@@ -112,6 +112,69 @@ describe("FulltextMode", () => {
     expect(wrapper.text()).not.toContain("第三句");
     expect(wrapper.findAll('[data-testid="fulltext-pending-sentence"]')).toHaveLength(1);
     expect(wrapper.findAll('[data-testid="fulltext-sentence"]')).toHaveLength(3);
+  });
+
+  it("uses a neutral mask for untranslated pending sentences", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.statements[1].sentenceChinese = undefined;
+    mount(FulltextMode, { global: { plugins: [pinia], stubs: { ModeClozeMode: true } } });
+    await flushPromises();
+    expect(vi.mocked(measureTextMasks).mock.calls.at(-1)?.[1][1].text).toBe(
+      "待练内容暂未翻译，进入此句后显示",
+    );
+  });
+
+  it("keeps old course masks based on their Chinese translations", async () => {
+    const { pinia } = setup();
+    mount(FulltextMode, { global: { plugins: [pinia], stubs: { ModeClozeMode: true } } });
+    await flushPromises();
+    expect(vi.mocked(measureTextMasks).mock.calls.at(-1)?.[1][1].text).toBe("第二句。");
+    expect(vi.mocked(measureTextMasks).mock.calls.at(-1)?.[1][1].english).toBe(false);
+  });
+
+  it("measures each pending lazy mask from its complete English sentence", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.practiceSequence = "lazy-comma-segments-v1";
+    store.currentCourse!.statements[1].english = "Short";
+    store.currentCourse!.statements[2].english = "A much longer original English sentence";
+    const wrapper = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    expect(vi.mocked(measureTextMasks).mock.calls.at(-1)?.[1].slice(1)).toEqual([
+      { id: "row-1", text: "Short.", english: true },
+      { id: "row-2", text: "A much longer original English sentence.", english: true },
+    ]);
+    expect(wrapper.text()).not.toContain("Short");
+    expect(wrapper.text()).not.toContain("A much longer original English sentence");
+  });
+
+  it("keeps pending masks and scroll stable when the next lazy sentence is prefetched", async () => {
+    const { pinia, store } = setup();
+    store.currentCourse!.practiceSequence = "lazy-comma-segments-v1";
+    store.currentCourse!.statements[1].sentenceChinese = undefined;
+    const wrapper = mount(FulltextMode, {
+      global: { plugins: [pinia], stubs: { ModeClozeMode: true } },
+    });
+    await flushPromises();
+    const masksBefore = vi
+      .mocked(measureTextMasks)
+      .mock.calls.at(-1)?.[1]
+      .map(({ text }) => text);
+    const scroll = wrapper.get('[data-testid="fulltext-scroll"]').element as HTMLElement;
+    scroll.scrollTop = 420;
+    store.currentCourse!.statements[1].sentenceChinese = "预取的下一句译文会比占位文字长很多。";
+    await flushPromises();
+    expect(
+      vi
+        .mocked(measureTextMasks)
+        .mock.calls.at(-1)?.[1]
+        .map(({ text }) => text),
+    ).toEqual(masksBefore);
+    expect(vi.mocked(measureTextMasks).mock.calls.at(-1)?.[1][1].text).toBe("Future.");
+    expect(wrapper.get('[data-testid="fulltext-scroll"]').element).toBe(scroll);
+    expect(scroll.scrollTop).toBe(420);
+    expect(wrapper.get('[data-sentence-id="row-1"]').text()).not.toContain("预取的下一句译文");
   });
 
   it("offers audio only after submitting a correct answer and on completed sentences", async () => {
@@ -332,7 +395,7 @@ describe("FulltextMode", () => {
       },
     );
     const { pinia } = setup();
-    vi.mocked(measureChineseMasks).mockReturnValue({
+    vi.mocked(measureTextMasks).mockReturnValue({
       "row-1": {
         height: 58.5,
         lines: [
@@ -355,14 +418,14 @@ describe("FulltextMode", () => {
     const scroll = wrapper.element as HTMLElement;
     scroll.scrollTop = 400;
     Object.defineProperty(scroll, "clientWidth", { value: 320 });
-    const calls = vi.mocked(measureChineseMasks).mock.calls.length;
+    const calls = vi.mocked(measureTextMasks).mock.calls.length;
     resize([], {} as ResizeObserver);
     await flushPromises();
-    expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+    expect(measureTextMasks).toHaveBeenCalledTimes(calls + 1);
     expect(scroll.scrollTop).toBe(400);
     resize([], {} as ResizeObserver);
     await flushPromises();
-    expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+    expect(measureTextMasks).toHaveBeenCalledTimes(calls + 1);
   });
 
   it("shows completed text at the end and restores all pending bars on restart", async () => {
@@ -396,15 +459,15 @@ describe("FulltextMode", () => {
       await flushPromises();
       const scroll = wrapper.element as HTMLElement;
       scroll.scrollTop = 400;
-      const calls = vi.mocked(measureChineseMasks).mock.calls.length;
+      const calls = vi.mocked(measureTextMasks).mock.calls.length;
       fonts.dispatchEvent(new Event("loadingdone"));
       await flushPromises();
-      expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+      expect(measureTextMasks).toHaveBeenCalledTimes(calls + 1);
       expect(scroll.scrollTop).toBe(400);
       wrapper.unmount();
       fonts.dispatchEvent(new Event("loadingdone"));
       await flushPromises();
-      expect(measureChineseMasks).toHaveBeenCalledTimes(calls + 1);
+      expect(measureTextMasks).toHaveBeenCalledTimes(calls + 1);
     } finally {
       if (original) Object.defineProperty(document, "fonts", original);
       else Reflect.deleteProperty(document, "fonts");

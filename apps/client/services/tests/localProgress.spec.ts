@@ -6,6 +6,7 @@ import {
   normalizeExerciseImport,
   saveLocalExercise,
   saveLocalExerciseProgress,
+  saveLocalExerciseTranslation,
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
 
@@ -64,5 +65,40 @@ describe("IndexedDB return position", () => {
       resumeStatementIndex: 0,
     });
     expect((await getLocalExercise(pack.id))?.courses[0].resumeStatementIndex).toBe(0);
+  });
+
+  it("persists a lazy step translation and cursor without a full pack rewrite", async () => {
+    vi.stubGlobal("indexedDB", indexedDB);
+    const [pack] = normalizeExerciseImport({
+      schema_version: 5,
+      practice_sequence: "lazy-comma-segments-v1",
+      statements: [
+        {
+          english: "Read this, then write.",
+          context_before: "",
+          context_after: "",
+          unit_id: "0:whole",
+          source_unit_ids: [],
+        },
+      ],
+    });
+    await saveLocalExercise(pack);
+    const courseId = pack.courses[0].id;
+    await saveLocalExerciseTranslation(pack.id, courseId, 0, 0, "读这个", false);
+    await saveLocalExerciseProgress(pack.id, courseId, 0, {
+      learningMode: "sentence-first",
+      sentenceFirstStartIndex: null,
+      resumeStatementIndex: 0,
+      resumeStepIndex: 1,
+    });
+    await saveLocalExerciseTranslation(pack.id, courseId, 0, 2, "读这个，然后写。", true);
+    await saveLocalExercise(pack);
+    const restored = (await getLocalExercise(pack.id))!.courses[0];
+    expect(restored.resumeStepIndex).toBe(1);
+    expect(restored.statements[0].stepTranslations).toEqual({
+      0: "读这个",
+      2: "读这个，然后写。",
+    });
+    expect(restored.statements[0].sentenceChinese).toBe("读这个，然后写。");
   });
 });

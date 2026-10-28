@@ -8,6 +8,8 @@ from collections.abc import Sequence
 
 SCHEMA_VERSION = 4
 PRACTICE_SEQUENCE = "comma-segments-v1"
+LAZY_SCHEMA_VERSION = 5
+LAZY_PRACTICE_SEQUENCE = "lazy-comma-segments-v1"
 ABBREVIATIONS = frozenset(
     {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc", "e.g", "i.e"}
 )
@@ -149,3 +151,24 @@ def render_phraseweave(sentences: Sequence[str], chinese: Sequence[Sequence[str]
         )
         + "\n"
     )
+
+
+def render_lazy_markdown(sentences: Sequence[str]) -> str:
+    lines = ["# 原句复现练习", ""]
+    for index, sentence in enumerate(sentences, start=1):
+        lines.extend([f"## 第 {index} 句", "", sentence, ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_lazy_phraseweave(sentences: Sequence[str]) -> str:
+    return json.dumps({
+        "schema_version": LAZY_SCHEMA_VERSION,
+        "practice_sequence": LAZY_PRACTICE_SEQUENCE,
+        "statements": [{
+            "english": sentence,
+            "context_before": "",
+            "context_after": "",
+            "unit_id": f"{index}:whole",
+            "source_unit_ids": [],
+        } for index, sentence in enumerate(sentences)],
+    }, ensure_ascii=False, indent=2) + "\n"

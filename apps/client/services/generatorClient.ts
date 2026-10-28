@@ -73,6 +73,14 @@ export function startGeneratorJob(payload: {
   });
 }
 
+export function translatePracticeStep(text: string) {
+  return localRequest<{ chinese: string }>("/api/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, translationProvider: "index-translate" }),
+  });
+}
+
 export function getGeneratorJob(id: string) {
   return localRequest<GeneratorJob>(`/api/jobs/${id}`);
 }

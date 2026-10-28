@@ -1,7 +1,7 @@
 ## 首次分段，随后整句复现
 
-粘贴英文后，本地生成器按句拆分原文，再按逗号划分片段。Index-Translate 分别翻译每个片段和完整原句；PhraseWeave JSON 沿用 schema 4，也可导出 Markdown。
+粘贴英文后，本地生成器只按句拆分原文，不调用翻译。新导出的 PhraseWeave JSON 使用 schema 5，Markdown 只列英文原句；练习到当前题时才拆逗号并通过 Index-Translate 翻译该段或整句，译文保存在练习中。
 
 新练习卡片首次依次单练每个逗号段，最后练完整原句；没有逗号时只练整句。完成后再次练习只从完整原句开始。空格确认当前词元；不会时按回车先看音节，再按一次查看该词元答案。答对后从当前题首词重新输入，包括刚获提示的词元。后续词元不会提前显示。已保存的旧语块练习继续可用，当前只练其中的完整原句。
 
-旧 spaCy 语块生成器与回退练习实现保留备用，当前生成与练习入口不调用。行为与兼容约定见 [ADR 0031](docs/adr/0031-comma-segment-first-practice.md)。
+旧 spaCy 语块生成器与回退练习实现保留备用，当前生成与练习入口不调用。行为与兼容约定见 [ADR 0031](docs/adr/0031-comma-segment-first-practice.md) 和 [ADR 0032](docs/adr/0032-lazy-practice-translation.md)。

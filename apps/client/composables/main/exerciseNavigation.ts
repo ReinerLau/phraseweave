@@ -12,7 +12,8 @@ export function useExerciseNavigation() {
   const { showSummary, showModal } = useSummary();
 
   function goToNextQuestion() {
-    if (showModal.value || (courseStore.isFulltext && !isAnswer())) return;
+    if (showModal.value || !courseStore.translationReady || (courseStore.isFulltext && !isAnswer()))
+      return;
     if (isAnswer() ? courseStore.advanceAfterCorrect() : courseStore.isAllDone()) {
       courseStore.cancelRecovery();
       showSummary();
@@ -24,7 +25,7 @@ export function useExerciseNavigation() {
   }
 
   function goToPreviousQuestion() {
-    if (showModal.value || courseStore.isFulltext) return;
+    if (showModal.value || !courseStore.translationReady || courseStore.isFulltext) return;
     courseStore.toPreviousStatement();
     showQuestion();
   }

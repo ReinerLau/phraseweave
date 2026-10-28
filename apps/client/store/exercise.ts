@@ -5,10 +5,12 @@ import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import type { RecoverySources } from "./reviewRecovery";
 import type { LearningMode } from "~/utils/learningDirection";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
+import { translatePracticeStep } from "~/services/generatorClient";
 import {
   getLocalExercise,
   saveLocalExercise,
   saveLocalExerciseProgress,
+  saveLocalExerciseTranslation,
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
 import { checkClozeAnswer, tokenizeClozeText } from "~/utils/clozeText";
@@ -18,6 +20,7 @@ import {
   sentenceFirstIndices,
 } from "~/utils/learningDirection";
 import { practiceModeAvailability } from "~/utils/practiceModes";
+import { practiceSpans } from "~/utils/practiceSpans";
 import { buildRecoverySteps } from "~/utils/recoverySources";
 import { ReviewRecovery } from "./reviewRecovery";
 import { useStatement } from "./statement";
@@ -31,6 +34,7 @@ export interface Statement {
   contextBefore?: string;
   contextAfter?: string;
   sentenceChinese?: string;
+  stepTranslations?: Record<string, string>;
   unitId?: string;
   sourceUnitIds?: [] | RecoverySources;
 }
@@ -50,11 +54,12 @@ export interface Course {
   coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
   /** Identifies the comma-segment sequence generated for new exercises. */
-  practiceSequence?: "comma-segments-v1";
+  practiceSequence?: "comma-segments-v1" | "lazy-comma-segments-v1";
   /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
   /** Unfinished base question in the original statements; null after completing a run. */
   resumeStatementIndex?: number | null;
+  resumeStepIndex?: number;
   passedUnitIds?: string[];
   learningMode?: LearningMode;
   practiceView?: PracticeView;
@@ -79,6 +84,13 @@ export const useExerciseStore = defineStore("exercise", () => {
   const currentStatement = ref<Statement>();
   const recoveryUnitId = ref<string>();
   const currentAnswerAccepted = ref(false);
+  const lazyStepIndex = ref(0);
+  const lazyReviewMode = ref(false);
+  const translationLoading = ref(false);
+  const translationError = ref("");
+  const fetchedTranslations = new Map<string, string>();
+  const pendingTranslations = new Map<string, Promise<string>>();
+  let translationRequest = 0;
   const fulltextCompleted = ref(false);
   const isRecovering = computed(() => recoveryUnitId.value !== undefined);
   const isAnsweringBaseUnit = computed(
@@ -95,6 +107,17 @@ export const useExerciseStore = defineStore("exercise", () => {
   let pendingPassedWrite = Promise.resolve();
   let pendingProgressWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
+  const isLazy = computed(() => currentCourse.value?.practiceSequence === "lazy-comma-segments-v1");
+  const translationReady = computed(
+    () => !isLazy.value || Boolean(currentStatement.value?.sentenceChinese?.trim()),
+  );
+  function lazySpans(index = statementIndex.value) {
+    const sentence = currentCourse.value?.statements[index]?.english ?? "";
+    return practiceSpans(sentence);
+  }
+  function lazyReview() {
+    return lazyReviewMode.value;
+  }
 
   const sentenceGroups = computed(() =>
     groupExerciseSentences(currentCourse.value?.statements ?? []),
@@ -112,7 +135,9 @@ export const useExerciseStore = defineStore("exercise", () => {
     }),
   );
   const canUseFulltext = computed(
-    () => canUseSentenceFirst.value && sentences.value.every((sentence) => sentence.chinese.trim()),
+    () =>
+      canUseSentenceFirst.value &&
+      (isLazy.value || sentences.value.every((sentence) => sentence.chinese.trim())),
   );
   const practiceView = computed(
     () =>
@@ -164,6 +189,25 @@ export const useExerciseStore = defineStore("exercise", () => {
   const { updateActiveCourseMap } = useActiveCourseMap();
 
   function refreshCurrentStatement() {
+    if (isLazy.value) {
+      const base = currentCourse.value?.statements[statementIndex.value];
+      if (!base) {
+        currentStatement.value = undefined;
+        return;
+      }
+      const spans = lazySpans();
+      lazyStepIndex.value = Math.min(Math.max(0, lazyStepIndex.value), spans.length - 1);
+      const [start, end] = spans[lazyStepIndex.value];
+      currentStatement.value = {
+        ...base,
+        id: `${base.id}:step:${lazyStepIndex.value}`,
+        english: base.english.slice(start, end),
+        contextBefore: base.english.slice(0, start),
+        contextAfter: base.english.slice(end),
+        sentenceChinese: base.stepTranslations?.[lazyStepIndex.value] ?? "",
+      };
+      return;
+    }
     currentStatement.value = recoveryUnitId.value
       ? unitStatements.get(recoveryUnitId.value)
       : currentCourse.value?.statements[statementIndex.value];
@@ -175,6 +219,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     return (statement.contextBefore ?? "") + statement.english + (statement.contextAfter ?? "");
   });
   const isCommaSegmentQuestion = computed(() => {
+    if (isLazy.value) return lazyStepIndex.value < lazySpans().length - 1;
     const course = currentCourse.value;
     const group = sentenceGroups.value?.[currentSentenceIndex.value];
     return (
@@ -200,6 +245,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   function canJumpToStatement(index: number) {
     const statement = baseStatements.value[index];
     return (
+      translationReady.value &&
       Number.isInteger(index) &&
       statement !== undefined &&
       index !== questionIndex.value &&
@@ -208,23 +254,24 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   function toSpecificStatement(index: number) {
+    if (!translationReady.value) return false;
     if (isFulltext.value && !canJumpToStatement(index)) return false;
     setQuestionIndex(index, !isFulltext.value);
     return true;
   }
 
   function toPreviousStatement() {
-    if (isFulltext.value) return;
+    if (isFulltext.value || !translationReady.value) return;
     setQuestionIndex(questionIndex.value - 1, true);
   }
 
   function toNextStatement() {
-    if (isFulltext.value) return;
+    if (isFulltext.value || !translationReady.value) return;
     setQuestionIndex(questionIndex.value + 1, true);
   }
 
   function resetStatementIndex() {
-    if (isFulltext.value) return;
+    if (isFulltext.value || !translationReady.value) return;
     setQuestionIndex(0, true);
   }
 
@@ -244,6 +291,13 @@ export const useExerciseStore = defineStore("exercise", () => {
     cancelRecovery();
     fulltextCompleted.value = false;
     statementIndex.value = index;
+    if (isLazy.value) {
+      const course = currentCourse.value!;
+      lazyStepIndex.value =
+        lazyReview() || index !== course.resumeStatementIndex
+          ? lazySpans(index).length - 1
+          : Math.min(course.resumeStepIndex ?? 0, lazySpans(index).length - 1);
+    }
     refreshCurrentStatement();
 
     const course = currentCourse.value;
@@ -251,6 +305,7 @@ export const useExerciseStore = defineStore("exercise", () => {
 
     course.statementIndex = index;
     persistProgress();
+    if (isLazy.value) void ensureCurrentTranslation();
   }
 
   function persistProgress() {
@@ -263,6 +318,7 @@ export const useExerciseStore = defineStore("exercise", () => {
       sentenceFirstStartIndex: course.sentenceFirstStartIndex ?? null,
       practiceView: practiceView.value,
       resumeStatementIndex: course.resumeStatementIndex ?? null,
+      ...(isLazy.value ? { resumeStepIndex: course.resumeStepIndex ?? 0 } : {}),
     };
     pendingProgressWrite = pendingProgressWrite
       .then(() => saveLocalExerciseProgress(course.coursePackId, course.id, index, state))
@@ -324,9 +380,19 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   /** Returns true only after the final base question has been answered. */
   function advanceAfterCorrect(): boolean {
+    if (!translationReady.value) return false;
     // Historic unit passes and an answer panel cannot unlock the next fulltext question.
     if (isFulltext.value && (!currentAnswerAccepted.value || fulltextCompleted.value)) return false;
     currentAnswerAccepted.value = false;
+    if (isLazy.value && lazyStepIndex.value < lazySpans().length - 1) {
+      lazyStepIndex.value++;
+      if (currentCourse.value!.resumeStatementIndex === statementIndex.value)
+        currentCourse.value!.resumeStepIndex = lazyStepIndex.value;
+      refreshCurrentStatement();
+      persistProgress();
+      void ensureCurrentTranslation();
+      return false;
+    }
     recoveryUnitId.value = recovery.value?.correct();
     if (recoveryUnitId.value) {
       refreshCurrentStatement();
@@ -337,6 +403,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     normalizeResumeStatementIndex(statementIndex.value);
     if (questionIndex.value >= totalQuestionsCount.value - 1) {
       fulltextCompleted.value = isFulltext.value;
+      if (isLazy.value) lazyReviewMode.value = true;
       if (course) {
         course.resumeStatementIndex = null;
         persistProgress();
@@ -345,6 +412,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     }
     if (course?.resumeStatementIndex === statementIndex.value) {
       course.resumeStatementIndex = questionIndices.value[questionIndex.value + 1];
+      if (isLazy.value) course.resumeStepIndex = 0;
     }
     setQuestionIndex(questionIndex.value + 1);
     return false;
@@ -362,6 +430,8 @@ export const useExerciseStore = defineStore("exercise", () => {
       if (course.practiceSequence === "comma-segments-v1") {
         course.learningMode = hasFinishedFirstPass(course) ? "sentence-first" : "progressive";
       }
+      if (isLazy.value) course.learningMode = "sentence-first";
+      if (isLazy.value && !lazyReview()) course.resumeStepIndex = 0;
     }
     setQuestionIndex(0, true);
     updateActiveCourseMap(currentCourse.value?.coursePackId!, currentCourse.value?.id!);
@@ -369,7 +439,11 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function checkCorrect(input: string) {
     const statement = currentStatement.value;
-    return statement !== undefined && checkClozeAnswer(statement.english, input);
+    return (
+      translationReady.value &&
+      statement !== undefined &&
+      checkClozeAnswer(statement.english, input)
+    );
   }
 
   function isStatementPassed(statement: Statement) {
@@ -379,11 +453,13 @@ export const useExerciseStore = defineStore("exercise", () => {
   function passCurrentStatement() {
     const course = currentCourse.value;
     const statement = currentStatement.value;
-    if (!course || !statement) return;
+    if (!course || !statement || !translationReady.value) return;
 
     currentAnswerAccepted.value = true;
 
-    const key = unitPassKey(statement);
+    if (isLazy.value && isCommaSegmentQuestion.value) return;
+
+    const key = unitPassKey(isLazy.value ? course.statements[statementIndex.value] : statement);
     if (isStatementPassed(statement)) return;
     course.passedUnitIds = [...(course.passedUnitIds ?? []), key];
     pendingPassedWrite = pendingPassedWrite
@@ -420,6 +496,9 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   async function setup(coursePackId: string, courseId: string) {
+    translationRequest++;
+    translationLoading.value = false;
+    translationError.value = "";
     const coursePack = await getLocalExercise(coursePackId);
     const course = coursePack?.courses.find((item) => item.id === courseId);
     if (!course) throw new Error("本地找不到该练习卡片");
@@ -428,6 +507,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     if (
       (!practiceModeAvailability.progressive && !groups) ||
       (!practiceModeAvailability.single &&
+        course.practiceSequence !== "lazy-comma-segments-v1" &&
         (!groups || groups.some((group) => !course.statements[group.end].sentenceChinese?.trim())))
     ) {
       throw new Error("该练习缺少原句分组或完整中文提示，请重新生成以使用整句优先和全文模式。");
@@ -443,6 +523,23 @@ export const useExerciseStore = defineStore("exercise", () => {
       ? Math.min(Math.max(0, Math.trunc(course.statementIndex)), lastIndex)
       : 0;
     currentCourse.value = course;
+    if (isLazy.value) {
+      const completedRun = course.resumeStatementIndex === null;
+      lazyReviewMode.value = course.completionCount > 0 || completedRun;
+      course.learningMode = "sentence-first";
+      course.sentenceFirstStartIndex = undefined;
+      if (completedRun) {
+        course.statementIndex = 0;
+        course.resumeStatementIndex = 0;
+      }
+      lazyStepIndex.value = lazyReview()
+        ? lazySpans(course.statementIndex).length - 1
+        : Math.min(
+            Math.max(0, course.resumeStepIndex ?? 0),
+            lazySpans(course.statementIndex).length - 1,
+          );
+      course.resumeStepIndex = lazyStepIndex.value;
+    }
     if (course.practiceSequence === "comma-segments-v1") {
       const completedRun = course.resumeStatementIndex === null;
       course.learningMode = hasFinishedFirstPass(course) ? "sentence-first" : "progressive";
@@ -503,12 +600,118 @@ export const useExerciseStore = defineStore("exercise", () => {
     refreshCurrentStatement();
     if (!practiceModeAvailability.progressive || !practiceModeAvailability.single)
       persistProgress();
+    if (isLazy.value) void ensureCurrentTranslation();
+  }
+
+  function translationKey(course: Course, index: number, step: number) {
+    return `${course.coursePackId}:${course.id}:${course.statements[index].id}:${step}`;
+  }
+
+  function loadStepTranslation(course: Course, index: number, step: number): Promise<string> {
+    const base = course.statements[index];
+    const cached = base.stepTranslations?.[step];
+    if (cached) return Promise.resolve(cached);
+    const key = translationKey(course, index, step);
+    const pending = pendingTranslations.get(key);
+    if (pending) return pending;
+    const task = (async () => {
+      let chinese = fetchedTranslations.get(key);
+      if (!chinese) {
+        const [start, end] = practiceSpans(base.english)[step];
+        const result = await translatePracticeStep(base.english.slice(start, end));
+        chinese = result.chinese.trim();
+        if (!chinese) throw new Error("翻译服务返回空译文，请重试。");
+        fetchedTranslations.set(key, chinese);
+      }
+      const whole = step === practiceSpans(base.english).length - 1;
+      await saveLocalExerciseTranslation(
+        course.coursePackId,
+        course.id,
+        index,
+        step,
+        chinese,
+        whole,
+      );
+      base.stepTranslations = { ...base.stepTranslations, [step]: chinese };
+      if (whole) base.sentenceChinese = chinese;
+      return chinese;
+    })();
+    pendingTranslations.set(key, task);
+    void task
+      .finally(() => {
+        if (pendingTranslations.get(key) === task) pendingTranslations.delete(key);
+      })
+      .catch(() => {});
+    return task;
+  }
+
+  function nextLazyStep(index: number, step: number): [number, number] | undefined {
+    const course = currentCourse.value;
+    if (!course) return;
+    const lastStep = lazySpans(index).length - 1;
+    if (step < lastStep) return [index, step + 1];
+    const nextIndex = questionIndices.value[questionIndices.value.indexOf(index) + 1];
+    if (nextIndex === undefined) return;
+    const nextLastStep = lazySpans(nextIndex).length - 1;
+    if (
+      lazyReview() ||
+      (course.resumeStatementIndex !== index && course.resumeStatementIndex !== nextIndex)
+    )
+      return [nextIndex, nextLastStep];
+    if (course.resumeStatementIndex === index) return [nextIndex, 0];
+    return [nextIndex, Math.min(course.resumeStepIndex ?? 0, nextLastStep)];
+  }
+
+  function prefetchNextTranslation(course: Course, index: number, step: number) {
+    if (
+      currentCourse.value !== course ||
+      statementIndex.value !== index ||
+      lazyStepIndex.value !== step
+    )
+      return;
+    const next = nextLazyStep(index, step);
+    if (next) void loadStepTranslation(course, next[0], next[1]).catch(() => {});
+  }
+
+  async function ensureCurrentTranslation() {
+    if (!isLazy.value) return;
+    const course = currentCourse.value;
+    const base = course?.statements[statementIndex.value];
+    if (!course || !base) return;
+    const index = statementIndex.value;
+    const step = lazyStepIndex.value;
+    const request = ++translationRequest;
+    translationError.value = "";
+    const cached = base.stepTranslations?.[step];
+    if (cached) {
+      translationLoading.value = false;
+      currentStatement.value!.sentenceChinese = cached;
+      prefetchNextTranslation(course, index, step);
+      return;
+    }
+    translationLoading.value = true;
+    try {
+      const chinese = await loadStepTranslation(course, index, step);
+      if (request === translationRequest) {
+        currentStatement.value!.sentenceChinese = chinese;
+        prefetchNextTranslation(course, index, step);
+      }
+    } catch (error) {
+      if (request === translationRequest)
+        translationError.value = error instanceof Error ? error.message : "翻译失败，请重试。";
+    } finally {
+      if (request === translationRequest) translationLoading.value = false;
+    }
   }
 
   return {
     statementIndex,
     currentCourse,
     currentStatement,
+    translationLoading,
+    translationError,
+    translationReady,
+    ensureCurrentTranslation,
     learningMode,
     canUseSentenceFirst,
     practiceView,

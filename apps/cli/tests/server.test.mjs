@@ -57,6 +57,27 @@ test("proxies generator requests from the local page", async () => {
   assert.deepEqual(requests.at(-1), ["/api/generate", "POST", '{"text":"Example"}']);
 });
 
+test("proxies on-demand translation and translation cache writes", async () => {
+  const headers = { Origin: new URL(url).origin, "Content-Type": "application/json" };
+  const translationBody = JSON.stringify({ text: "The cat sleeps." });
+  const translation = await fetch(new URL("/api/translate", url), {
+    method: "POST",
+    headers,
+    body: translationBody,
+  });
+  assert.equal(translation.status, 200);
+  assert.deepEqual(requests.at(-1), ["/api/translate", "POST", translationBody]);
+
+  const cacheBody = JSON.stringify({ courseId: "course", statementIndex: 0, stepIndex: 0 });
+  const cache = await fetch(new URL("/api/local-exercises/pack/translations", url), {
+    method: "PUT",
+    headers,
+    body: cacheBody,
+  });
+  assert.equal(cache.status, 200);
+  assert.deepEqual(requests.at(-1), ["/api/local-exercises/pack/translations", "PUT", cacheBody]);
+});
+
 test("preserves UTF-8 characters split across request chunks", { timeout: 10_000 }, async (t) => {
   for (const [pathname, method] of [
     ["/api/generate", "POST"],

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
-from sentence_review import practice_spans, render_markdown, render_phraseweave, split_sentences
+from sentence_review import render_lazy_markdown, render_lazy_phraseweave, split_sentences
 
 
 def _read_request() -> Mapping[str, Any]:
@@ -49,32 +49,14 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
     if output_format not in {"markdown", "phraseweave", "both"}:
         raise ValueError("Choose an output format.")
-    provider = payload.get("translationProvider", "local")
-    if provider not in TRANSLATION_PROVIDERS:
-        raise ValueError("Choose a supported translation provider.")
-
     sentences = split_sentences(text)
-    spans_by_sentence = [practice_spans(sentence) for sentence in sentences]
-    texts = [
-        sentence[start:end]
-        for sentence, spans in zip(sentences, spans_by_sentence, strict=True)
-        for start, end in spans
-    ]
-    translated = translate_sentences(texts, provider, lambda message: _emit({"progress": message}))
-    if len(translated) != len(texts) or any(not line for line in translated):
-        raise RuntimeError("The translation engine did not return one prompt for each practice step.")
-    chinese = []
-    offset = 0
-    for spans in spans_by_sentence:
-        chinese.append(translated[offset:offset + len(spans)])
-        offset += len(spans)
     markdown = (
-        render_markdown(sentences, chinese)
+        render_lazy_markdown(sentences)
         if output_format in {"markdown", "both"}
         else ""
     )
     phraseweave = (
-        render_phraseweave(sentences, chinese)
+        render_lazy_phraseweave(sentences)
         if output_format in {"phraseweave", "both"}
         else ""
     )
@@ -87,6 +69,19 @@ def _generate(payload: Mapping[str, Any]) -> None:
     })
 
 
+def _translate(payload: Mapping[str, Any]) -> None:
+    text = payload.get("text")
+    if not isinstance(text, str) or not text.strip() or len(text) > 30_000:
+        raise ValueError("Choose one nonempty practice step under 30,000 characters.")
+    provider = payload.get("translationProvider", "index-translate")
+    if provider not in TRANSLATION_PROVIDERS:
+        raise ValueError("Choose a supported translation provider.")
+    translated = translate_sentences([text], provider)
+    if len(translated) != 1 or not translated[0].strip():
+        raise RuntimeError("The translation engine did not return a prompt.")
+    _emit({"ok": True, "chinese": translated[0].strip()})
+
+
 def main() -> int:
     try:
         payload = _read_request()
@@ -96,6 +91,8 @@ def main() -> int:
             _emit({"ok": True, "model": model_status()})
         elif action == "generate":
             _generate(payload)
+        elif action == "translate":
+            _translate(payload)
         elif action == "status":
             _emit({"ok": True, "model": model_status()})
         else:
