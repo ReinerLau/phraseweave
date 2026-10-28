@@ -131,14 +131,16 @@
       <label class="flex cursor-pointer items-start gap-3">
         <input
           v-model="splitClauses"
-          class="checkbox checkbox-primary mt-0.5"
+          class="checkbox-primary checkbox mt-0.5"
           type="checkbox"
           :disabled="generationBusy || savingExercise"
           @change="clearGeneratedOutputs"
         />
         <span>
-          <span class="font-semibold">在逗号分隔片段内拆分从句</span>
-          <span class="block text-sm opacity-70">可选试用；生成后可预览题序，不影响已有卡片。</span>
+          <span class="font-semibold">在标点分隔片段内拆分从句</span>
+          <span class="block text-sm opacity-70"
+            >默认按逗号、分号、冒号和长破折号分段；勾选后进一步拆分从句。生成后可预览题序，不影响已有卡片。</span
+          >
         </span>
       </label>
 
@@ -212,10 +214,18 @@
     >
       <h2 class="text-xl font-semibold">首次练习题序预览</h2>
       <ol class="mt-4 space-y-4">
-        <li v-for="(item, index) in practicePreview" :key="index">
+        <li
+          v-for="(item, index) in practicePreview"
+          :key="index"
+        >
           <p class="font-semibold">第 {{ index + 1 }} 句：{{ item.sentence }}</p>
           <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm">
-            <li v-for="(step, stepIndex) in item.steps" :key="stepIndex">{{ step }}</li>
+            <li
+              v-for="(step, stepIndex) in item.steps"
+              :key="stepIndex"
+            >
+              {{ step }}
+            </li>
           </ol>
         </li>
       </ol>

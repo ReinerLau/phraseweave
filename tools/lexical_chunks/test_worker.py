@@ -24,7 +24,7 @@ class SentenceGenerationTests(TestCase):
     def test_opt_in_clause_generation_exports_preview_even_for_markdown_only(self):
         with (
             patch("worker.load_syntax_model") as model,
-            patch("worker.clause_practice_spans", return_value=[(0, 7), (8, 25), (0, 26)]) as spans,
+            patch("worker.punctuation_clause_practice_spans", return_value=[(0, 7), (8, 25), (0, 26)]) as spans,
             patch("worker._emit") as emit,
         ):
             _generate({"text": "I think that she is right.", "format": "markdown", "splitClauses": True})
@@ -39,7 +39,7 @@ class SentenceGenerationTests(TestCase):
     def test_opt_in_clause_parser_failure_is_reported(self):
         with (
             patch("worker.load_syntax_model", return_value=object()),
-            patch("worker.clause_practice_spans", side_effect=ValueError("bad parse")),
+            patch("worker.punctuation_clause_practice_spans", side_effect=ValueError("bad parse")),
         ):
             with self.assertRaisesRegex(RuntimeError, "Clause parsing failed for sentence 1: bad parse"):
                 _generate({"text": "I think that she is right.", "format": "both", "splitClauses": True})
@@ -58,13 +58,17 @@ class SentenceGenerationTests(TestCase):
         markdown, phraseweave = emit.call_args.args[0]["outputs"]
         self.assertIn("The cat sleeps.", markdown["content"])
         self.assertNotIn("中文提示", markdown["content"])
-        self.assertEqual(json.loads(phraseweave["content"])["schema_version"], 5)
-        rows = json.loads(phraseweave["content"])["statements"]
+        generated = json.loads(phraseweave["content"])
+        self.assertEqual(generated["schema_version"], 7)
+        self.assertEqual(generated["practice_sequence"], "lazy-punctuation-segments-v1")
+        rows = generated["statements"]
         self.assertEqual([row["english"] for row in rows], ["The cat sleeps.", "Birds sing!"])
         self.assertEqual([row["unit_id"] for row in rows], ["0:whole", "1:whole"])
         self.assertTrue(all("sentence_chinese" not in row for row in rows))
         self.assertTrue(all(row["source_unit_ids"] == [] for row in rows))
         self.assertTrue(all(row["context_before"] == row["context_after"] == "" for row in rows))
+        self.assertEqual([row["practice_spans"] for row in rows], [[[0, 15]], [[0, 11]]])
+        self.assertEqual(emit.call_args.args[0]["preview"][0]["steps"], ["The cat sleeps."])
 
     def test_generation_does_not_split_or_translate_comma_parts(self):
         source = "Read this, then write, and check. Birds sing!"
@@ -79,6 +83,26 @@ class SentenceGenerationTests(TestCase):
         self.assertEqual([row["english"] for row in rows],
                          ["Read this, then write, and check.", "Birds sing!"])
         self.assertEqual(len(rows), 2)
+
+    def test_default_preview_matches_saved_punctuation_steps(self):
+        with patch("worker._emit") as emit:
+            _generate({"text": "A, B; C: D—E.", "format": "both"})
+        result = emit.call_args.args[0]
+        self.assertEqual(result["preview"][0]["steps"], ["A", "B", "C", "D", "E.", "A, B; C: D—E."])
+        saved = json.loads(result["outputs"][1]["content"])
+        self.assertEqual(saved["statements"][0]["practice_spans"],
+                         [[0, 1], [3, 4], [6, 7], [9, 10], [11, 13], [0, 13]])
+
+    def test_opt_in_clause_export_uses_new_version(self):
+        with (
+            patch("worker.load_syntax_model", return_value=object()),
+            patch("worker.punctuation_clause_practice_spans", return_value=[(0, 7), (8, 25), (0, 26)]),
+            patch("worker._emit") as emit,
+        ):
+            _generate({"text": "I think that she is right.", "format": "phraseweave", "splitClauses": True})
+        saved = json.loads(emit.call_args.args[0]["outputs"][0]["content"])
+        self.assertEqual(saved["schema_version"], 7)
+        self.assertEqual(saved["practice_sequence"], "lazy-punctuation-clause-segments-v1")
 
     def test_generation_ignores_translation_provider(self):
         with patch("worker.translate_sentences") as translate, patch("worker._emit"):

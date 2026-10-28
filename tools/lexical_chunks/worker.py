@@ -8,9 +8,12 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from clause_practice import clause_practice_spans, render_clause_phraseweave
+from clause_practice import punctuation_clause_practice_spans
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
-from sentence_review import render_lazy_markdown, render_lazy_phraseweave, split_sentences
+from sentence_review import (
+    punctuation_practice_spans, render_lazy_markdown, render_punctuation_phraseweave,
+    split_sentences, utf16_spans,
+)
 from split_lexical_chunks import load_syntax_model
 
 
@@ -56,22 +59,25 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("splitClauses must be a boolean.")
     sentences = split_sentences(text)
     nlp = load_syntax_model() if split_clauses else None
-    clause_spans = None
+    practice_steps = []
     if nlp:
-        clause_spans = []
         for index, sentence in enumerate(sentences, start=1):
             try:
-                clause_spans.append(clause_practice_spans(sentence, nlp))
+                practice_steps.append(punctuation_clause_practice_spans(sentence, nlp))
             except Exception as error:
                 raise RuntimeError(f"Clause parsing failed for sentence {index}: {error}") from error
+    else:
+        practice_steps = [
+            utf16_spans(sentence, punctuation_practice_spans(sentence))
+            for sentence in sentences
+        ]
     markdown = (
         render_lazy_markdown(sentences)
         if output_format in {"markdown", "both"}
         else ""
     )
     phraseweave = (
-        render_clause_phraseweave(sentences, clause_spans)
-        if clause_spans is not None else render_lazy_phraseweave(sentences)
+        render_punctuation_phraseweave(sentences, practice_steps, split_clauses=split_clauses)
     ) if output_format in {"phraseweave", "both"} else ""
     outputs = _build_outputs(markdown, phraseweave, output_format)
 
@@ -80,12 +86,11 @@ def _generate(payload: Mapping[str, Any]) -> None:
         "outputs": outputs,
         "model": model_status(),
     }
-    if clause_spans is not None:
-        result["preview"] = [{
-            "sentence": sentence,
-            "steps": [sentence.encode("utf-16-le")[start * 2:end * 2].decode("utf-16-le")
-                      for start, end in spans],
-        } for sentence, spans in zip(sentences, clause_spans, strict=True)]
+    result["preview"] = [{
+        "sentence": sentence,
+        "steps": [sentence.encode("utf-16-le")[start * 2:end * 2].decode("utf-16-le")
+                  for start, end in spans],
+    } for sentence, spans in zip(sentences, practice_steps, strict=True)]
     _emit(result)
 
 

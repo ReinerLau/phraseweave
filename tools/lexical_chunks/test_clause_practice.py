@@ -1,7 +1,8 @@
 import json
 from unittest import TestCase
 
-from clause_practice import clause_practice_spans, render_clause_phraseweave
+from clause_practice import (clause_practice_spans, punctuation_clause_practice_spans,
+                             render_clause_phraseweave)
 from split_lexical_chunks import load_syntax_model
 
 
@@ -53,3 +54,13 @@ class ClausePracticeTests(TestCase):
         self.assertEqual(payload["schema_version"], 6)
         self.assertEqual(payload["practice_sequence"], "lazy-clause-segments-v1")
         self.assertEqual(payload["statements"][0]["practice_spans"], [list(span) for span in spans])
+
+    def test_new_clause_steps_use_punctuation_parents(self):
+        sentence = "I think that she is right; then I agree."
+        spans = punctuation_clause_practice_spans(sentence, self.nlp)
+        encoded = sentence.encode("utf-16-le")
+        steps = [encoded[start * 2:end * 2].decode("utf-16-le") for start, end in spans]
+        self.assertEqual(steps, [
+            "I think", "that she is right", "I think that she is right",
+            "then I agree.", sentence,
+        ])

@@ -35,7 +35,7 @@ export interface Statement {
   contextAfter?: string;
   sentenceChinese?: string;
   stepTranslations?: Record<string, string>;
-  /** Generation-time UTF-16 ranges for opt-in clause practice. */
+  /** Generation-time UTF-16 ranges for saved step sequences. */
   practiceSpans?: Array<[number, number]>;
   unitId?: string;
   sourceUnitIds?: [] | RecoverySources;
@@ -56,7 +56,12 @@ export interface Course {
   coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
   /** Identifies the generated step sequence and its translation timing. */
-  practiceSequence?: "comma-segments-v1" | "lazy-comma-segments-v1" | "lazy-clause-segments-v1";
+  practiceSequence?:
+    | "comma-segments-v1"
+    | "lazy-comma-segments-v1"
+    | "lazy-clause-segments-v1"
+    | "lazy-punctuation-segments-v1"
+    | "lazy-punctuation-clause-segments-v1";
   /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
   /** Unfinished base question in the original statements; null after completing a run. */
@@ -109,15 +114,25 @@ export const useExerciseStore = defineStore("exercise", () => {
   let pendingPassedWrite = Promise.resolve();
   let pendingProgressWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
-  const isLazy = computed(() =>
-    currentCourse.value?.practiceSequence === "lazy-comma-segments-v1" ||
-    currentCourse.value?.practiceSequence === "lazy-clause-segments-v1",
+  const isLazy = computed(
+    () =>
+      currentCourse.value?.practiceSequence === "lazy-comma-segments-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-clause-segments-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-punctuation-segments-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-punctuation-clause-segments-v1",
   );
   const translationReady = computed(
     () => !isLazy.value || Boolean(currentStatement.value?.sentenceChinese?.trim()),
   );
   function lazySpans(index = statementIndex.value) {
     const statement = currentCourse.value?.statements[index];
+    if (
+      currentCourse.value?.practiceSequence === "lazy-punctuation-segments-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-punctuation-clause-segments-v1"
+    ) {
+      if (!statement?.practiceSpans?.length) throw new Error("已保存的分段题序无效");
+      return statement.practiceSpans;
+    }
     return statement?.practiceSpans ?? practiceSpans(statement?.english ?? "");
   }
   function lazyReview() {
@@ -514,6 +529,8 @@ export const useExerciseStore = defineStore("exercise", () => {
       (!practiceModeAvailability.single &&
         course.practiceSequence !== "lazy-comma-segments-v1" &&
         course.practiceSequence !== "lazy-clause-segments-v1" &&
+        course.practiceSequence !== "lazy-punctuation-segments-v1" &&
+        course.practiceSequence !== "lazy-punctuation-clause-segments-v1" &&
         (!groups || groups.some((group) => !course.statements[group.end].sentenceChinese?.trim())))
     ) {
       throw new Error("该练习缺少原句分组或完整中文提示，请重新生成以使用整句优先和全文模式。");

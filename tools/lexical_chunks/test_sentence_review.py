@@ -1,8 +1,9 @@
 import json
 from unittest import TestCase
 
-from sentence_review import (practice_spans, render_lazy_markdown, render_lazy_phraseweave,
-                             render_markdown, render_phraseweave, split_sentences)
+from sentence_review import (practice_spans, punctuation_practice_spans,
+                             render_lazy_markdown, render_lazy_phraseweave,
+                             render_markdown, render_phraseweave, split_sentences, utf16_spans)
 
 
 class SentenceReviewTests(TestCase):
@@ -55,6 +56,28 @@ class SentenceReviewTests(TestCase):
             [sentence[start:end] for start, end in practice_spans(sentence)],
             ['Bring 1,000 books', 'then leave', 'please.', sentence],
         )
+
+    def test_new_punctuation_steps_preserve_internal_symbols(self):
+        sentence = "A, B; C: D—E."
+        self.assertEqual(
+            [sentence[start:end] for start, end in punctuation_practice_spans(sentence)],
+            ["A", "B", "C", "D", "E.", sentence],
+        )
+        protected = "Don't split 1,000 at 12:30 or e.g. well-known 3/4 (quoted) – https://example.com:8080/a,b; leave."
+        self.assertEqual(
+            [protected[start:end] for start, end in punctuation_practice_spans(protected)],
+            ["Don't split 1,000 at 12:30 or e.g. well-known 3/4 (quoted) – https://example.com:8080/a,b", "leave.", protected],
+        )
+        self.assertEqual(punctuation_practice_spans("A; : — B."), [(0, 1), (7, 9), (0, 9)])
+        self.assertEqual(
+            ["A: B;"[start:end] for start, end in punctuation_practice_spans("A: B;")],
+            ["A", "B;", "A: B;"],
+        )
+
+    def test_new_spans_use_utf16_offsets(self):
+        sentence = "😀 A—B."
+        self.assertEqual(utf16_spans(sentence, punctuation_practice_spans(sentence)),
+                         [(0, 4), (5, 7), (0, 7)])
 
     def test_exports_individual_prompts_and_exact_context_then_whole(self):
         sentence = 'Read this, then write, and check.'

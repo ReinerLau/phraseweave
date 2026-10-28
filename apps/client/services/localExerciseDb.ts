@@ -42,9 +42,16 @@ interface LazySentenceBackup {
 interface ClauseSentenceBackup {
   schema_version: 6;
   practice_sequence: "lazy-clause-segments-v1";
-  statements: Array<LazySentenceBackup["statements"][number] & {
-    practice_spans: Array<[number, number]>;
-  }>;
+  statements: Array<
+    LazySentenceBackup["statements"][number] & {
+      practice_spans: Array<[number, number]>;
+    }
+  >;
+}
+interface PunctuationSentenceBackup {
+  schema_version: 7;
+  practice_sequence: "lazy-punctuation-segments-v1" | "lazy-punctuation-clause-segments-v1";
+  statements: ClauseSentenceBackup["statements"];
 }
 
 export interface ExerciseImportOptions {
@@ -267,8 +274,10 @@ export function mergeLocalExerciseProgress(
           ...new Set([...(previous.passedUnitIds ?? []), ...(course.passedUnitIds ?? [])]),
         ],
         statements:
-          (course.practiceSequence === "lazy-comma-segments-v1" ||
-            course.practiceSequence === "lazy-clause-segments-v1")
+          course.practiceSequence === "lazy-comma-segments-v1" ||
+          course.practiceSequence === "lazy-clause-segments-v1" ||
+          course.practiceSequence === "lazy-punctuation-segments-v1" ||
+          course.practiceSequence === "lazy-punctuation-clause-segments-v1"
             ? course.statements.map((statement, index) => ({
                 ...statement,
                 stepTranslations: {
@@ -465,13 +474,20 @@ export function normalizeExerciseImport(
     return title ? [{ ...coursePacks[0], title }] : coursePacks;
   }
 
-  if (!isLexicalChunksBackup(value) && !isLazySentenceBackup(value) && !isClauseSentenceBackup(value))
+  if (
+    !isLexicalChunksBackup(value) &&
+    !isLazySentenceBackup(value) &&
+    !isClauseSentenceBackup(value) &&
+    !isPunctuationSentenceBackup(value)
+  )
     throw new Error("旧版练习请重新生成后导入");
   if (
     !value.statements.every(
-      value.schema_version === 6
-        ? isClauseSentenceStatement
-        : value.schema_version === 5 ? isLazySentenceStatement : isLexicalChunksStatementV4,
+      value.schema_version === 6 || value.schema_version === 7
+        ? isSavedSpanStatement
+        : value.schema_version === 5
+          ? isLazySentenceStatement
+          : isLexicalChunksStatementV4,
     )
   ) {
     throw new Error("备份文件包含无效练习");
@@ -493,7 +509,7 @@ export function normalizeExerciseImport(
     sentenceChinese: "sentence_chinese" in statement ? statement.sentence_chinese : undefined,
     unitId: statement.unit_id,
     sourceUnitIds: statement.source_unit_ids,
-    ...(value.schema_version === 6 && "practice_spans" in statement
+    ...((value.schema_version === 6 || value.schema_version === 7) && "practice_spans" in statement
       ? { practiceSpans: statement.practice_spans }
       : {}),
   }));
@@ -572,10 +588,14 @@ function isExerciseResponse(value: unknown): value is ExerciseResponse {
             typeof statement.contextAfter === "string" &&
             (course.practiceSequence === "lazy-comma-segments-v1" ||
               course.practiceSequence === "lazy-clause-segments-v1" ||
+              course.practiceSequence === "lazy-punctuation-segments-v1" ||
+              course.practiceSequence === "lazy-punctuation-clause-segments-v1" ||
               (typeof statement.sentenceChinese === "string" &&
                 statement.sentenceChinese.trim().length > 0)) &&
-            (course.practiceSequence !== "lazy-clause-segments-v1" ||
-              validClauseSpans(statement.english, statement.practiceSpans)),
+            ((course.practiceSequence !== "lazy-clause-segments-v1" &&
+              course.practiceSequence !== "lazy-punctuation-segments-v1" &&
+              course.practiceSequence !== "lazy-punctuation-clause-segments-v1") ||
+              validSavedSpans(statement.english, statement.practiceSpans)),
         ),
     )
   );
@@ -614,25 +634,46 @@ function isClauseSentenceBackup(value: unknown): value is ClauseSentenceBackup {
   );
 }
 
-function isClauseSentenceStatement(value: unknown): value is ClauseSentenceBackup["statements"][number] {
-  if (!isLazySentenceStatement(value)) return false;
-  return validClauseSpans(value.english, (value as { practice_spans?: unknown }).practice_spans);
+function isPunctuationSentenceBackup(value: unknown): value is PunctuationSentenceBackup {
+  if (!value || typeof value !== "object") return false;
+  const backup = value as Partial<PunctuationSentenceBackup>;
+  return (
+    backup.schema_version === 7 &&
+    (backup.practice_sequence === "lazy-punctuation-segments-v1" ||
+      backup.practice_sequence === "lazy-punctuation-clause-segments-v1") &&
+    Array.isArray(backup.statements) &&
+    backup.statements.length > 0
+  );
 }
 
-function validClauseSpans(english: string, spans: unknown): spans is Array<[number, number]> {
+function isSavedSpanStatement(value: unknown): value is ClauseSentenceBackup["statements"][number] {
+  if (!isLazySentenceStatement(value)) return false;
+  return validSavedSpans(value.english, (value as { practice_spans?: unknown }).practice_spans);
+}
+
+function validSavedSpans(english: string, spans: unknown): spans is Array<[number, number]> {
   if (!Array.isArray(spans) || !spans.length) return false;
   const size = english.length;
-  const valid = spans.every((span) =>
-    Array.isArray(span) && span.length === 2 &&
-    Number.isInteger(span[0]) && Number.isInteger(span[1]) &&
-    span[0] >= 0 && span[0] < span[1] && span[1] <= size &&
-    /[\p{L}\p{N}]/u.test(english.slice(span[0], span[1])) &&
-    !/^[\uDC00-\uDFFF]/u.test(english.slice(span[0])) &&
-    !/[\uD800-\uDBFF]$/u.test(english.slice(0, span[1])),
+  const valid = spans.every(
+    (span) =>
+      Array.isArray(span) &&
+      span.length === 2 &&
+      Number.isInteger(span[0]) &&
+      Number.isInteger(span[1]) &&
+      span[0] >= 0 &&
+      span[0] < span[1] &&
+      span[1] <= size &&
+      /[\p{L}\p{N}]/u.test(english.slice(span[0], span[1])) &&
+      !/^[\uDC00-\uDFFF]/u.test(english.slice(span[0])) &&
+      !/[\uD800-\uDBFF]$/u.test(english.slice(0, span[1])),
   );
   const last = spans[spans.length - 1];
-  return valid && last[0] === 0 && last[1] === size &&
-    new Set(spans.map((span) => `${span[0]}:${span[1]}`)).size === spans.length;
+  return (
+    valid &&
+    last[0] === 0 &&
+    last[1] === size &&
+    new Set(spans.map((span) => `${span[0]}:${span[1]}`)).size === spans.length
+  );
 }
 
 function isLazySentenceStatement(
@@ -673,7 +714,11 @@ function isLexicalChunksStatementV4(value: unknown): value is LexicalChunksState
 }
 
 function hasValidSources(
-  statements: Array<LexicalChunksStatementV4 | LazySentenceBackup["statements"][number] | ClauseSentenceBackup["statements"][number]>,
+  statements: Array<
+    | LexicalChunksStatementV4
+    | LazySentenceBackup["statements"][number]
+    | ClauseSentenceBackup["statements"][number]
+  >,
 ): boolean {
   const firstById = new Map<string, number>();
   const canonical = new Map<string, (typeof statements)[number]>();

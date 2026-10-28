@@ -16,26 +16,89 @@ const firstUnit = {
 };
 
 describe("normalizeExerciseImport", () => {
+  it.each(["lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1"] as const)(
+    "imports schema 7 saved steps for %s",
+    (practiceSequence) => {
+      const backup = {
+        schema_version: 7,
+        practice_sequence: practiceSequence,
+        statements: [
+          {
+            english: "Read this; then write.",
+            context_before: "",
+            context_after: "",
+            unit_id: "0:whole",
+            source_unit_ids: [],
+            practice_spans: [
+              [0, 9],
+              [11, 22],
+              [0, 22],
+            ],
+          },
+        ],
+      };
+      const [pack] = normalizeExerciseImport(backup);
+      expect(pack.courses[0].practiceSequence).toBe(practiceSequence);
+      expect(pack.courses[0].statements[0].practiceSpans).toEqual(
+        backup.statements[0].practice_spans,
+      );
+      expect(() =>
+        normalizeExerciseImport({
+          ...backup,
+          statements: [
+            {
+              ...backup.statements[0],
+              practice_spans: [
+                [0, 9],
+                [11, 23],
+                [0, 22],
+              ],
+            },
+          ],
+        }),
+      ).toThrow("备份文件包含无效练习");
+    },
+  );
+
   it("imports validated schema 6 clause spans and rejects malformed boundaries", () => {
     const backup = {
       schema_version: 6,
       practice_sequence: "lazy-clause-segments-v1",
-      statements: [{
-        english: "I think that she is right.",
-        context_before: "",
-        context_after: "",
-        unit_id: "0:whole",
-        source_unit_ids: [],
-        practice_spans: [[0, 7], [8, 25], [0, 26]],
-      }],
+      statements: [
+        {
+          english: "I think that she is right.",
+          context_before: "",
+          context_after: "",
+          unit_id: "0:whole",
+          source_unit_ids: [],
+          practice_spans: [
+            [0, 7],
+            [8, 25],
+            [0, 26],
+          ],
+        },
+      ],
     };
     const [pack] = normalizeExerciseImport(backup);
     expect(pack.courses[0].practiceSequence).toBe("lazy-clause-segments-v1");
-    expect(pack.courses[0].statements[0].practiceSpans).toEqual(backup.statements[0].practice_spans);
-    expect(() => normalizeExerciseImport({
-      ...backup,
-      statements: [{ ...backup.statements[0], practice_spans: [[0, 7], [8, 30], [0, 26]] }],
-    })).toThrow("备份文件包含无效练习");
+    expect(pack.courses[0].statements[0].practiceSpans).toEqual(
+      backup.statements[0].practice_spans,
+    );
+    expect(() =>
+      normalizeExerciseImport({
+        ...backup,
+        statements: [
+          {
+            ...backup.statements[0],
+            practice_spans: [
+              [0, 7],
+              [8, 30],
+              [0, 26],
+            ],
+          },
+        ],
+      }),
+    ).toThrow("备份文件包含无效练习");
   });
 
   it("imports untranslated schema 5 sentences for lazy practice", () => {
