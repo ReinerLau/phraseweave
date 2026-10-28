@@ -57,6 +57,7 @@ for (const name of [
   "split_lexical_chunks.py",
   "sentence_review.py",
   "clause_practice.py",
+  "content_function_practice.py",
   "worker.py",
   "pyproject.toml",
   "uv.lock",
