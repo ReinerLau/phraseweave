@@ -2,7 +2,8 @@ from types import SimpleNamespace
 from unittest import TestCase
 
 from content_function_practice import build_practice_steps, preview_step
-from sentence_review import utf16_spans
+from sentence_review import punctuation_practice_spans, utf16_spans
+from split_lexical_chunks import load_syntax_model
 
 
 def model(*parts):
@@ -13,6 +14,19 @@ def model(*parts):
 
 
 class ContentFunctionPracticeTests(TestCase):
+    def test_uppercase_all_content_segment_is_replayed_before_next_segment(self):
+        sentence = (
+            "TIME MARCHED ON, indifferent to my concerns; "
+            "and soon enough another month had passed."
+        )
+        spans = utf16_spans(sentence, punctuation_practice_spans(sentence))
+        steps = build_practice_steps(sentence, spans, load_syntax_model())
+        labels = [preview_step(sentence, step) for step in steps]
+        self.assertEqual(labels[:4], [
+            "实义词：TIME", "实义词：MARCHED", "实义词：ON",
+            "组合片段：TIME MARCHED ON",
+        ])
+
     def test_content_words_then_one_function_fill_then_whole(self):
         sentence = "She put the book on the table."
         nlp = model(("She", 0, "PRON"), ("put", 4, "VERB"), ("the", 8, "DET"),
@@ -34,7 +48,7 @@ class ContentFunctionPracticeTests(TestCase):
                     ("and", 12, "CCONJ"), ("I", 16, "PRON"))
         steps = build_practice_steps(sentence, spans, nlp)
         self.assertEqual([step["kind"] for step in steps],
-                         ["content-word", "content-word", "segment", "sentence"])
+                         ["content-word", "content-word", "segment", "segment", "sentence"])
 
     def test_contractions_remain_one_editable_word_and_utf16_offsets_survive_emoji(self):
         sentence = "🙂 John's book isn't here."
@@ -56,4 +70,5 @@ class ContentFunctionPracticeTests(TestCase):
                     ("is", 17, "AUX"), ("right", 20, "ADJ"))
         steps = build_practice_steps(sentence, spans, nlp)
         self.assertEqual([step["kind"] for step in steps],
-                         ["content-word", "function-fill", "content-word", "function-fill", "sentence"])
+                         ["content-word", "function-fill", "segment", "content-word",
+                          "function-fill", "segment", "sentence"])

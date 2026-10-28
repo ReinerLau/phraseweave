@@ -84,6 +84,7 @@ def build_practice_steps(
                 "kind": "function-fill", "span": [start, end],
                 "answer_word_indices": functions,
             })
+        steps.append({"kind": "segment", "span": [start, end]})
 
     if not steps or steps[-1]["span"] != list(whole) or steps[-1]["kind"] != "segment":
         steps.append({"kind": "sentence", "span": [0, len(sentence)]})
