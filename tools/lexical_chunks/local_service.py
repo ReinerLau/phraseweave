@@ -56,20 +56,30 @@ INITIALIZATION: dict[str, str] = {"state": "starting", "message": "Starting loca
 
 
 def _practice_steps(course: dict[str, Any], statement: dict[str, Any]) -> list[Any]:
-    if course.get("practiceSequence") not in (
+    sequence = course.get("practiceSequence")
+    if sequence not in (
         "lazy-clause-segments-v1", "lazy-punctuation-segments-v1",
-        "lazy-punctuation-clause-segments-v1",
+        "lazy-punctuation-clause-segments-v1", "lazy-content-function-v1",
+        "lazy-content-function-clause-v1",
     ):
         return practice_spans(statement.get("english", ""))
     english = statement.get("english")
-    spans = statement.get("practiceSpans")
+    typed_steps = sequence in ("lazy-content-function-v1", "lazy-content-function-clause-v1")
+    spans = statement.get("practiceSteps" if typed_steps else "practiceSpans")
     size = len(english.encode("utf-16-le")) // 2 if isinstance(english, str) else -1
     if not isinstance(spans, list) or not spans or not all(
+        isinstance(span, dict) and isinstance(span.get("span"), list)
+        if typed_steps else isinstance(span, list) and len(span) == 2
+        for span in spans
+    ):
+        raise ValueError("Saved practice steps are invalid.")
+    ranges = [step["span"] if isinstance(step, dict) else step for step in spans]
+    if not all(
         isinstance(span, list) and len(span) == 2
         and all(isinstance(offset, int) and not isinstance(offset, bool) and offset >= 0 for offset in span)
         and span[0] < span[1] <= size
-        for span in spans
-    ) or spans[-1] != [0, size]:
+        for span in ranges
+    ) or ranges[-1] != [0, size]:
         raise ValueError("Saved practice steps are invalid.")
     return spans
 
@@ -479,6 +489,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Choose a supported translation provider.")
                 if not isinstance(payload.get("text"), str) or not payload["text"].strip() or len(payload["text"]) > 30_000:
                     raise ValueError("Choose one nonempty practice step under 30,000 characters.")
+                if "context" in payload and (not isinstance(payload["context"], str) or not payload["context"].strip() or len(payload["context"]) > 30_000):
+                    raise ValueError("Choose one nonempty context under 30,000 characters.")
                 result = _run_worker({**payload, "action": "translate"})
             except (ValueError, json.JSONDecodeError) as error:
                 self._json({"error": str(error)}, 400)
@@ -574,7 +586,8 @@ class Handler(BaseHTTPRequestHandler):
                         statements = course.get("statements", [])
                         if (course.get("practiceSequence") not in (
                                 "lazy-comma-segments-v1", "lazy-clause-segments-v1",
-                                "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1")
+                                "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1",
+                                "lazy-content-function-v1", "lazy-content-function-clause-v1")
                             or not isinstance(statement_index, int) or isinstance(statement_index, bool)
                             or statement_index < 0 or statement_index >= len(statements)
                             or not isinstance(step_index, int) or isinstance(step_index, bool)

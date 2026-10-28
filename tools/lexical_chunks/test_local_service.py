@@ -132,6 +132,25 @@ class CompletedJobEndpointTests(TestCase):
         self.assertEqual(body, {"chinese": "读这个"})
         worker.assert_called_once_with({"text": "Read this", "action": "translate"})
 
+    def test_translate_word_passes_context_to_worker(self):
+        connection = HTTPConnection("127.0.0.1", self.port)
+        try:
+            with patch("local_service.INITIALIZATION", {"state": "ready"}), patch(
+                "local_service._run_worker", return_value={"chinese": "放"}
+            ) as worker:
+                connection.request(
+                    "POST", "/api/translate",
+                    body=json.dumps({"text": "put", "context": "She put the book."}),
+                    headers={"Origin": "http://localhost:3000", "Content-Type": "application/json"},
+                )
+                response = connection.getresponse()
+                body = json.loads(response.read())
+        finally:
+            connection.close()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body, {"chinese": "放"})
+        worker.assert_called_once_with({"text": "put", "context": "She put the book.", "action": "translate"})
+
 
 class ExerciseProgressEndpointTests(TestCase):
     def setUp(self):
@@ -242,6 +261,34 @@ class ExerciseProgressEndpointTests(TestCase):
             "chinese": "多余译文", "whole": False,
         })[0], 400)
         self.assertEqual(self.stored_course()["statements"][0]["stepTranslations"], {"1": "然后写"})
+
+    def test_content_function_steps_save_translation_and_resume(self):
+        course = self.pack["courses"][0]
+        course["practiceSequence"] = "lazy-content-function-v1"
+        course["statements"][0].update({
+            "english": "She put the book.",
+            "practiceSteps": [
+                {"kind": "content-word", "span": [4, 7], "context_span": [0, 17]},
+                {"kind": "function-fill", "span": [0, 17], "answer_word_indices": [0, 2]},
+                {"kind": "sentence", "span": [0, 17]},
+            ],
+        })
+        self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
+            "courseId": "course", "statementIndex": 0, "stepIndex": 0,
+            "chinese": "放", "whole": False,
+        })[0], 200)
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/progress", {
+            "courseId": "course", "statementIndex": 0,
+            "resumeStatementIndex": 0, "resumeStepIndex": 1,
+        })[0], 200)
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
+            "courseId": "course", "statementIndex": 0, "stepIndex": 1,
+            "chinese": "错误整句", "whole": True,
+        })[0], 400)
+        stored = self.stored_course()
+        self.assertEqual(stored["resumeStepIndex"], 1)
+        self.assertEqual(stored["statements"][0]["stepTranslations"], {"0": "放"})
 
     def test_switch_and_restart_atomically_save_a_lower_cursor_and_mode(self):
         self.assertEqual(self.progress(3, "sentence-first", 3)[0], 200)

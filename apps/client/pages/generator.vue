@@ -3,7 +3,7 @@
     <header class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
-        <h1 class="mt-1 text-3xl font-bold">分段与整句练习生成器</h1>
+        <h1 class="mt-1 text-3xl font-bold">实义词与功能词练习生成器</h1>
         <p class="mt-2 max-w-2xl text-sm opacity-75">
           在本机分句并生成英文练习；练到对应题目时才翻译。练习时英文内容会发送至 Bilibili。
         </p>
@@ -139,7 +139,7 @@
         <span>
           <span class="font-semibold">在标点分隔片段内拆分从句</span>
           <span class="block text-sm opacity-70"
-            >默认按逗号、分号、冒号和长破折号分段；勾选后进一步拆分从句。生成后可预览题序，不影响已有卡片。</span
+            >默认按逗号、分号、冒号和长破折号分段，逐个练实义词，再填功能词；勾选后进一步拆分从句。生成后可预览题序，不影响已有卡片。</span
           >
         </span>
       </label>

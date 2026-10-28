@@ -100,7 +100,9 @@ function measureMasks() {
         (courseStore.currentCourse?.practiceSequence === "lazy-comma-segments-v1" ||
           courseStore.currentCourse?.practiceSequence === "lazy-clause-segments-v1" ||
           courseStore.currentCourse?.practiceSequence === "lazy-punctuation-segments-v1" ||
-          courseStore.currentCourse?.practiceSequence === "lazy-punctuation-clause-segments-v1") &&
+          courseStore.currentCourse?.practiceSequence === "lazy-punctuation-clause-segments-v1" ||
+          courseStore.currentCourse?.practiceSequence === "lazy-content-function-v1" ||
+          courseStore.currentCourse?.practiceSequence === "lazy-content-function-clause-v1") &&
         index > courseStore.currentSentenceIndex;
       return {
         id: sentence.id,

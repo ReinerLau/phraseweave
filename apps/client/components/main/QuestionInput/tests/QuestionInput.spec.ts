@@ -51,7 +51,7 @@ describe("QuestionInput", () => {
 
   function mountQuestionInput(
     english = "I eat",
-    context: { contextBefore?: string; contextAfter?: string } = {},
+    context: { contextBefore?: string; contextAfter?: string; answerWordIndices?: number[] } = {},
   ) {
     const pinia = createTestingPinia({ createSpy: vi.fn });
     const courseStore = useExerciseStore(pinia);
@@ -72,6 +72,27 @@ describe("QuestionInput", () => {
 
     return { input: wrapper.get('input[type="text"]'), wrapper, store: courseStore };
   }
+
+  it("shows practiced content words while accepting only function words", async () => {
+    const { input, wrapper, store } = mountQuestionInput("She put the book.", {
+      answerWordIndices: [0, 2],
+    });
+    expect(
+      wrapper.findAll('[data-testid="fixed-practice-word"]').map((word) => word.text()),
+    ).toEqual(["put", "book"]);
+    expect(wrapper.findAll(".question-input-word.border-b-2")).toHaveLength(2);
+    await submitAnswer(input, "She the");
+    expect(store.passCurrentStatement).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back on the current function word without replaying fixed content words", async () => {
+    const { input, store } = mountQuestionInput("She put the book.", {
+      answerWordIndices: [0, 2],
+    });
+    await rollbackAnswer(input, "She ");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(store.failCurrentStatement).toHaveBeenCalledWith("She ", 1);
+  });
 
   async function submitAnswer(
     input: ReturnType<typeof mountQuestionInput>["input"],

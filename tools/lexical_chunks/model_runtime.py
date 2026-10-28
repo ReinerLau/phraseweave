@@ -90,19 +90,29 @@ def translate_sentences(
     return _translate_transformers(sentences, tokenizer)
 
 
-def _translate_index(sentences: list[str], progress: Any = None) -> list[str]:
+def translate_contextual_word(word: str, context: str, provider: str = "index-translate") -> str:
+    if provider != "index-translate":
+        raise ValueError("Choose a supported translation provider.")
+    return _translate_index([word], word_context=context)[0]
+
+
+def _translate_index(sentences: list[str], progress: Any = None, *, word_context: str | None = None) -> list[str]:
     translations = []
     for index, sentence in enumerate(sentences, start=1):
         if progress:
             progress(f"Index-Translate：正在翻译第 {index}/{len(sentences)} 句…")
+        prompt = (
+            f"根据英文片段「{word_context}」，只翻译其中的单词「{sentence}」在此处的含义。"
+            "只输出简短中文词义，不要解释。"
+            if word_context else
+            "请将以下英语文本翻译为中文，直接输出翻译结果，不要进行任何解释。\n\n"
+            f"{sentence}"
+        )
         payload = {
             "model": INDEX_TRANSLATE_MODEL,
             "messages": [{
                 "role": "user",
-                "content": (
-                    "请将以下英语文本翻译为中文，直接输出翻译结果，不要进行任何解释。\n\n"
-                    f"{sentence}"
-                ),
+                "content": prompt,
             }],
             "temperature": 0,
             "max_tokens": MAX_OUTPUT_TOKENS,

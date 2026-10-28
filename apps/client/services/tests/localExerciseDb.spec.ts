@@ -16,6 +16,47 @@ const firstUnit = {
 };
 
 describe("normalizeExerciseImport", () => {
+  it("imports schema 8 typed steps and rejects invalid answer indices", () => {
+    const backup = {
+      schema_version: 8,
+      practice_sequence: "lazy-content-function-v1",
+      statements: [
+        {
+          english: "She put the book.",
+          context_before: "",
+          context_after: "",
+          unit_id: "0:whole",
+          source_unit_ids: [],
+          practice_steps: [
+            { kind: "content-word", span: [4, 7], context_span: [0, 17] },
+            { kind: "content-word", span: [12, 16], context_span: [0, 17] },
+            { kind: "function-fill", span: [0, 17], answer_word_indices: [0, 2] },
+            { kind: "sentence", span: [0, 17] },
+          ],
+        },
+      ],
+    };
+    const [pack] = normalizeExerciseImport(backup);
+    expect(pack.courses[0].statements[0].practiceSteps).toEqual(
+      backup.statements[0].practice_steps,
+    );
+    expect(() =>
+      normalizeExerciseImport({
+        ...backup,
+        statements: [
+          {
+            ...backup.statements[0],
+            practice_steps: [
+              backup.statements[0].practice_steps[0],
+              { kind: "function-fill", span: [0, 17], answer_word_indices: [0, 9] },
+              backup.statements[0].practice_steps[3],
+            ],
+          },
+        ],
+      }),
+    ).toThrow("备份文件包含无效练习");
+  });
+
   it.each(["lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1"] as const)(
     "imports schema 7 saved steps for %s",
     (practiceSequence) => {

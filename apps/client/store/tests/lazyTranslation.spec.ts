@@ -61,6 +61,49 @@ describe("lazy sentence practice", () => {
     return store;
   }
 
+  it("uses contextual word prompts, function-only answers, resume, and whole review", async () => {
+    course.practiceSequence = "lazy-content-function-v1";
+    course.statements = [
+      {
+        ...course.statements[0],
+        english: "She put the book.",
+        practiceSteps: [
+          { kind: "content-word", span: [4, 7], context_span: [0, 17] },
+          { kind: "content-word", span: [12, 16], context_span: [0, 17] },
+          { kind: "function-fill", span: [0, 17], answer_word_indices: [0, 2] },
+          { kind: "sentence", span: [0, 17] },
+        ],
+      },
+    ];
+    let store = await setup();
+    expect(store.currentStatement?.english).toBe("put");
+    expect(translatePracticeStep).toHaveBeenCalledWith("put", "She put the book.");
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(course.resumeStepIndex).toBe(1);
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.currentStatement?.english).toBe("book");
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.currentStatement?.english).toBe("She put the book.");
+    expect(store.answerWordIndices).toEqual([0, 2]);
+    expect(store.words).toEqual(["She", "the"]);
+    expect(store.checkCorrect("She the")).toBe(true);
+    expect(store.checkCorrect("She put the book")).toBe(false);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.words).toEqual(["She", "put", "the", "book"]);
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(true);
+    store.doAgain();
+    await flushPromises();
+    expect(store.currentStatement?.english).toBe("She put the book.");
+  });
+
   it("uses saved clause steps for translation, resume, and whole-sentence review", async () => {
     course.practiceSequence = "lazy-clause-segments-v1";
     course.statements = [
