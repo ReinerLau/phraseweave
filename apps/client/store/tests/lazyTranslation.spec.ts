@@ -61,6 +61,38 @@ describe("lazy sentence practice", () => {
     return store;
   }
 
+  it("uses saved clause steps for translation, resume, and whole-sentence review", async () => {
+    course.practiceSequence = "lazy-clause-segments-v1";
+    course.statements = [{
+      ...course.statements[0],
+      english: "I think that she is right.",
+      practiceSpans: [[0, 7], [8, 25], [0, 26]],
+    }];
+    let store = await setup();
+    expect(store.currentPracticeText).toBe("I think");
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "I think", "that she is right",
+    ]);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(course.resumeStepIndex).toBe(1);
+    expect(translatePracticeStep).toHaveBeenLastCalledWith("I think that she is right.");
+
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.currentPracticeText).toBe("that she is right");
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.currentPracticeText).toBe("I think that she is right.");
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(true);
+    store.doAgain();
+    await flushPromises();
+    expect(store.currentPracticeText).toBe("I think that she is right.");
+  });
+
   it("shows the course shell before the first translation completes", async () => {
     let finishCurrent!: (value: { chinese: string }) => void;
     vi.mocked(translatePracticeStep).mockImplementation(async (text) => {

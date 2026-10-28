@@ -5,9 +5,10 @@
         <p class="text-sm opacity-60">PhraseWeave 本地工具</p>
         <h1 class="mt-1 text-3xl font-bold">分段与整句练习生成器</h1>
         <p class="mt-2 max-w-2xl text-sm opacity-75">
-          在本机分句并生成英文练习；练到对应题目时才拆逗号并翻译。练习时英文内容会发送至 Bilibili。
+          在本机分句并生成英文练习；练到对应题目时才翻译。练习时英文内容会发送至 Bilibili。
         </p>
       </div>
+
       <div class="flex shrink-0 items-center gap-2">
         <CommonBackLink
           label="返回练习清单"
@@ -127,6 +128,20 @@
         </label>
       </div>
 
+      <label class="flex cursor-pointer items-start gap-3">
+        <input
+          v-model="splitClauses"
+          class="checkbox checkbox-primary mt-0.5"
+          type="checkbox"
+          :disabled="generationBusy || savingExercise"
+          @change="clearGeneratedOutputs"
+        />
+        <span>
+          <span class="font-semibold">在逗号分隔片段内拆分从句</span>
+          <span class="block text-sm opacity-70">可选试用；生成后可预览题序，不影响已有卡片。</span>
+        </span>
+      </label>
+
       <div class="flex flex-wrap items-center gap-3">
         <button
           class="btn btn-primary"
@@ -189,6 +204,21 @@
           </button>
         </div>
       </div>
+    </section>
+
+    <section
+      v-if="practicePreview.length"
+      class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
+    >
+      <h2 class="text-xl font-semibold">首次练习题序预览</h2>
+      <ol class="mt-4 space-y-4">
+        <li v-for="(item, index) in practicePreview" :key="index">
+          <p class="font-semibold">第 {{ index + 1 }} 句：{{ item.sentence }}</p>
+          <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm">
+            <li v-for="(step, stepIndex) in item.steps" :key="stepIndex">{{ step }}</li>
+          </ol>
+        </li>
+      </ol>
     </section>
 
     <section
@@ -302,6 +332,7 @@ const selectedText =
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
 const supportsPublicTranslation = ref(false);
 const outputFormat = ref<OutputFormat>("both");
+const splitClauses = ref(false);
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
@@ -314,6 +345,7 @@ const submitting = ref(false);
 const generationBusy = computed(() => submitting.value || Boolean(activeJob.value));
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
+const practicePreview = ref<Array<{ sentence: string; steps: string[] }>>([]);
 const generatedText = ref("");
 const defaultExerciseTitle = computed(() =>
   generatedText.value.replace(/\s+/g, " ").trim().slice(0, 80),
@@ -465,11 +497,10 @@ async function refreshService() {
 async function startJob(payload: {
   text: string;
   format: OutputFormat;
+  splitClauses?: boolean;
 }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
-  outputFiles.value = [];
-  markdownFileName.value = "";
-  markdownContent.value = null;
+  clearGeneratedOutputs();
   generatedText.value = payload.text;
   exerciseTitle.value = defaultExerciseTitle.value;
   try {
@@ -482,6 +513,13 @@ async function startJob(payload: {
   }
 }
 
+function clearGeneratedOutputs() {
+  outputFiles.value = [];
+  practicePreview.value = [];
+  markdownFileName.value = "";
+  markdownContent.value = null;
+}
+
 async function generate() {
   if (!canGenerate.value) return;
   submitting.value = true;
@@ -490,6 +528,7 @@ async function generate() {
     await startJob({
       text: englishText.value,
       format: outputFormat.value,
+      ...(splitClauses.value ? { splitClauses: true } : {}),
     });
   } finally {
     submitting.value = false;
@@ -518,6 +557,7 @@ async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
     const outputs = job.result?.outputs || [];
     if (job.result) {
       outputFiles.value = outputs;
+      practicePreview.value = job.result.preview ?? [];
       const markdownFile = outputFiles.value.find((file) => file.name.endsWith(".md"));
       if (markdownFile) {
         markdownFileName.value = markdownFile.name;

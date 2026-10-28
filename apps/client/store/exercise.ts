@@ -35,6 +35,8 @@ export interface Statement {
   contextAfter?: string;
   sentenceChinese?: string;
   stepTranslations?: Record<string, string>;
+  /** Generation-time UTF-16 ranges for opt-in clause practice. */
+  practiceSpans?: Array<[number, number]>;
   unitId?: string;
   sourceUnitIds?: [] | RecoverySources;
 }
@@ -53,8 +55,8 @@ export interface Course {
   statements: Statement[];
   coursePackId: ExerciseCatalogItem["id"];
   completionCount: number;
-  /** Identifies the comma-segment sequence generated for new exercises. */
-  practiceSequence?: "comma-segments-v1" | "lazy-comma-segments-v1";
+  /** Identifies the generated step sequence and its translation timing. */
+  practiceSequence?: "comma-segments-v1" | "lazy-comma-segments-v1" | "lazy-clause-segments-v1";
   /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
   /** Unfinished base question in the original statements; null after completing a run. */
@@ -107,13 +109,16 @@ export const useExerciseStore = defineStore("exercise", () => {
   let pendingPassedWrite = Promise.resolve();
   let pendingProgressWrite = Promise.resolve();
   const { statementIndex, setupStatement } = useStatement();
-  const isLazy = computed(() => currentCourse.value?.practiceSequence === "lazy-comma-segments-v1");
+  const isLazy = computed(() =>
+    currentCourse.value?.practiceSequence === "lazy-comma-segments-v1" ||
+    currentCourse.value?.practiceSequence === "lazy-clause-segments-v1",
+  );
   const translationReady = computed(
     () => !isLazy.value || Boolean(currentStatement.value?.sentenceChinese?.trim()),
   );
   function lazySpans(index = statementIndex.value) {
-    const sentence = currentCourse.value?.statements[index]?.english ?? "";
-    return practiceSpans(sentence);
+    const statement = currentCourse.value?.statements[index];
+    return statement?.practiceSpans ?? practiceSpans(statement?.english ?? "");
   }
   function lazyReview() {
     return lazyReviewMode.value;
@@ -508,6 +513,7 @@ export const useExerciseStore = defineStore("exercise", () => {
       (!practiceModeAvailability.progressive && !groups) ||
       (!practiceModeAvailability.single &&
         course.practiceSequence !== "lazy-comma-segments-v1" &&
+        course.practiceSequence !== "lazy-clause-segments-v1" &&
         (!groups || groups.some((group) => !course.statements[group.end].sentenceChinese?.trim())))
     ) {
       throw new Error("该练习缺少原句分组或完整中文提示，请重新生成以使用整句优先和全文模式。");
@@ -617,13 +623,13 @@ export const useExerciseStore = defineStore("exercise", () => {
     const task = (async () => {
       let chinese = fetchedTranslations.get(key);
       if (!chinese) {
-        const [start, end] = practiceSpans(base.english)[step];
+        const [start, end] = lazySpans(index)[step];
         const result = await translatePracticeStep(base.english.slice(start, end));
         chinese = result.chinese.trim();
         if (!chinese) throw new Error("翻译服务返回空译文，请重试。");
         fetchedTranslations.set(key, chinese);
       }
-      const whole = step === practiceSpans(base.english).length - 1;
+      const whole = step === lazySpans(index).length - 1;
       await saveLocalExerciseTranslation(
         course.coursePackId,
         course.id,

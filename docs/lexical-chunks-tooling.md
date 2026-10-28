@@ -1,6 +1,6 @@
 # 逗号分段生成与旧语块工具
 
-当前 `/generator` 只在本机按原文分句，导出不含译文的 schema 5 英文原句。练到对应句子时动态拆逗号，逐题翻译；首次练习逐段后练整句，完成后只练整句。旧 spaCy 依存分析和语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。当前行为见 [ADR 0031](adr/0031-comma-segment-first-practice.md) 和 [ADR 0032](adr/0032-lazy-practice-translation.md)。
+默认 `/generator` 只在本机按原文分句，导出不含译文的 schema 5 英文原句。练到对应句子时动态拆逗号，逐题翻译；首次练习逐段后练整句，完成后只练整句。生成时可选开启 spaCy 从句拆分：在逗号分隔片段内部预先确定练习题序，导出 schema 6，并在保存前预览；详见 [ADR 0033](adr/0033-optional-clause-practice.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。当前默认行为见 [ADR 0031](adr/0031-comma-segment-first-practice.md) 和 [ADR 0032](adr/0032-lazy-practice-translation.md)。
 
 PhraseWeave 的 `/generator` 页面由本机 CLI 提供。生成时只在本机按标点分句。练习中的中文提示使用 Index-Translate 公网翻译，当前英文题目会发送至 Bilibili。生成结果可下载为英文 Markdown、PhraseWeave JSON，或点击“保存并进入练习”写入共享练习库。
 
