@@ -3,6 +3,7 @@ import { computed, ref, shallowRef } from "vue";
 
 import type { ExerciseCatalogItem } from "./exerciseCatalog";
 import type { RecoverySources } from "./reviewRecovery";
+import type { ContentFunctionStep } from "~/services/localExerciseDb";
 import type { LearningMode } from "~/utils/learningDirection";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
 import { translatePracticeStep } from "~/services/generatorClient";
@@ -13,7 +14,7 @@ import {
   saveLocalExerciseTranslation,
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
-import { checkClozeAnswer, tokenizeClozeText } from "~/utils/clozeText";
+import { checkClozeAnswer, getClozeWords, tokenizeClozeText } from "~/utils/clozeText";
 import {
   findRecoveryOccurrence,
   groupExerciseSentences,
@@ -37,6 +38,8 @@ export interface Statement {
   stepTranslations?: Record<string, string>;
   /** Generation-time UTF-16 ranges for saved step sequences. */
   practiceSpans?: Array<[number, number]>;
+  practiceSteps?: ContentFunctionStep[];
+  answerWordIndices?: number[];
   unitId?: string;
   sourceUnitIds?: [] | RecoverySources;
 }
@@ -61,7 +64,9 @@ export interface Course {
     | "lazy-comma-segments-v1"
     | "lazy-clause-segments-v1"
     | "lazy-punctuation-segments-v1"
-    | "lazy-punctuation-clause-segments-v1";
+    | "lazy-punctuation-clause-segments-v1"
+    | "lazy-content-function-v1"
+    | "lazy-content-function-clause-v1";
   /** Position in the original statements, independent of the selected learning direction. */
   statementIndex: number;
   /** Unfinished base question in the original statements; null after completing a run. */
@@ -119,13 +124,22 @@ export const useExerciseStore = defineStore("exercise", () => {
       currentCourse.value?.practiceSequence === "lazy-comma-segments-v1" ||
       currentCourse.value?.practiceSequence === "lazy-clause-segments-v1" ||
       currentCourse.value?.practiceSequence === "lazy-punctuation-segments-v1" ||
-      currentCourse.value?.practiceSequence === "lazy-punctuation-clause-segments-v1",
+      currentCourse.value?.practiceSequence === "lazy-punctuation-clause-segments-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-content-function-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-content-function-clause-v1",
   );
   const translationReady = computed(
     () => !isLazy.value || Boolean(currentStatement.value?.sentenceChinese?.trim()),
   );
   function lazySpans(index = statementIndex.value) {
     const statement = currentCourse.value?.statements[index];
+    if (
+      currentCourse.value?.practiceSequence === "lazy-content-function-v1" ||
+      currentCourse.value?.practiceSequence === "lazy-content-function-clause-v1"
+    ) {
+      if (!statement?.practiceSteps?.length) throw new Error("已保存的练习题序无效");
+      return statement.practiceSteps.map((step) => step.span);
+    }
     if (
       currentCourse.value?.practiceSequence === "lazy-punctuation-segments-v1" ||
       currentCourse.value?.practiceSequence === "lazy-punctuation-clause-segments-v1"
@@ -218,6 +232,7 @@ export const useExerciseStore = defineStore("exercise", () => {
       const spans = lazySpans();
       lazyStepIndex.value = Math.min(Math.max(0, lazyStepIndex.value), spans.length - 1);
       const [start, end] = spans[lazyStepIndex.value];
+      const step = base.practiceSteps?.[lazyStepIndex.value];
       currentStatement.value = {
         ...base,
         id: `${base.id}:step:${lazyStepIndex.value}`,
@@ -225,6 +240,7 @@ export const useExerciseStore = defineStore("exercise", () => {
         contextBefore: base.english.slice(0, start),
         contextAfter: base.english.slice(end),
         sentenceChinese: base.stepTranslations?.[lazyStepIndex.value] ?? "",
+        answerWordIndices: step?.kind === "function-fill" ? step.answer_word_indices : undefined,
       };
       return;
     }
@@ -254,8 +270,16 @@ export const useExerciseStore = defineStore("exercise", () => {
   );
 
   const clozeTokens = computed(() => tokenizeClozeText(currentStatement.value?.english ?? ""));
+  const answerWordIndices = computed(() => {
+    const all = clozeTokens.value.flatMap((token) =>
+      token.kind === "word" ? [token.wordIndex] : [],
+    );
+    return currentStatement.value?.answerWordIndices ?? all;
+  });
   const words = computed(() =>
-    clozeTokens.value.filter((token) => token.kind === "word").map((token) => token.text),
+    answerWordIndices.value.map(
+      (index) => getClozeWords(currentStatement.value?.english ?? "")[index],
+    ),
   );
 
   const totalQuestionsCount = computed(() => {
@@ -462,7 +486,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     return (
       translationReady.value &&
       statement !== undefined &&
-      checkClozeAnswer(statement.english, input)
+      checkClozeAnswer(words.value.join(" "), input)
     );
   }
 
@@ -531,6 +555,8 @@ export const useExerciseStore = defineStore("exercise", () => {
         course.practiceSequence !== "lazy-clause-segments-v1" &&
         course.practiceSequence !== "lazy-punctuation-segments-v1" &&
         course.practiceSequence !== "lazy-punctuation-clause-segments-v1" &&
+        course.practiceSequence !== "lazy-content-function-v1" &&
+        course.practiceSequence !== "lazy-content-function-clause-v1" &&
         (!groups || groups.some((group) => !course.statements[group.end].sentenceChinese?.trim())))
     ) {
       throw new Error("该练习缺少原句分组或完整中文提示，请重新生成以使用整句优先和全文模式。");
@@ -641,7 +667,15 @@ export const useExerciseStore = defineStore("exercise", () => {
       let chinese = fetchedTranslations.get(key);
       if (!chinese) {
         const [start, end] = lazySpans(index)[step];
-        const result = await translatePracticeStep(base.english.slice(start, end));
+        const practiceStep = base.practiceSteps?.[step];
+        const context =
+          practiceStep?.kind === "content-word" && practiceStep.context_span
+            ? base.english.slice(...practiceStep.context_span)
+            : undefined;
+        const text = base.english.slice(start, end);
+        const result = context
+          ? await translatePracticeStep(text, context)
+          : await translatePracticeStep(text);
         chinese = result.chinese.trim();
         if (!chinese) throw new Error("翻译服务返回空译文，请重试。");
         fetchedTranslations.set(key, chinese);
@@ -753,6 +787,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     canDecomposeCurrentUnit,
     isAnsweringBaseUnit,
     words,
+    answerWordIndices,
     originalSentence,
     isCommaSegmentQuestion,
     currentPracticeText,

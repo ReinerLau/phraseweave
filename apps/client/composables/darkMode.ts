@@ -15,8 +15,8 @@ const LIGHT_THEME_CLASS = "light";
 const darkMode = ref(Theme.LIGHT);
 export function useDarkMode() {
   const isAppearanceTransition =
-    // @ts-expect-error: Transition API
-    document.startViewTransition && !window.matchMedia(`(prefers-reduced-motion: reduce)`).matches;
+    "startViewTransition" in document &&
+    !window.matchMedia(`(prefers-reduced-motion: reduce)`).matches;
 
   const isDarkMode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
