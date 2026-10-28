@@ -39,6 +39,13 @@ interface LazySentenceBackup {
   practice_sequence: "lazy-comma-segments-v1";
   statements: Omit<LexicalChunksStatementV4, "sentence_chinese">[];
 }
+interface ClauseSentenceBackup {
+  schema_version: 6;
+  practice_sequence: "lazy-clause-segments-v1";
+  statements: Array<LazySentenceBackup["statements"][number] & {
+    practice_spans: Array<[number, number]>;
+  }>;
+}
 
 export interface ExerciseImportOptions {
   title?: string;
@@ -260,7 +267,8 @@ export function mergeLocalExerciseProgress(
           ...new Set([...(previous.passedUnitIds ?? []), ...(course.passedUnitIds ?? [])]),
         ],
         statements:
-          course.practiceSequence === "lazy-comma-segments-v1"
+          (course.practiceSequence === "lazy-comma-segments-v1" ||
+            course.practiceSequence === "lazy-clause-segments-v1")
             ? course.statements.map((statement, index) => ({
                 ...statement,
                 stepTranslations: {
@@ -457,11 +465,13 @@ export function normalizeExerciseImport(
     return title ? [{ ...coursePacks[0], title }] : coursePacks;
   }
 
-  if (!isLexicalChunksBackup(value) && !isLazySentenceBackup(value))
+  if (!isLexicalChunksBackup(value) && !isLazySentenceBackup(value) && !isClauseSentenceBackup(value))
     throw new Error("旧版练习请重新生成后导入");
   if (
     !value.statements.every(
-      value.schema_version === 5 ? isLazySentenceStatement : isLexicalChunksStatementV4,
+      value.schema_version === 6
+        ? isClauseSentenceStatement
+        : value.schema_version === 5 ? isLazySentenceStatement : isLexicalChunksStatementV4,
     )
   ) {
     throw new Error("备份文件包含无效练习");
@@ -483,6 +493,9 @@ export function normalizeExerciseImport(
     sentenceChinese: "sentence_chinese" in statement ? statement.sentence_chinese : undefined,
     unitId: statement.unit_id,
     sourceUnitIds: statement.source_unit_ids,
+    ...(value.schema_version === 6 && "practice_spans" in statement
+      ? { practiceSpans: statement.practice_spans }
+      : {}),
   }));
 
   return [
@@ -558,8 +571,11 @@ function isExerciseResponse(value: unknown): value is ExerciseResponse {
             typeof statement.contextBefore === "string" &&
             typeof statement.contextAfter === "string" &&
             (course.practiceSequence === "lazy-comma-segments-v1" ||
+              course.practiceSequence === "lazy-clause-segments-v1" ||
               (typeof statement.sentenceChinese === "string" &&
-                statement.sentenceChinese.trim().length > 0)),
+                statement.sentenceChinese.trim().length > 0)) &&
+            (course.practiceSequence !== "lazy-clause-segments-v1" ||
+              validClauseSpans(statement.english, statement.practiceSpans)),
         ),
     )
   );
@@ -585,6 +601,38 @@ function isLazySentenceBackup(value: unknown): value is LazySentenceBackup {
     Array.isArray(backup.statements) &&
     backup.statements.length > 0
   );
+}
+
+function isClauseSentenceBackup(value: unknown): value is ClauseSentenceBackup {
+  if (!value || typeof value !== "object") return false;
+  const backup = value as Partial<ClauseSentenceBackup>;
+  return (
+    backup.schema_version === 6 &&
+    backup.practice_sequence === "lazy-clause-segments-v1" &&
+    Array.isArray(backup.statements) &&
+    backup.statements.length > 0
+  );
+}
+
+function isClauseSentenceStatement(value: unknown): value is ClauseSentenceBackup["statements"][number] {
+  if (!isLazySentenceStatement(value)) return false;
+  return validClauseSpans(value.english, (value as { practice_spans?: unknown }).practice_spans);
+}
+
+function validClauseSpans(english: string, spans: unknown): spans is Array<[number, number]> {
+  if (!Array.isArray(spans) || !spans.length) return false;
+  const size = english.length;
+  const valid = spans.every((span) =>
+    Array.isArray(span) && span.length === 2 &&
+    Number.isInteger(span[0]) && Number.isInteger(span[1]) &&
+    span[0] >= 0 && span[0] < span[1] && span[1] <= size &&
+    /[\p{L}\p{N}]/u.test(english.slice(span[0], span[1])) &&
+    !/^[\uDC00-\uDFFF]/u.test(english.slice(span[0])) &&
+    !/[\uD800-\uDBFF]$/u.test(english.slice(0, span[1])),
+  );
+  const last = spans[spans.length - 1];
+  return valid && last[0] === 0 && last[1] === size &&
+    new Set(spans.map((span) => `${span[0]}:${span[1]}`)).size === spans.length;
 }
 
 function isLazySentenceStatement(
@@ -625,7 +673,7 @@ function isLexicalChunksStatementV4(value: unknown): value is LexicalChunksState
 }
 
 function hasValidSources(
-  statements: Array<LexicalChunksStatementV4 | LazySentenceBackup["statements"][number]>,
+  statements: Array<LexicalChunksStatementV4 | LazySentenceBackup["statements"][number] | ClauseSentenceBackup["statements"][number]>,
 ): boolean {
   const firstById = new Map<string, number>();
   const canonical = new Map<string, (typeof statements)[number]>();
@@ -643,7 +691,9 @@ function hasValidSources(
       statement.context_after === first.context_after &&
       ("sentence_chinese" in statement ? statement.sentence_chinese : undefined) ===
         ("sentence_chinese" in first ? first.sentence_chinese : undefined) &&
-      JSON.stringify(statement.source_unit_ids) === JSON.stringify(first.source_unit_ids);
+      JSON.stringify(statement.source_unit_ids) === JSON.stringify(first.source_unit_ids) &&
+      JSON.stringify("practice_spans" in statement ? statement.practice_spans : undefined) ===
+        JSON.stringify("practice_spans" in first ? first.practice_spans : undefined);
     const sources = statement.source_unit_ids;
     const sourceOrderValid =
       new Set(sources).size === sources.length &&

@@ -23,7 +23,10 @@ export interface GeneratorJob {
   state: "running" | "complete" | "failed";
   message?: string;
   error?: string;
-  result?: { outputs: GeneratorOutput[] };
+  result?: {
+    outputs: GeneratorOutput[];
+    preview?: Array<{ sentence: string; steps: string[] }>;
+  };
 }
 
 const SERVICE_URL = "http://127.0.0.1:8765";
@@ -64,6 +67,7 @@ export function getGeneratorStatus() {
 export function startGeneratorJob(payload: {
   text: string;
   format: string;
+  splitClauses?: boolean;
   translationProvider?: TranslationProvider;
 }) {
   return localRequest<{ id: string }>("/api/generate", {

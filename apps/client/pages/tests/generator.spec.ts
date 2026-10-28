@@ -120,6 +120,28 @@ async function mountAndGenerate() {
 }
 
 describe("generator capture preview", () => {
+  it("keeps clause splitting off by default and previews an opted-in sequence", async () => {
+    await mount();
+    const toggle = wrapper!.find('input[type="checkbox"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(false);
+    await toggle.setValue(true);
+    mocks.job.mockResolvedValueOnce({
+      id: "job-1",
+      state: "complete",
+      result: {
+        outputs,
+        preview: [{ sentence: "The cat sleeps.", steps: ["The cat", "sleeps.", "The cat sleeps."] }],
+      },
+    });
+    await submit();
+    expect(mocks.start).toHaveBeenCalledWith({ text, format: "both", splitClauses: true });
+    expect(wrapper!.text()).toContain("首次练习题序预览");
+    expect(wrapper!.text()).toContain("The cat");
+    await toggle.setValue(false);
+    expect(wrapper!.text()).not.toContain("首次练习题序预览");
+    expect(wrapper!.text()).not.toContain("下载 units.json");
+  });
+
   it("prefills the editable form and generates only after submission", async () => {
     await mount();
     expect(mocks.status).toHaveBeenCalled();

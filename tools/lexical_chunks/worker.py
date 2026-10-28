@@ -8,8 +8,10 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from clause_practice import clause_practice_spans, render_clause_phraseweave
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
 from sentence_review import render_lazy_markdown, render_lazy_phraseweave, split_sentences
+from split_lexical_chunks import load_syntax_model
 
 
 def _read_request() -> Mapping[str, Any]:
@@ -49,24 +51,42 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
     if output_format not in {"markdown", "phraseweave", "both"}:
         raise ValueError("Choose an output format.")
+    split_clauses = payload.get("splitClauses", False)
+    if not isinstance(split_clauses, bool):
+        raise ValueError("splitClauses must be a boolean.")
     sentences = split_sentences(text)
+    nlp = load_syntax_model() if split_clauses else None
+    clause_spans = None
+    if nlp:
+        clause_spans = []
+        for index, sentence in enumerate(sentences, start=1):
+            try:
+                clause_spans.append(clause_practice_spans(sentence, nlp))
+            except Exception as error:
+                raise RuntimeError(f"Clause parsing failed for sentence {index}: {error}") from error
     markdown = (
         render_lazy_markdown(sentences)
         if output_format in {"markdown", "both"}
         else ""
     )
     phraseweave = (
-        render_lazy_phraseweave(sentences)
-        if output_format in {"phraseweave", "both"}
-        else ""
-    )
+        render_clause_phraseweave(sentences, clause_spans)
+        if clause_spans is not None else render_lazy_phraseweave(sentences)
+    ) if output_format in {"phraseweave", "both"} else ""
     outputs = _build_outputs(markdown, phraseweave, output_format)
 
-    _emit({
+    result = {
         "ok": True,
         "outputs": outputs,
         "model": model_status(),
-    })
+    }
+    if clause_spans is not None:
+        result["preview"] = [{
+            "sentence": sentence,
+            "steps": [sentence.encode("utf-16-le")[start * 2:end * 2].decode("utf-16-le")
+                      for start, end in spans],
+        } for sentence, spans in zip(sentences, clause_spans, strict=True)]
+    _emit(result)
 
 
 def _translate(payload: Mapping[str, Any]) -> None:

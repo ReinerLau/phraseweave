@@ -21,15 +21,40 @@ class InMemoryOutputTests(TestCase):
 
 
 class SentenceGenerationTests(TestCase):
+    def test_opt_in_clause_generation_exports_preview_even_for_markdown_only(self):
+        with (
+            patch("worker.load_syntax_model") as model,
+            patch("worker.clause_practice_spans", return_value=[(0, 7), (8, 25), (0, 26)]) as spans,
+            patch("worker._emit") as emit,
+        ):
+            _generate({"text": "I think that she is right.", "format": "markdown", "splitClauses": True})
+        model.assert_called_once()
+        spans.assert_called_once()
+        result = emit.call_args.args[0]
+        self.assertEqual(len(result["outputs"]), 1)
+        self.assertEqual(result["preview"][0]["steps"], [
+            "I think", "that she is right", "I think that she is right.",
+        ])
+
+    def test_opt_in_clause_parser_failure_is_reported(self):
+        with (
+            patch("worker.load_syntax_model", return_value=object()),
+            patch("worker.clause_practice_spans", side_effect=ValueError("bad parse")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Clause parsing failed for sentence 1: bad parse"):
+                _generate({"text": "I think that she is right.", "format": "both", "splitClauses": True})
+
     def test_generation_exports_one_whole_statement_per_sentence_without_commas(self):
         with (
             patch("worker.translate_sentences") as translate,
+            patch("worker.load_syntax_model") as syntax_model,
             patch("worker.model_status", return_value={"model_downloaded": False}),
             patch("worker._emit") as emit,
         ):
             _generate({"text": "The cat sleeps. Birds sing!", "format": "both"})
 
         translate.assert_not_called()
+        syntax_model.assert_not_called()
         markdown, phraseweave = emit.call_args.args[0]["outputs"]
         self.assertIn("The cat sleeps.", markdown["content"])
         self.assertNotIn("中文提示", markdown["content"])
