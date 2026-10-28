@@ -1,6 +1,6 @@
-# 逗号分段生成与旧语块工具
+# 标点分段生成与旧语块工具
 
-默认 `/generator` 只在本机按原文分句，导出不含译文的 schema 5 英文原句。练到对应句子时动态拆逗号，逐题翻译；首次练习逐段后练整句，完成后只练整句。生成时可选开启 spaCy 从句拆分：在逗号分隔片段内部预先确定练习题序，导出 schema 6，并在保存前预览；详见 [ADR 0033](adr/0033-optional-clause-practice.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。当前默认行为见 [ADR 0031](adr/0031-comma-segment-first-practice.md) 和 [ADR 0032](adr/0032-lazy-practice-translation.md)。
+默认 `/generator` 在本机按原文分句，并按逗号、分号、冒号和长破折号预先确定首次练习题序，导出不含译文的 schema 7 英文原句及 `practice_spans`。练到对应题目时才逐题翻译；首次练习逐段后练整句，完成后只练整句。生成时可选开启 spaCy 在标点分隔片段内进一步拆从句；两种模式均在保存前预览题序，详见 [ADR 0034](adr/0034-punctuation-segment-practice.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。
 
 PhraseWeave 的 `/generator` 页面由本机 CLI 提供。生成时只在本机按标点分句。练习中的中文提示使用 Index-Translate 公网翻译，当前英文题目会发送至 Bilibili。生成结果可下载为英文 Markdown、PhraseWeave JSON，或点击“保存并进入练习”写入共享练习库。
 
@@ -20,11 +20,11 @@ Chrome 扩展直接携带选中文本打开固定的本机 Web UI，文本放在
 
 公网翻译使用官方 `https://index-translate.bilibili.com/v1/chat/completions` 和 `Index-Translate-35B-A3B`，无需 API Key，逐题请求，每题超时 30 秒。生成不下载或加载 Hy-MT2。请求失败或译文截断时停在当前题，用户可以重试；不会自动回退到本地翻译。启动仍需准备本地 Python 和 spaCy 依赖。
 
-新生成流程只保存英文原句。PhraseWeave JSON 使用 schema 5 和 `practice_sequence: "lazy-comma-segments-v1"`，每句一条记录，`source_unit_ids` 为空；Markdown 仅列原句。练习时动态拆分并逐题获取译文，缓存写入练习卡片。旧 schema 4 保持兼容；旧依存组合流程仍使用其直接来源复习规则。
+新生成流程保存英文原句和题序，不保存译文。PhraseWeave JSON 使用 schema 7 和 `practice_sequence: "lazy-punctuation-segments-v1"`，可选从句模式使用 `lazy-punctuation-clause-segments-v1`；每句一条记录，包含 UTF-16 偏移的 `practice_spans`，`source_unit_ids` 为空。Markdown 仅列原句。练习时按保存题序逐题获取译文，缓存写入练习卡片。旧 schema 4/5/6 保持兼容；旧依存组合流程仍使用其直接来源复习规则。
 
 双引号只在分句和依存分析时忽略；输出的原句及学习单元按原文范围截取，整句保留完整的引号和句末标点。练习中这些标点固定显示，不参与填写或判分。若忽略引号后某句的整句无法组合、来源为空，则仅对该句用原文重试一次依存分析，避免整句失去可回退的词元来源；重试树的引号词元仍会过滤。此规则从算法版本 8 生效；旧计划和已丢失引号的练习需从原始英文重新生成。见 [ADR 0028](adr/0028-retry-blocked-sentence-with-original-quotes.md)。
 
-练习页面当前只开放全文展示，隐藏学习方向和展示方式的切换入口。新生成卡片首次按逗号段练习，完成后只练整句；旧练习从当前进度所属整句开始。新卡片允许尚未翻译的原句进入，当前题翻译失败时停留并提供重试；旧练习缺少可靠原句分组或完整中文提示时阻止进入，提示重新生成并提供返回练习列表的入口。旧练习不做批量迁移或自动清理。此临时限制覆盖 [ADR 0022](adr/0022-switchable-learning-direction.md) 的自由切换与旧数据回退规则，以及 [ADR 0023](adr/0023-fulltext-practice-view.md) 的默认单题规则。渐进组合和单题的实现及类型仍保留，后续可在 `apps/client/utils/practiceModes.ts` 重新开放对应开关。
+练习页面当前只开放全文展示，隐藏学习方向和展示方式的切换入口。新生成卡片首次按标点片段练习，完成后只练整句；旧练习从当前进度所属整句开始。新卡片允许尚未翻译的原句进入，当前题翻译失败时停留并提供重试；旧练习缺少可靠原句分组或完整中文提示时阻止进入，提示重新生成并提供返回练习列表的入口。旧练习不做批量迁移或自动清理。此临时限制覆盖 [ADR 0022](adr/0022-switchable-learning-direction.md) 的自由切换与旧数据回退规则，以及 [ADR 0023](adr/0023-fulltext-practice-view.md) 的默认单题规则。渐进组合和单题的实现及类型仍保留，后续可在 `apps/client/utils/practiceModes.ts` 重新开放对应开关。
 
 渐进组合保留生成题序，从较小的学习单元逐步组合并复习到完整原句；整句优先先练整句，答错时进入回退复习。两种方向均以当前填空词元为回车回退边界，先复习该位置及前面错误或空白位置对应的最小可练习单元，后续尚未练到的词元不单独加入复习；空格只在最后一个词元激活时提交整句，其他位置只移动到下一空位，边界内全部正确但原题尚未填完时保留输入继续填写，见 [ADR 0027](adr/0027-current-word-recovery-boundary.md) 和 [ADR 0029](adr/0029-space-submits-enter-rolls-back.md)。回退时再练原题中包含错误的直接组成单元，最后重试原题，跳过更深的中间组合；多个分支按来源顺序分别复习，返回后重新填写整个单元。中途再次出错只建立局部复习路径，完成后继续外层剩余步骤。见 [ADR 0026](adr/0026-shorten-word-recovery-path.md)。重新开放模式切换后，切换从当前单元重新开始；临时复习切回渐进组合时定位到原基础题之前同一单元最后一次出现的位置。学习方向和位置随本地练习保存，完整备份包含这些状态。定位与兼容规则见 [ADR 0022](adr/0022-switchable-learning-direction.md)。
 

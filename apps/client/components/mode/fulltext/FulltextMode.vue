@@ -97,7 +97,10 @@ function measureMasks() {
     scroll,
     courseStore.sentences.map((sentence, index) => {
       const english =
-        courseStore.currentCourse?.practiceSequence === "lazy-comma-segments-v1" &&
+        (courseStore.currentCourse?.practiceSequence === "lazy-comma-segments-v1" ||
+          courseStore.currentCourse?.practiceSequence === "lazy-clause-segments-v1" ||
+          courseStore.currentCourse?.practiceSequence === "lazy-punctuation-segments-v1" ||
+          courseStore.currentCourse?.practiceSequence === "lazy-punctuation-clause-segments-v1") &&
         index > courseStore.currentSentenceIndex;
       return {
         id: sentence.id,

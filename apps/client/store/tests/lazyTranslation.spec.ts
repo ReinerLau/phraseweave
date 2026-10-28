@@ -63,15 +63,22 @@ describe("lazy sentence practice", () => {
 
   it("uses saved clause steps for translation, resume, and whole-sentence review", async () => {
     course.practiceSequence = "lazy-clause-segments-v1";
-    course.statements = [{
-      ...course.statements[0],
-      english: "I think that she is right.",
-      practiceSpans: [[0, 7], [8, 25], [0, 26]],
-    }];
+    course.statements = [
+      {
+        ...course.statements[0],
+        english: "I think that she is right.",
+        practiceSpans: [
+          [0, 7],
+          [8, 25],
+          [0, 26],
+        ],
+      },
+    ];
     let store = await setup();
     expect(store.currentPracticeText).toBe("I think");
     expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
-      "I think", "that she is right",
+      "I think",
+      "that she is right",
     ]);
     store.passCurrentStatement();
     store.advanceAfterCorrect();
@@ -91,6 +98,49 @@ describe("lazy sentence practice", () => {
     store.doAgain();
     await flushPromises();
     expect(store.currentPracticeText).toBe("I think that she is right.");
+  });
+
+  it("uses new punctuation steps and cached translations across a resumed first pass", async () => {
+    course.practiceSequence = "lazy-punctuation-segments-v1";
+    course.statements = [
+      {
+        ...course.statements[0],
+        english: "Read this; then write.",
+        practiceSpans: [
+          [0, 9],
+          [11, 22],
+          [0, 22],
+        ],
+      },
+    ];
+    let store = await setup();
+    expect(store.currentPracticeText).toBe("Read this");
+    expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
+      "Read this",
+      "then write.",
+    ]);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(course.resumeStepIndex).toBe(1);
+    expect(store.currentPracticeText).toBe("then write.");
+    expect(translatePracticeStep).toHaveBeenLastCalledWith("Read this; then write.");
+
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.currentPracticeText).toBe("then write.");
+    expect(
+      vi.mocked(translatePracticeStep).mock.calls.filter(([text]) => text === "then write."),
+    ).toHaveLength(1);
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.currentPracticeText).toBe("Read this; then write.");
+    store.passCurrentStatement();
+    expect(store.advanceAfterCorrect()).toBe(true);
+    store.doAgain();
+    await flushPromises();
+    expect(store.currentPracticeText).toBe("Read this; then write.");
   });
 
   it("shows the course shell before the first translation completes", async () => {

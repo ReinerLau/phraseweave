@@ -56,7 +56,10 @@ INITIALIZATION: dict[str, str] = {"state": "starting", "message": "Starting loca
 
 
 def _practice_steps(course: dict[str, Any], statement: dict[str, Any]) -> list[Any]:
-    if course.get("practiceSequence") != "lazy-clause-segments-v1":
+    if course.get("practiceSequence") not in (
+        "lazy-clause-segments-v1", "lazy-punctuation-segments-v1",
+        "lazy-punctuation-clause-segments-v1",
+    ):
         return practice_spans(statement.get("english", ""))
     english = statement.get("english")
     spans = statement.get("practiceSpans")
@@ -67,7 +70,7 @@ def _practice_steps(course: dict[str, Any], statement: dict[str, Any]) -> list[A
         and span[0] < span[1] <= size
         for span in spans
     ) or spans[-1] != [0, size]:
-        raise ValueError("Saved clause practice steps are invalid.")
+        raise ValueError("Saved practice steps are invalid.")
     return spans
 
 
@@ -254,7 +257,10 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
             *(previous_units if isinstance(previous_units, list) else []),
             *(current_units if isinstance(current_units, list) else []),
         ]))
-        if course.get("practiceSequence") in ("lazy-comma-segments-v1", "lazy-clause-segments-v1"):
+        if course.get("practiceSequence") in (
+            "lazy-comma-segments-v1", "lazy-clause-segments-v1",
+            "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1",
+        ):
             for statement, old_statement in zip(course.get("statements", []), previous.get("statements", [])):
                 statement["stepTranslations"] = {
                     **statement.get("stepTranslations", {}),
@@ -566,7 +572,9 @@ class Handler(BaseHTTPRequestHandler):
                         step_index = payload.get("stepIndex")
                         chinese = payload.get("chinese")
                         statements = course.get("statements", [])
-                        if (course.get("practiceSequence") not in ("lazy-comma-segments-v1", "lazy-clause-segments-v1")
+                        if (course.get("practiceSequence") not in (
+                                "lazy-comma-segments-v1", "lazy-clause-segments-v1",
+                                "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1")
                             or not isinstance(statement_index, int) or isinstance(statement_index, bool)
                             or statement_index < 0 or statement_index >= len(statements)
                             or not isinstance(step_index, int) or isinstance(step_index, bool)

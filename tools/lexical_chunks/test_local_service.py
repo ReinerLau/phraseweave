@@ -225,6 +225,24 @@ class ExerciseProgressEndpointTests(TestCase):
         })[0], 400)
         self.assertEqual(self.stored_course()["statements"][0]["stepTranslations"], {"1": "她是对的"})
 
+    def test_new_punctuation_steps_use_saved_spans_for_translation(self):
+        course = self.pack["courses"][0]
+        course["practiceSequence"] = "lazy-punctuation-segments-v1"
+        course["statements"][0].update({
+            "english": "Read this; then write.",
+            "practiceSpans": [[0, 9], [11, 22], [0, 22]],
+        })
+        self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
+            "courseId": "course", "statementIndex": 0, "stepIndex": 1,
+            "chinese": "然后写", "whole": False,
+        })[0], 200)
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
+            "courseId": "course", "statementIndex": 0, "stepIndex": 3,
+            "chinese": "多余译文", "whole": False,
+        })[0], 400)
+        self.assertEqual(self.stored_course()["statements"][0]["stepTranslations"], {"1": "然后写"})
+
     def test_switch_and_restart_atomically_save_a_lower_cursor_and_mode(self):
         self.assertEqual(self.progress(3, "sentence-first", 3)[0], 200)
         self.assertEqual(self.stored_course()["statementIndex"], 3)

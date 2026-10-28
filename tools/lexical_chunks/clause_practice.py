@@ -6,13 +6,9 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from sentence_review import practice_spans
+from sentence_review import practice_spans, punctuation_practice_spans, utf16_spans
 
 CLAUSE_DEPS = frozenset({"advcl", "ccomp", "xcomp", "acl", "relcl", "csubj", "csubjpass", "pcomp"})
-
-
-def _utf16_offset(text: str, offset: int) -> int:
-    return len(text[:offset].encode("utf-16-le")) // 2
 
 
 def _words(text: str) -> bool:
@@ -84,9 +80,19 @@ def _split_parent(
 
 def clause_practice_spans(sentence: str, nlp: Any) -> list[tuple[int, int]]:
     """Return UTF-16 ranges ordered as small parts, comma parents, then whole."""
+    return _clause_practice_spans(sentence, nlp, practice_spans(sentence))
+
+
+def punctuation_clause_practice_spans(sentence: str, nlp: Any) -> list[tuple[int, int]]:
+    """Split clauses within the new punctuation-delimited parent steps."""
+    return _clause_practice_spans(sentence, nlp, punctuation_practice_spans(sentence))
+
+
+def _clause_practice_spans(
+    sentence: str, nlp: Any, parent_steps: Sequence[tuple[int, int]]
+) -> list[tuple[int, int]]:
     document = nlp(sentence)
-    comma_steps = practice_spans(sentence)
-    parents = comma_steps[:-1] if len(comma_steps) > 1 else comma_steps
+    parents = parent_steps[:-1] if len(parent_steps) > 1 else parent_steps
     candidates = [
         _clause_bounds(token)
         for token in document
@@ -98,7 +104,7 @@ def clause_practice_spans(sentence: str, nlp: Any) -> list[tuple[int, int]]:
     whole = (0, len(sentence))
     if not steps or steps[-1] != whole:
         steps.append(whole)
-    return [(_utf16_offset(sentence, start), _utf16_offset(sentence, end)) for start, end in steps]
+    return utf16_spans(sentence, steps)
 
 
 def render_clause_phraseweave(sentences: Sequence[str], spans: Sequence[Sequence[tuple[int, int]]]) -> str:
