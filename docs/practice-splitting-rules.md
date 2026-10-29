@@ -1,6 +1,6 @@
 # 练习拆分规则索引
 
-这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果中的斜杠表示顺序；除“分句”外，末尾的完整原句也是一道练习题。默认模式和可选从句模式共用分句、标点分段及片段内题目规则；“前置成分”仅用于默认模式，“从句”仅用于勾选从句模式。每节开头的实现路径适用于该节每一条规则，每条规则都列出对应测试。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
+这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果代码块每行展示一个片段或题目，完整序列按行顺序排列；除“分句”外，末尾的完整原句也是一道练习题。默认模式和可选从句模式共用分句、标点分段及片段内题目规则；“前置成分”仅用于默认模式，“从句”仅用于勾选从句模式。每节开头的实现路径适用于该节每一条规则，每条规则都列出对应测试。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
 
 ## 1. 分句（两种当前模式）
 
@@ -16,7 +16,13 @@
 Birds sing. Cats sleep?
 ```
 
-- **分句结果：** `Birds sing.` / `Cats sleep?`
+**分句结果：**
+
+```text
+Birds sing.
+Cats sleep?
+```
+
 - **测试：** `test_rule_index_sentence_examples`
 
 ### S2 连续符号与闭合引号
@@ -29,7 +35,13 @@ Birds sing. Cats sleep?
 “Go now?!” She left?
 ```
 
-- **分句结果：** `“Go now?!”` / `She left?`
+**分句结果：**
+
+```text
+“Go now?!”
+She left?
+```
+
 - **测试：** `test_rule_index_sentence_examples`
 
 ### S3 空段落
@@ -44,7 +56,13 @@ Birds sing
 Cats sleep
 ```
 
-- **分句结果：** `Birds sing` / `Cats sleep`
+**分句结果：**
+
+```text
+Birds sing
+Cats sleep
+```
+
 - **测试：** `test_rule_index_sentence_examples`
 
 ### S4 缩写不分句
@@ -57,7 +75,13 @@ Cats sleep
 Dr. Smith paid, e.g. for lunch. Ms. Lee smiled.
 ```
 
-- **分句结果：** `Dr. Smith paid, e.g. for lunch.` / `Ms. Lee smiled.`
+**分句结果：**
+
+```text
+Dr. Smith paid, e.g. for lunch.
+Ms. Lee smiled.
+```
+
 - **测试：** `test_rule_index_sentence_examples`
 
 ### S5 小数不分句
@@ -70,7 +94,13 @@ Dr. Smith paid, e.g. for lunch. Ms. Lee smiled.
 He paid 3.14 dollars. She left.
 ```
 
-- **分句结果：** `He paid 3.14 dollars.` / `She left.`
+**分句结果：**
+
+```text
+He paid 3.14 dollars.
+She left.
+```
+
 - **测试：** `test_rule_index_sentence_examples`
 
 ### S6 无句末符号
@@ -84,7 +114,13 @@ Birds sing
 softly
 ```
 
-- **分句结果：** `Birds sing\nsoftly`
+**分句结果：**
+
+```text
+Birds sing
+softly
+```
+
 - **测试：** `test_keeps_unpunctuated_text_and_rejects_empty_input`
 
 ### S7 无可练文字
@@ -97,7 +133,12 @@ softly
 Birds sing. ...
 ```
 
-- **分句结果：** 报错：第 2 句没有词元
+**分句结果：**
+
+```text
+报错：第 2 句没有词元
+```
+
 - **测试：** `test_keeps_unpunctuated_text_and_rejects_empty_input`
 
 ## 2. 标点分段（两种当前模式）
@@ -114,7 +155,17 @@ Birds sing. ...
 A, B; C: D—E.
 ```
 
-- **片段题序：** `A` / `B` / `C` / `D` / `E.` / 整句
+**片段题序：**
+
+```text
+A
+B
+C
+D
+E.
+A, B; C: D—E.
+```
+
 - **测试：** `test_new_punctuation_steps_preserve_internal_symbols`
 
 ### P2 数字内部不拆
@@ -127,7 +178,14 @@ A, B; C: D—E.
 Bring 1,000 books at 12:30; leave.
 ```
 
-- **片段题序：** `Bring 1,000 books at 12:30` / `leave.` / 整句
+**片段题序：**
+
+```text
+Bring 1,000 books at 12:30
+leave.
+Bring 1,000 books at 12:30; leave.
+```
+
 - **测试：** `test_rule_index_punctuation_examples`
 
 ### P3 网址内部不拆
@@ -140,7 +198,14 @@ Bring 1,000 books at 12:30; leave.
 See https://example.com:8080/a,b; leave.
 ```
 
-- **片段题序：** `See https://example.com:8080/a,b` / `leave.` / 整句
+**片段题序：**
+
+```text
+See https://example.com:8080/a,b
+leave.
+See https://example.com:8080/a,b; leave.
+```
+
 - **测试：** `test_rule_index_punctuation_examples`
 
 ### P4 其他符号不拆
@@ -153,7 +218,12 @@ See https://example.com:8080/a,b; leave.
 Don't split "well-known" 3/4 (quoted) – now.
 ```
 
-- **片段题序：** 整句
+**片段题序：**
+
+```text
+Don't split "well-known" 3/4 (quoted) – now.
+```
+
 - **测试：** `test_rule_index_punctuation_examples`
 
 ### P5 无空题
@@ -166,7 +236,14 @@ Don't split "well-known" 3/4 (quoted) – now.
 A; : — B.
 ```
 
-- **片段题序：** `A` / `B.` / 整句
+**片段题序：**
+
+```text
+A
+B.
+A; : — B.
+```
+
 - **测试：** `test_new_punctuation_steps_preserve_internal_symbols`
 
 ### P6 边缘分号冒号
@@ -179,7 +256,14 @@ A; : — B.
 A: B;
 ```
 
-- **片段题序：** `A` / `B;` / 整句
+**片段题序：**
+
+```text
+A
+B;
+A: B;
+```
+
 - **测试：** `test_new_punctuation_steps_preserve_internal_symbols`
 
 ### P7 无有效分段
@@ -192,7 +276,12 @@ A: B;
 Birds sing.
 ```
 
-- **片段题序：** 整句
+**片段题序：**
+
+```text
+Birds sing.
+```
+
 - **测试：** `test_rule_index_punctuation_examples`
 
 ## 3. 前置成分二次拆分（仅默认模式）
@@ -209,7 +298,14 @@ Birds sing.
 and soon enough another month had passed.
 ```
 
-- **片段题序：** `and soon enough` / `another month had passed.` / 整段
+**片段题序：**
+
+```text
+and soon enough
+another month had passed.
+and soon enough another month had passed.
+```
+
 - **测试：** `test_fronted_time_modifier_replays_its_punctuation_parent`
 
 ### F2 地点或时间介词短语
@@ -222,7 +318,14 @@ and soon enough another month had passed.
 In the morning she left.
 ```
 
-- **片段题序：** `In the morning` / `she left.` / 整句
+**片段题序：**
+
+```text
+In the morning
+she left.
+In the morning she left.
+```
+
 - **测试：** `test_fronted_place_time_and_condition_keep_the_core_clause_together`
 
 ### F3 条件状语
@@ -235,7 +338,14 @@ In the morning she left.
 If it rains we will stay.
 ```
 
-- **片段题序：** `If it rains` / `we will stay.` / 整句
+**片段题序：**
+
+```text
+If it rains
+we will stay.
+If it rains we will stay.
+```
+
 - **测试：** `test_fronted_place_time_and_condition_keep_the_core_clause_together`
 
 ### F4 多个前置成分
@@ -248,7 +358,14 @@ If it rains we will stay.
 Yesterday in the morning we left.
 ```
 
-- **片段题序：** `Yesterday in the morning` / `we left.` / 整句
+**片段题序：**
+
+```text
+Yesterday in the morning
+we left.
+Yesterday in the morning we left.
+```
+
 - **测试：** `test_fronted_place_time_and_condition_keep_the_core_clause_together`
 
 ### F5 只有连接词不拆
@@ -261,7 +378,12 @@ Yesterday in the morning we left.
 And another month had passed.
 ```
 
-- **片段题序：** 整句
+**片段题序：**
+
+```text
+And another month had passed.
+```
+
 - **测试：** `test_connective_only_and_mid_clause_modifiers_do_not_split`
 
 ### F6 句中修饰语不拆
@@ -274,7 +396,12 @@ And another month had passed.
 She quietly left.
 ```
 
-- **片段题序：** 整句
+**片段题序：**
+
+```text
+She quietly left.
+```
+
 - **测试：** `test_connective_only_and_mid_clause_modifiers_do_not_split`
 
 ### F7 不可靠边界不拆
@@ -287,7 +414,12 @@ She quietly left.
 😀 And then she left.
 ```
 
-- **片段题序：** 整句
+**片段题序：**
+
+```text
+😀 And then she left.
+```
+
 - **测试：** `test_unreliable_prefix_remains_whole_and_utf16_offsets_are_preserved`
 
 ### F8 不误认从句主语
@@ -300,7 +432,14 @@ She quietly left.
 When the sun rose the birds sang.
 ```
 
-- **片段题序：** `When the sun rose` / `the birds sang.` / 整句
+**片段题序：**
+
+```text
+When the sun rose
+the birds sang.
+When the sun rose the birds sang.
+```
+
 - **测试：** `test_subordinate_subject_is_not_mistaken_for_the_core_subject`
 
 ## 4. 可选从句拆分（仅勾选从句模式）
@@ -317,7 +456,14 @@ When the sun rose the birds sang.
 I stayed because it rained.
 ```
 
-- **片段题序：** `I stayed` / `because it rained` / 整句
+**片段题序：**
+
+```text
+I stayed
+because it rained
+I stayed because it rained.
+```
+
 - **测试：** `test_embedded_relative_and_adverbial_clauses`
 
 ### C2 补语从句
@@ -330,7 +476,16 @@ I stayed because it rained.
 I think that she is right; then I agree.
 ```
 
-- **片段题序：** `I think` / `that she is right` / `I think that she is right` / `then I agree.` / 整句
+**片段题序：**
+
+```text
+I think
+that she is right
+I think that she is right
+then I agree.
+I think that she is right; then I agree.
+```
+
 - **测试：** `test_new_clause_steps_use_punctuation_parents`
 
 ### C3 嵌入式从句
@@ -343,7 +498,15 @@ I think that she is right; then I agree.
 The book that I bought is good.
 ```
 
-- **片段题序：** `The book` / `that I bought` / `is good.` / 整句
+**片段题序：**
+
+```text
+The book
+that I bought
+is good.
+The book that I bought is good.
+```
+
 - **测试：** `test_embedded_relative_and_adverbial_clauses`
 
 ### C4 嵌套从句
@@ -356,7 +519,16 @@ The book that I bought is good.
 I know that she said that he left.
 ```
 
-- **片段题序：** `I know` / `that she said` / `that he left` / `that she said that he left` / 整句
+**片段题序：**
+
+```text
+I know
+that she said
+that he left
+that she said that he left
+I know that she said that he left.
+```
+
 - **测试：** `test_nested_clauses_and_numeric_comma`
 
 ### C5 无从句不拆
@@ -369,7 +541,12 @@ I know that she said that he left.
 Birds sing.
 ```
 
-- **片段题序：** 整句
+**片段题序：**
+
+```text
+Birds sing.
+```
+
 - **测试：** `test_unsplit_sentence_and_utf16_offsets`
 
 ### C6 越界或交叉不拆
@@ -383,7 +560,13 @@ Alpha beta gamma delta.
 ```
 
 - **候选范围：** `[0,10)` 与 `[6,16)` 交叉
-- **片段题序：** `Alpha beta gamma delta.`
+
+**片段题序：**
+
+```text
+Alpha beta gamma delta.
+```
+
 - **测试：** `test_crossing_or_out_of_parent_clause_candidates_do_not_split`
 
 ## 5. 片段内实义词与功能词题（两种当前模式）
@@ -400,7 +583,16 @@ Alpha beta gamma delta.
 She put the book on the table.
 ```
 
-- **题序示例：** `put` / `book` / `table` / 功能词填空 / 整句
+**题序示例：**
+
+```text
+put
+book
+table
+___ put ___ book ___ ___ table.
+She put the book on the table.
+```
+
 - **测试：** `test_content_words_then_one_function_fill_then_whole`
 
 ### W2 功能词填空
@@ -413,7 +605,12 @@ She put the book on the table.
 She put the book on the table.
 ```
 
-- **题序示例：** `___ put ___ book ___ ___ table.`
+**题序示例：**
+
+```text
+___ put ___ book ___ ___ table.
+```
+
 - **测试：** `test_content_words_then_one_function_fill_then_whole`
 
 ### W3 无功能词
@@ -426,7 +623,15 @@ She put the book on the table.
 TIME MARCHED ON
 ```
 
-- **题序示例：** `TIME` / `MARCHED` / `ON` / `TIME MARCHED ON`
+**题序示例：**
+
+```text
+TIME
+MARCHED
+ON
+TIME MARCHED ON
+```
+
 - **测试：** `test_uppercase_all_content_segment_is_replayed_before_next_segment`
 
 ### W4 无实义词
@@ -439,7 +644,12 @@ TIME MARCHED ON
 and I.
 ```
 
-- **题序示例：** `and I.`
+**题序示例：**
+
+```text
+and I.
+```
+
 - **测试：** `test_skips_fill_without_function_words_and_replays_segment_without_content`
 
 ### W5 缩写词元
@@ -452,7 +662,17 @@ and I.
 John's book isn't here.
 ```
 
-- **题序示例：** 实义词 `John's`、`book`、`here`；`isn't` 留在功能词填空
+**题序示例：**
+
+```text
+John's
+book
+here
+John's book ___ here.
+John's book isn't here.
+```
+
+- **说明：** `isn't` 作为一个词元留在功能词填空中。
 - **测试：** `test_contractions_remain_one_editable_word_and_utf16_offsets_survive_emoji`
 
 ### W6 组合与整句
@@ -465,7 +685,18 @@ John's book isn't here.
 I think that she is right.
 ```
 
-- **题序示例：** `I think` 的词题与复现 / `that she is right` 的词题与复现 / 整句
+**题序示例：**
+
+```text
+think
+___ think
+I think
+right
+___ ___ ___ right
+that she is right
+I think that she is right.
+```
+
 - **测试：** `test_clause_parent_is_replayed_after_leaf_drills`
 
 ## 6. 旧语块生成（保留备用，不用于新生成卡片）
@@ -482,7 +713,16 @@ I think that she is right.
 The book fell.
 ```
 
-- **学习单元示例：** `The` / `book` / `The book` / `fell` / 整句
+**学习单元示例：**
+
+```text
+The
+book
+The book
+fell
+The book fell.
+```
+
 - **测试：** `test_rule_index_small_legacy_sequences`、`test_function_words_are_available_as_review_sources`
 
 ### L2 后序闭合
@@ -495,7 +735,18 @@ The book fell.
 The young teacher left.
 ```
 
-- **学习单元示例：** `The` / `young` / `teacher` / `young teacher` / `The young teacher` / `left` / 整句
+**学习单元示例：**
+
+```text
+The
+young
+teacher
+young teacher
+The young teacher
+left
+The young teacher left.
+```
+
 - **测试：** `test_rule_index_small_legacy_sequences`
 
 ### L3 非叶先行
@@ -508,7 +759,18 @@ The young teacher left.
 Researchers from Tulane University in the USA say any kind of light at bedtime could be bad for your heart.
 ```
 
-- **学习单元示例：** 连续摘录：`bad for your heart` / `could` / `be` / `could be` / `be bad for your heart` / `could be bad for your heart`
+**学习单元示例：**
+
+```text
+bad for your heart
+could
+be
+could be
+be bad for your heart
+could be bad for your heart
+```
+
+- **说明：** 以上为连续摘录。
 - **测试：** `test_leaf_child_follows_non_leaf_siblings_before_head`
 
 ### L4 左右两侧
@@ -521,7 +783,15 @@ Researchers from Tulane University in the USA say any kind of light at bedtime c
 She is happy.
 ```
 
-- **学习单元示例：** `She is` / `is happy` / 整句（序列摘录）
+**学习单元示例：**
+
+```text
+She is
+is happy
+She is happy.
+```
+
+- **说明：** 以上为序列摘录。
 - **测试：** `test_rule_index_small_legacy_sequences`
 
 ### L5 标点不挡邻接
@@ -534,7 +804,16 @@ She is happy.
 He smiled, and she laughed.
 ```
 
-- **学习单元示例：** 包含 `smiled, and`、`He smiled, and`、`she laughed`、整句
+**学习单元示例：**
+
+```text
+smiled, and
+He smiled, and
+she laughed
+He smiled, and she laughed.
+```
+
+- **说明：** 结果包含以上学习单元；未列出完整序列。
 - **测试：** `test_internal_punctuation_allows_local_closure_and_keeps_comma`
 
 ### L6 字词间隔阻断
@@ -547,7 +826,14 @@ He smiled, and she laughed.
 I bought a book yesterday that explains grammar.
 ```
 
-- **学习单元示例：** 有 `a book` 和 `that explains grammar`，没有 `a book yesterday that explains grammar`
+**学习单元示例：**
+
+```text
+a book
+that explains grammar
+```
+
+- **说明：** 结果包含以上学习单元，不生成 `a book yesterday that explains grammar`。
 - **测试：** `test_word_gaps_still_block_unclosed_subtrees`
 
 ### L7 不特判并列
@@ -560,7 +846,15 @@ I bought a book yesterday that explains grammar.
 He smiled and she laughed.
 ```
 
-- **学习单元示例：** 包含 `smiled and`、`she laughed`、整句
+**学习单元示例：**
+
+```text
+smiled and
+she laughed
+He smiled and she laughed.
+```
+
+- **说明：** 结果包含以上学习单元；未列出完整序列。
 - **测试：** `test_coordination_follows_tree_without_special_grouping`
 
 ### L8 引号保留
@@ -573,7 +867,11 @@ He smiled and she laughed.
 “Run!”
 ```
 
-- **学习单元示例 1：** 整句 `“Run!”`
+**学习单元示例 1：**
+
+```text
+“Run!”
+```
 
 **输入 2：**
 
@@ -581,7 +879,12 @@ He smiled and she laughed.
 She said"hello"today.
 ```
 
-- **学习单元示例 2：** 整句保留双引号
+**学习单元示例 2：**
+
+```text
+She said"hello"today.
+```
+
 - **测试：** `test_quoted_sentences_keep_independent_original_boundaries`
 
 ### L9 引号重试
@@ -594,7 +897,13 @@ She said"hello"today.
 My future self had given me a few pieces of advice: “Consult Nanahoshi,” “Write Eris a letter,” and “Doubt the Man-God without opposing him.”
 ```
 
-- **学习单元示例：** 整句仍是原文，且可经来源追溯到 `had`
+**学习单元示例：**
+
+```text
+My future self had given me a few pieces of advice: “Consult Nanahoshi,” “Write Eris a letter,” and “Doubt the Man-God without opposing him.”
+```
+
+- **说明：** 整句可经来源追溯到 `had`。
 - **测试：** `test_blocked_quote_parse_retries_raw_sentence_for_full_span_sources`
 
 ### L10 整句收尾
@@ -607,7 +916,14 @@ My future self had given me a few pieces of advice: “Consult Nanahoshi,” “
 Birds sing.
 ```
 
-- **学习单元示例：** `Birds` / `sing` / `Birds sing.`
+**学习单元示例：**
+
+```text
+Birds
+sing
+Birds sing.
+```
+
 - **测试：** `test_rule_index_small_legacy_sequences`、`test_word_gaps_still_block_unclosed_subtrees`
 
 ## 新增或修改规则时
