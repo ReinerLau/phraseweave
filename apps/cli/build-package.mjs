@@ -58,6 +58,7 @@ for (const name of [
   "sentence_review.py",
   "clause_practice.py",
   "content_function_practice.py",
+  "fronted_practice.py",
   "worker.py",
   "pyproject.toml",
   "uv.lock",
