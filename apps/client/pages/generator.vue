@@ -214,81 +214,6 @@
         </li>
       </ol>
     </section>
-
-    <section
-      v-if="markdownContent !== null"
-      class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
-    >
-      <div class="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 class="text-xl font-semibold">Markdown 文件内容</h2>
-        <span class="text-sm opacity-60">{{ markdownFileName }}</span>
-      </div>
-      <article class="mt-4 max-h-[36rem] overflow-auto rounded-lg bg-base-200 p-4">
-        <template
-          v-for="(block, index) in markdownBlocks"
-          :key="index"
-        >
-          <h1
-            v-if="block.type === 'heading' && block.level === 1"
-            class="mt-0 text-2xl font-bold"
-          >
-            {{ block.text }}
-          </h1>
-          <h2
-            v-else-if="block.type === 'heading' && block.level === 2"
-            class="mt-6 text-xl font-semibold"
-          >
-            {{ block.text }}
-          </h2>
-          <h3
-            v-else-if="block.type === 'heading'"
-            class="mt-4 text-lg font-semibold"
-          >
-            {{ block.text }}
-          </h3>
-          <p
-            v-else-if="block.type === 'paragraph'"
-            class="my-3 whitespace-pre-wrap"
-          >
-            {{ block.text }}
-          </p>
-          <pre
-            v-else-if="block.type === 'code'"
-            class="whitespace-pre-wrap rounded bg-base-300"
-          ><code>{{ block.text }}</code></pre>
-          <div
-            v-else-if="block.type === 'table'"
-            class="overflow-x-auto"
-          >
-            <table class="table table-zebra table-sm">
-              <thead>
-                <tr>
-                  <th
-                    v-for="(cell, cellIndex) in block.headers"
-                    :key="cellIndex"
-                  >
-                    {{ cell }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(row, rowIndex) in block.rows"
-                  :key="rowIndex"
-                >
-                  <td
-                    v-for="(cell, cellIndex) in row"
-                    :key="cellIndex"
-                  >
-                    {{ cell }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
-      </article>
-    </section>
   </main>
 </template>
 
@@ -311,11 +236,6 @@ import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExer
 
 type OutputFormat = "markdown" | "phraseweave" | "both";
 type OutputFile = GeneratorOutput;
-type MarkdownBlock =
-  | { type: "heading"; level: number; text: string }
-  | { type: "paragraph"; text: string }
-  | { type: "code"; text: string }
-  | { type: "table"; headers: string[]; rows: string[][] };
 const route = useRoute();
 const rawCaptureId = route.query.capture;
 const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
@@ -345,9 +265,6 @@ const defaultExerciseTitle = computed(() =>
 );
 const exerciseTitle = ref("");
 const savingExercise = ref(false);
-const markdownFileName = ref("");
-const markdownContent = ref<string | null>(null);
-const markdownBlocks = computed(() => parseMarkdown(markdownContent.value || ""));
 const captureStatus = ref("");
 const captureError = ref("");
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -508,8 +425,6 @@ async function startJob(payload: {
 function clearGeneratedOutputs() {
   outputFiles.value = [];
   practicePreview.value = [];
-  markdownFileName.value = "";
-  markdownContent.value = null;
 }
 
 async function generate() {
@@ -549,11 +464,6 @@ async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
     if (job.result) {
       outputFiles.value = outputs;
       practicePreview.value = job.result.preview ?? [];
-      const markdownFile = outputFiles.value.find((file) => file.name.endsWith(".md"));
-      if (markdownFile) {
-        markdownFileName.value = markdownFile.name;
-        markdownContent.value = markdownFile.content;
-      }
     }
     await releaseGeneratorJob(jobId);
     return outputs;
@@ -610,85 +520,10 @@ function describeError(error: unknown) {
   return error instanceof Error ? error.message : "本地服务请求失败。";
 }
 
-function parseMarkdown(source: string): MarkdownBlock[] {
-  const lines = source.split(/\r?\n/);
-  const blocks: MarkdownBlock[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index].trim();
-    if (!line) {
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !lines[index].trim().startsWith("```")) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-      blocks.push({ type: "code", text: codeLines.join("\n") });
-      index += 1;
-      continue;
-    }
-
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
-      index += 1;
-      continue;
-    }
-
-    if (
-      line.startsWith("|") &&
-      index + 1 < lines.length &&
-      /^\|?[\s:|-]+\|?$/.test(lines[index + 1].trim())
-    ) {
-      const headers = parseMarkdownTableRow(line);
-      const rows: string[][] = [];
-      index += 2;
-      while (index < lines.length && lines[index].trim().startsWith("|")) {
-        rows.push(parseMarkdownTableRow(lines[index].trim()));
-        index += 1;
-      }
-      blocks.push({ type: "table", headers, rows });
-      continue;
-    }
-
-    blocks.push({ type: "paragraph", text: line });
-    index += 1;
-  }
-
-  return blocks;
-}
-
-function parseMarkdownTableRow(line: string): string[] {
-  const trimmed = line.replace(/^\|/, "").replace(/\|$/, "");
-  const cells: string[] = [];
-  let cell = "";
-  for (let index = 0; index < trimmed.length; index += 1) {
-    const character = trimmed[index];
-    if (character === "\\" && trimmed[index + 1] === "|") {
-      cell += "|";
-      index += 1;
-    } else if (character === "|") {
-      cells.push(cell.trim().replaceAll("<br>", "\n"));
-      cell = "";
-    } else {
-      cell += character;
-    }
-  }
-  cells.push(cell.trim().replaceAll("<br>", "\n"));
-  return cells;
-}
-
 onUnmounted(() => {
   disposed = true;
   if (pollTimer) clearTimeout(pollTimer);
   if (statusTimer) clearTimeout(statusTimer);
   outputFiles.value = [];
-  markdownContent.value = null;
 });
 </script>

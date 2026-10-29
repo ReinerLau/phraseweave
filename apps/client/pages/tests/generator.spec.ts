@@ -84,7 +84,11 @@ beforeEach(() => {
   });
   mocks.consume.mockResolvedValue(text);
   mocks.start.mockResolvedValue({ id: "job-1" });
-  mocks.job.mockResolvedValue({ id: "job-1", state: "complete", result: { outputs } });
+  mocks.job.mockResolvedValue({
+    id: "job-1",
+    state: "complete",
+    result: { outputs, preview: [{ sentence: text, steps: [text] }] },
+  });
   mocks.release.mockResolvedValue(undefined);
   mocks.save.mockResolvedValue(undefined);
   mocks.navigate.mockResolvedValue(undefined);
@@ -155,6 +159,7 @@ describe("generator capture preview", () => {
     expect(wrapper!.text()).not.toContain("中文提示：猫在睡觉。");
     expect(wrapper!.text()).toContain("下载 units.md");
     expect(wrapper!.text()).toContain("下载 units.json");
+    expect(wrapper!.text()).not.toContain("Markdown 文件内容");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
