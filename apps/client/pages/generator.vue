@@ -128,22 +128,6 @@
         </label>
       </div>
 
-      <label class="flex cursor-pointer items-start gap-3">
-        <input
-          v-model="splitClauses"
-          class="checkbox-primary checkbox mt-0.5"
-          type="checkbox"
-          :disabled="generationBusy || savingExercise"
-          @change="clearGeneratedOutputs"
-        />
-        <span>
-          <span class="font-semibold">在标点分隔片段内拆分从句</span>
-          <span class="block text-sm opacity-70"
-            >默认按逗号、分号、冒号和长破折号分段，逐个练实义词，再填功能词；勾选后进一步拆分从句。生成后可预览题序，不影响已有卡片。</span
-          >
-        </span>
-      </label>
-
       <div class="flex flex-wrap items-center gap-3">
         <button
           class="btn btn-primary"
@@ -342,7 +326,6 @@ const selectedText =
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
 const supportsPublicTranslation = ref(false);
 const outputFormat = ref<OutputFormat>("both");
-const splitClauses = ref(false);
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
@@ -507,7 +490,6 @@ async function refreshService() {
 async function startJob(payload: {
   text: string;
   format: OutputFormat;
-  splitClauses?: boolean;
 }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   clearGeneratedOutputs();
@@ -538,7 +520,6 @@ async function generate() {
     await startJob({
       text: englishText.value,
       format: outputFormat.value,
-      ...(splitClauses.value ? { splitClauses: true } : {}),
     });
   } finally {
     submitting.value = false;

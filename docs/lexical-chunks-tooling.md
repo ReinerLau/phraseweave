@@ -1,6 +1,6 @@
 # 标点分段生成与旧语块工具
 
-默认 `/generator` 在本机按原文分句，并按逗号、分号、冒号和长破折号分段；可可靠定位时，再分开前置状语与主谓核心。生成时可选改用从句拆分；两种模式均导出不含译文的 schema 8 英文原句及 `practice_steps`，在保存前预览题序。每个最小片段先逐个练实义词，再显示实义词、填入功能词，随后完整复现片段；较大的组合片段只练完整复现，最后复现整句，完成后只练整句。拆分规则及示例集中见[练习拆分规则索引](practice-splitting-rules.md)，决策见 [ADR 0035](adr/0035-content-function-practice.md) 与 [ADR 0036](adr/0036-fronted-adjunct-practice.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。
+`/generator` 在本机按原文分句，并按逗号、分号、冒号和长破折号分段；可可靠定位时，再分开非从句的前置状语与主谓核心。生成器导出不含译文的 schema 8 英文原句及 `practice_steps`，在保存前预览题序。每个最小片段先逐个练实义词，再显示实义词、填入功能词，随后完整复现片段；较大的组合片段只练完整复现，最后复现整句，完成后只练整句。拆分规则及示例集中见[练习拆分规则索引](practice-splitting-rules.md)，当前暂停从句拆分的决定见 [ADR 0037](adr/0037-pause-clause-splitting.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。
 
 PhraseWeave 的 `/generator` 页面由本机 CLI 提供。生成时只在本机按标点分句。练习中的中文提示使用 Index-Translate 公网翻译，当前英文题目会发送至 Bilibili。生成结果可下载为英文 Markdown、PhraseWeave JSON，或点击“保存并进入练习”写入共享练习库。
 
@@ -20,7 +20,7 @@ Chrome 扩展直接携带选中文本打开固定的本机 Web UI，文本放在
 
 公网翻译使用官方 `https://index-translate.bilibili.com/v1/chat/completions` 和 `Index-Translate-35B-A3B`，无需 API Key，逐题请求，每题超时 30 秒。生成不下载或加载 Hy-MT2。请求失败或译文截断时停在当前题，用户可以重试；不会自动回退到本地翻译。启动仍需准备本地 Python 和 spaCy 依赖。
 
-新生成流程保存英文原句和题序，不保存译文。PhraseWeave JSON 使用 schema 8 和 `practice_sequence: "lazy-content-function-v1"`，可选从句模式使用 `lazy-content-function-clause-v1`；每句一条记录，包含 UTF-16 偏移的 `practice_steps`，`source_unit_ids` 为空。Markdown 仅列原句。练习时按保存题序逐题获取译文，缓存写入练习卡片。旧 schema 4–7 保持兼容；旧依存组合流程仍使用其直接来源复习规则。
+新生成流程保存英文原句和题序，不保存译文。PhraseWeave JSON 使用 schema 8 和 `practice_sequence: "lazy-content-function-v1"`；每句一条记录，包含 UTF-16 偏移的 `practice_steps`，`source_unit_ids` 为空。Markdown 仅列原句。练习时按保存题序逐题获取译文，缓存写入练习卡片。旧 schema 4–7 及已保存的从句题序保持兼容；旧依存组合流程仍使用其直接来源复习规则。
 
 双引号只在分句和依存分析时忽略；输出的原句及学习单元按原文范围截取，整句保留完整的引号和句末标点。练习中这些标点固定显示，不参与填写或判分。若忽略引号后某句的整句无法组合、来源为空，则仅对该句用原文重试一次依存分析，避免整句失去可回退的词元来源；重试树的引号词元仍会过滤。此规则从算法版本 8 生效；旧计划和已丢失引号的练习需从原始英文重新生成。见 [ADR 0028](adr/0028-retry-blocked-sentence-with-original-quotes.md)。
 
