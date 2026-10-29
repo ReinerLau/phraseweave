@@ -150,7 +150,8 @@ describe("generator capture preview", () => {
     expect(window.location.hash).toBe("");
     expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(wrapper!.text()).not.toContain("中文提示：猫在睡觉。");
-    expect(wrapper!.text()).toContain("下载 units.json");
+    expect(wrapper!.text()).toContain("下载 JSON");
+    expect(wrapper!.text()).not.toContain("下载 units.json");
     expect(wrapper!.findAll("select")).toHaveLength(0);
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();

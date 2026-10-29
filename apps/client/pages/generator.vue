@@ -171,7 +171,7 @@
             type="button"
             @click="downloadFile(file)"
           >
-            下载 {{ file.name }}
+            下载 JSON
           </button>
         </div>
       </div>
