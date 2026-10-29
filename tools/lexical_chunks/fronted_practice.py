@@ -1,4 +1,4 @@
-"""Split detachable fronted adjuncts from punctuation practice segments."""
+"""Split detachable non-clausal fronted adjuncts from punctuation segments."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 from sentence_review import punctuation_practice_spans, utf16_spans
 
 SUBJECT_DEPS = frozenset({"nsubj", "nsubjpass", "csubj", "csubjpass"})
-FRONTED_ADJUNCT_DEPS = frozenset({"advmod", "npadvmod", "prep", "advcl"})
+FRONTED_ADJUNCT_DEPS = frozenset({"advmod", "npadvmod", "prep"})
 LEADING_CONNECTOR_DEPS = frozenset({"cc", "discourse"})
 MAIN_PREDICATE_DEPS = frozenset({"ROOT", "conj", "parataxis"})
 

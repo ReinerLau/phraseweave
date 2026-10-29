@@ -1,8 +1,8 @@
 # 练习拆分规则索引
 
-这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果代码块每行展示一个片段或题目，完整序列按行顺序排列；除“分句”外，末尾的完整原句也是一道练习题。默认模式和可选从句模式共用分句、标点分段及片段内题目规则；“前置成分”仅用于默认模式，“从句”仅用于勾选从句模式。每节开头的实现路径适用于该节每一条规则。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
+这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果代码块每行展示一个片段或题目，完整序列按行顺序排列；除“分句”外，末尾的完整原句也是一道练习题。当前生成流程依次应用分句、标点分段、前置成分拆分及片段内题目规则。每节开头的实现路径适用于该节每一条规则。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
 
-## 1. 分句（两种当前模式）
+## 1. 分句
 
 实现：[sentence_review.py](../tools/lexical_chunks/sentence_review.py) 的 `split_sentences`。本阶段输出原句列表，尚不生成片段题。
 
@@ -127,7 +127,7 @@ Birds sing. ...
 报错：第 2 句没有词元
 ```
 
-## 2. 标点分段（两种当前模式）
+## 2. 标点分段
 
 实现：[sentence_review.py](../tools/lexical_chunks/sentence_review.py) 的 `punctuation_practice_spans`。以下示例只列片段复现题，省略片段内的实义词与功能词题。
 
@@ -256,9 +256,9 @@ Birds sing.
 Birds sing.
 ```
 
-## 3. 前置成分二次拆分（仅默认模式）
+## 3. 前置成分二次拆分
 
-实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `fronted_adjunct_practice_spans`。在每个标点片段内寻找主谓核心；只有主语之前的文字完整由前置状语及可选连接词组成，才在主语前拆开。多个连续前置成分合成一段，不设词数门槛。小片段先练，原标点片段随后复现。
+实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `fronted_adjunct_practice_spans`。在每个标点片段内寻找主谓核心；只有主语之前的文字完整由非从句前置状语及可选连接词组成，才在主语前拆开。多个连续前置成分合成一段，不设词数门槛。小片段先练，原标点片段随后复现。
 
 ### F1 时间状语
 
@@ -296,25 +296,7 @@ she left.
 In the morning she left.
 ```
 
-### F3 条件状语
-
-- **条件：** 前置状语从句完整位于主句主语之前。
-
-**输入：**
-
-```text
-If it rains we will stay.
-```
-
-**片段题序：**
-
-```text
-If it rains
-we will stay.
-If it rains we will stay.
-```
-
-### F4 多个前置成分
+### F3 多个前置成分
 
 - **条件：** 连续的完整前置成分合为一个片段。
 
@@ -332,7 +314,7 @@ we left.
 Yesterday in the morning we left.
 ```
 
-### F5 只有连接词不拆
+### F4 只有连接词不拆
 
 - **条件：** 主语前只有 `and` 等连接词，没有前置状语。
 
@@ -348,7 +330,7 @@ And another month had passed.
 And another month had passed.
 ```
 
-### F6 句中修饰语不拆
+### F5 句中修饰语不拆
 
 - **条件：** 状语位于主语之后。
 
@@ -364,7 +346,7 @@ She quietly left.
 She quietly left.
 ```
 
-### F7 不可靠边界不拆
+### F6 不可靠边界不拆
 
 - **条件：** 前缀含有无法归入完整前置成分的文字，或解析无法确认主句主语。
 
@@ -380,140 +362,7 @@ She quietly left.
 😀 And then she left.
 ```
 
-### F8 不误认从句主语
-
-- **条件：** 前置从句自己的主语不是主句拆分点。
-
-**输入：**
-
-```text
-When the sun rose the birds sang.
-```
-
-**片段题序：**
-
-```text
-When the sun rose
-the birds sang.
-When the sun rose the birds sang.
-```
-
-## 4. 可选从句拆分（仅勾选从句模式）
-
-实现：[clause_practice.py](../tools/lexical_chunks/clause_practice.py) 的 `punctuation_clause_practice_spans`。该模式不使用第 3 节的前置成分规则。
-
-### C1 从句候选
-
-- **条件：** spaCy 标为 `advcl/ccomp/xcomp/acl/relcl/csubj/csubjpass/pcomp` 且中心词是动词或助动词的子树才参与拆分。
-
-**输入：**
-
-```text
-I stayed because it rained.
-```
-
-**片段题序：**
-
-```text
-I stayed
-because it rained
-I stayed because it rained.
-```
-
-### C2 补语从句
-
-- **条件：** 完整从句与主句分开，再练所属片段。
-
-**输入：**
-
-```text
-I think that she is right; then I agree.
-```
-
-**片段题序：**
-
-```text
-I think
-that she is right
-I think that she is right
-then I agree.
-I think that she is right; then I agree.
-```
-
-### C3 嵌入式从句
-
-- **条件：** 从句两侧各保留连续主句文字，不拼接非连续文字。
-
-**输入：**
-
-```text
-The book that I bought is good.
-```
-
-**片段题序：**
-
-```text
-The book
-that I bought
-is good.
-The book that I bought is good.
-```
-
-### C4 嵌套从句
-
-- **条件：** 子从句先于包含它的父片段。
-
-**输入：**
-
-```text
-I know that she said that he left.
-```
-
-**片段题序：**
-
-```text
-I know
-that she said
-that he left
-that she said that he left
-I know that she said that he left.
-```
-
-### C5 无从句不拆
-
-- **条件：** 没有可用从句候选时保留标点父片段。
-
-**输入：**
-
-```text
-Birds sing.
-```
-
-**片段题序：**
-
-```text
-Birds sing.
-```
-
-### C6 越界或交叉不拆
-
-- **条件：** 候选越过标点父片段，或两个候选范围交叉时保留父片段。
-
-**输入：**
-
-```text
-Alpha beta gamma delta.
-```
-
-- **候选范围：** `[0,10)` 与 `[6,16)` 交叉
-
-**片段题序：**
-
-```text
-Alpha beta gamma delta.
-```
-
-## 5. 片段内实义词与功能词题（两种当前模式）
+## 4. 片段内实义词与功能词题
 
 实现：[content_function_practice.py](../tools/lexical_chunks/content_function_practice.py) 的 `build_practice_steps`。本节的结果展示**题型顺序**，不改变前面确定的片段边界。
 
@@ -617,22 +466,23 @@ John's book isn't here.
 **输入：**
 
 ```text
-I think that she is right.
+time marched on, indifferent to my concerns; and soon enough another month had passed.
 ```
 
-**题序示例：**
+**片段复现题序：**
 
 ```text
-think
-___ think
-I think
-right
-___ ___ ___ right
-that she is right
-I think that she is right.
+time marched on
+indifferent to my concerns
+and soon enough
+another month had passed.
+and soon enough another month had passed.
+time marched on, indifferent to my concerns; and soon enough another month had passed.
 ```
 
-## 6. 旧语块生成（保留备用，不用于新生成卡片）
+- **说明：** 此处只列片段复现题；最小片段内的词题见 W1–W5。
+
+## 5. 旧语块生成（保留备用，不用于新生成卡片）
 
 实现：[split_lexical_chunks.py](../tools/lexical_chunks/split_lexical_chunks.py) 的 `generate_plan`。以下结果是实际学习单元序列或其中注明的连续摘录；此流程按固定 spaCy 依存树生成，与当前标点片段流程分开。
 

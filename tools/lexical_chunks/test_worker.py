@@ -38,41 +38,11 @@ class SentenceGenerationTests(TestCase):
                           if label.startswith(("组合片段：", "整句："))],
                          [f"组合片段：{text}" for text in segment_texts[:-1]] + [f"整句：{sentence}"])
 
-    def test_opt_in_clause_mode_does_not_use_fronted_adjunct_split(self):
-        sentence = "time marched on, indifferent to my concerns; and soon enough another month had passed."
-        with patch("worker._emit") as emit:
-            _generate({"text": sentence, "format": "phraseweave", "splitClauses": True})
-        saved = json.loads(emit.call_args.args[0]["outputs"][0]["content"])
-        steps = saved["statements"][0]["practice_steps"]
-        segment_texts = [sentence.encode("utf-16-le")[step["span"][0] * 2:step["span"][1] * 2]
-                         .decode("utf-16-le") for step in steps if step["kind"] in {"segment", "sentence"}]
-        self.assertEqual(segment_texts, [
-            "time marched on", "indifferent to my concerns",
-            "and soon enough another month had passed.", sentence,
-        ])
-
-    def test_opt_in_clause_generation_exports_preview_even_for_markdown_only(self):
-        with (
-            patch("worker.load_syntax_model") as model,
-            patch("worker.punctuation_clause_practice_spans", return_value=[(0, 7), (8, 25), (0, 26)]) as spans,
-            patch("worker._emit") as emit,
-        ):
-            _generate({"text": "I think that she is right.", "format": "markdown", "splitClauses": True})
-        model.assert_called_once()
-        spans.assert_called_once()
-        result = emit.call_args.args[0]
-        self.assertEqual(len(result["outputs"]), 1)
-        self.assertEqual(result["preview"][0]["steps"], [
-            "组合片段：I think", "组合片段：that she is right", "整句：I think that she is right.",
-        ])
-
-    def test_opt_in_clause_parser_failure_is_reported(self):
-        with (
-            patch("worker.load_syntax_model", return_value=object()),
-            patch("worker.punctuation_clause_practice_spans", side_effect=ValueError("bad parse")),
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Clause parsing failed for sentence 1: bad parse"):
+    def test_clause_option_is_unavailable_for_new_generation(self):
+        with patch("worker.load_syntax_model") as model:
+            with self.assertRaisesRegex(ValueError, "Clause splitting is temporarily unavailable"):
                 _generate({"text": "I think that she is right.", "format": "both", "splitClauses": True})
+        model.assert_not_called()
 
     def test_generation_exports_one_whole_statement_per_sentence_without_commas(self):
         with (
@@ -122,17 +92,6 @@ class SentenceGenerationTests(TestCase):
         saved = json.loads(result["outputs"][1]["content"])
         self.assertEqual(saved["statements"][0]["practice_steps"][-1],
                          {"kind": "sentence", "span": [0, 13]})
-
-    def test_opt_in_clause_export_uses_new_version(self):
-        with (
-            patch("worker.load_syntax_model", return_value=lambda text: []),
-            patch("worker.punctuation_clause_practice_spans", return_value=[(0, 7), (8, 25), (0, 26)]),
-            patch("worker._emit") as emit,
-        ):
-            _generate({"text": "I think that she is right.", "format": "phraseweave", "splitClauses": True})
-        saved = json.loads(emit.call_args.args[0]["outputs"][0]["content"])
-        self.assertEqual(saved["schema_version"], 8)
-        self.assertEqual(saved["practice_sequence"], "lazy-content-function-clause-v1")
 
     def test_generation_ignores_translation_provider(self):
         with patch("worker.translate_sentences") as translate, patch("worker._emit"):

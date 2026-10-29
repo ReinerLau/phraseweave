@@ -56,7 +56,7 @@ def build_practice_steps(
     steps: list[dict[str, Any]] = []
 
     for start, end in segments:
-        # Clause mode emits children before their enclosing parent. Drill only leaves.
+        # Drill only leaves before replaying their enclosing punctuation segment.
         if any(start <= left and right <= end and (left, right) != (start, end)
                for left, right in segments):
             steps.append({"kind": "segment", "span": [start, end]})

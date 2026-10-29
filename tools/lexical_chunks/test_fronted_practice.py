@@ -22,7 +22,7 @@ class FrontedAdjunctPracticeTests(TestCase):
             sentence,
         ])
 
-    def test_fronted_place_time_and_condition_keep_the_core_clause_together(self):
+    def test_fronted_place_and_time_keep_the_core_clause_together(self):
         self.assertEqual(self.steps("In the morning she left."), [
             "In the morning", "she left.", "In the morning she left.",
         ])
@@ -31,23 +31,21 @@ class FrontedAdjunctPracticeTests(TestCase):
             "at night", "he returned.", "at night he returned.",
             "In the morning she left; at night he returned.",
         ])
-        self.assertEqual(self.steps("If it rains we will stay."), [
-            "If it rains", "we will stay.", "If it rains we will stay.",
-        ])
         self.assertEqual(self.steps("Yesterday in the morning we left."), [
             "Yesterday in the morning", "we left.", "Yesterday in the morning we left.",
         ])
+
+    def test_fronted_clauses_remain_whole(self):
+        self.assertEqual(self.steps("If it rains we will stay."),
+                         ["If it rains we will stay."])
+        self.assertEqual(self.steps("When the sun rose the birds sang."),
+                         ["When the sun rose the birds sang."])
 
     def test_connective_only_and_mid_clause_modifiers_do_not_split(self):
         self.assertEqual(self.steps("And another month had passed."),
                          ["And another month had passed."])
         self.assertEqual(self.steps("She quietly left."), ["She quietly left."])
         self.assertEqual(self.steps("Birds sing."), ["Birds sing."])
-
-    def test_subordinate_subject_is_not_mistaken_for_the_core_subject(self):
-        self.assertEqual(self.steps("When the sun rose the birds sang."), [
-            "When the sun rose", "the birds sang.", "When the sun rose the birds sang.",
-        ])
 
     def test_unreliable_prefix_remains_whole_and_utf16_offsets_are_preserved(self):
         self.assertEqual(self.steps("😀 And then she left."), ["😀 And then she left."])

@@ -8,7 +8,6 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from clause_practice import punctuation_clause_practice_spans
 from content_function_practice import build_practice_steps, preview_step
 from fronted_practice import fronted_adjunct_practice_spans
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_contextual_word, translate_sentences
@@ -55,23 +54,14 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
     if output_format not in {"markdown", "phraseweave", "both"}:
         raise ValueError("Choose an output format.")
-    split_clauses = payload.get("splitClauses", False)
-    if not isinstance(split_clauses, bool):
-        raise ValueError("splitClauses must be a boolean.")
+    if payload.get("splitClauses", False) is not False:
+        raise ValueError("Clause splitting is temporarily unavailable.")
     sentences = split_sentences(text)
     nlp = load_syntax_model()
-    segment_spans = []
-    if split_clauses:
-        for index, sentence in enumerate(sentences, start=1):
-            try:
-                segment_spans.append(punctuation_clause_practice_spans(sentence, nlp))
-            except Exception as error:
-                raise RuntimeError(f"Clause parsing failed for sentence {index}: {error}") from error
-    else:
-        segment_spans = [
-            fronted_adjunct_practice_spans(sentence, nlp)
-            for sentence in sentences
-        ]
+    segment_spans = [
+        fronted_adjunct_practice_spans(sentence, nlp)
+        for sentence in sentences
+    ]
     practice_steps = [
         build_practice_steps(sentence, spans, nlp)
         for sentence, spans in zip(sentences, segment_spans, strict=True)
@@ -85,10 +75,7 @@ def _generate(payload: Mapping[str, Any]) -> None:
     if output_format in {"phraseweave", "both"}:
         phraseweave = json.dumps({
             "schema_version": 8,
-            "practice_sequence": (
-                "lazy-content-function-clause-v1" if split_clauses
-                else "lazy-content-function-v1"
-            ),
+            "practice_sequence": "lazy-content-function-v1",
             "statements": [{
                 "english": sentence,
                 "context_before": "",
