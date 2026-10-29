@@ -7,6 +7,33 @@ from sentence_review import (practice_spans, punctuation_practice_spans,
 
 
 class SentenceReviewTests(TestCase):
+    def test_rule_index_sentence_examples(self):
+        for source, expected in (
+            ("Birds sing. Cats sleep?", ["Birds sing.", "Cats sleep?"]),
+            ("“Go now?!” She left?", ["“Go now?!”", "She left?"]),
+            ("Birds sing\n\nCats sleep", ["Birds sing", "Cats sleep"]),
+            ("Dr. Smith paid, e.g. for lunch. Ms. Lee smiled.",
+             ["Dr. Smith paid, e.g. for lunch.", "Ms. Lee smiled."]),
+            ("He paid 3.14 dollars. She left.",
+             ["He paid 3.14 dollars.", "She left."]),
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(split_sentences(source), expected)
+
+    def test_rule_index_punctuation_examples(self):
+        for sentence, expected in (
+            ("Bring 1,000 books at 12:30; leave.", ["Bring 1,000 books at 12:30", "leave."]),
+            ("See https://example.com:8080/a,b; leave.",
+             ["See https://example.com:8080/a,b", "leave."]),
+            ("Don't split \"well-known\" 3/4 (quoted) – now.", []),
+            ("Birds sing.", []),
+        ):
+            with self.subTest(sentence=sentence):
+                spans = punctuation_practice_spans(sentence)
+                parts = [sentence[start:end] for start, end in spans[:-1]]
+                self.assertEqual(parts, expected)
+                self.assertEqual(spans[-1], (0, len(sentence)))
+
     def test_lazy_export_contains_only_whole_english_sentences(self):
         sentences = ["Read this, then write.", "Birds sing!"]
         payload = json.loads(render_lazy_phraseweave(sentences))

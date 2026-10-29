@@ -1,6 +1,6 @@
 # 标点分段生成与旧语块工具
 
-默认 `/generator` 在本机按原文分句，并按逗号、分号、冒号和长破折号分段，导出不含译文的 schema 8 英文原句及 `practice_steps`。每个片段先逐个练实义词，再显示实义词、填入功能词，随后完整复现片段，最后复现整句；完成后只练整句。生成时可选进一步拆从句；两种模式均在保存前预览题序，详见 [ADR 0035](adr/0035-content-function-practice.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。
+默认 `/generator` 在本机按原文分句，并按逗号、分号、冒号和长破折号分段；可可靠定位时，再分开前置状语与主谓核心。生成时可选改用从句拆分；两种模式均导出不含译文的 schema 8 英文原句及 `practice_steps`，在保存前预览题序。每个最小片段先逐个练实义词，再显示实义词、填入功能词，随后完整复现片段；较大的组合片段只练完整复现，最后复现整句，完成后只练整句。拆分规则及示例集中见[练习拆分规则索引](practice-splitting-rules.md)，决策见 [ADR 0035](adr/0035-content-function-practice.md) 与 [ADR 0036](adr/0036-fronted-adjunct-practice.md)。旧 spaCy 依存语块组合实现保留备用；下文涉及依存树、语块复习题序及普通整句输入的说明属于旧模式。
 
 PhraseWeave 的 `/generator` 页面由本机 CLI 提供。生成时只在本机按标点分句。练习中的中文提示使用 Index-Translate 公网翻译，当前英文题目会发送至 Bilibili。生成结果可下载为英文 Markdown、PhraseWeave JSON，或点击“保存并进入练习”写入共享练习库。
 

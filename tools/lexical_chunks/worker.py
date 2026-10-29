@@ -10,10 +10,10 @@ from typing import Any
 
 from clause_practice import punctuation_clause_practice_spans
 from content_function_practice import build_practice_steps, preview_step
+from fronted_practice import fronted_adjunct_practice_spans
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_contextual_word, translate_sentences
 from sentence_review import (
-    punctuation_practice_spans, render_lazy_markdown,
-    split_sentences, utf16_spans,
+    render_lazy_markdown, split_sentences,
 )
 from split_lexical_chunks import load_syntax_model
 
@@ -69,7 +69,7 @@ def _generate(payload: Mapping[str, Any]) -> None:
                 raise RuntimeError(f"Clause parsing failed for sentence {index}: {error}") from error
     else:
         segment_spans = [
-            utf16_spans(sentence, punctuation_practice_spans(sentence))
+            fronted_adjunct_practice_spans(sentence, nlp)
             for sentence in sentences
         ]
     practice_steps = [

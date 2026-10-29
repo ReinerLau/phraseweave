@@ -2,7 +2,7 @@ import json
 from unittest import TestCase
 
 from clause_practice import (clause_practice_spans, punctuation_clause_practice_spans,
-                             render_clause_phraseweave)
+                             render_clause_phraseweave, _split_parent)
 from split_lexical_chunks import load_syntax_model
 
 
@@ -64,3 +64,9 @@ class ClausePracticeTests(TestCase):
             "I think", "that she is right", "I think that she is right",
             "then I agree.", sentence,
         ])
+
+    def test_crossing_or_out_of_parent_clause_candidates_do_not_split(self):
+        sentence = "Alpha beta gamma delta."
+        parent = (0, len(sentence))
+        self.assertEqual(_split_parent(sentence, parent, [(0, 10), (6, 16)]), [parent])
+        self.assertEqual(_split_parent(sentence, parent, [(0, len(sentence) + 1)]), [parent])
