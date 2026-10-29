@@ -82,6 +82,20 @@ The young teacher gave her students a difficult problem after class.""".splitlin
 
 
 class AdjacentSubtreeLearningUnitTests(TestCase):
+    def test_rule_index_small_legacy_sequences(self):
+        for sentence, expected in (
+            ("The book fell.", ["The", "book", "The book", "fell", "The book fell."]),
+            ("The young teacher left.", [
+                "The", "young", "teacher", "young teacher", "The young teacher",
+                "left", "The young teacher left.",
+            ]),
+            ("She is happy.", ["She", "happy", "is", "She is", "is happy", "She is happy."]),
+            ("Birds sing.", ["Birds", "sing", "Birds sing."]),
+        ):
+            with self.subTest(sentence=sentence):
+                self.assertEqual([unit["text"] for unit in self.plan(sentence)["sentences"][0]["units"]],
+                                 expected)
+
     @classmethod
     def setUpClass(cls):
         cls.nlp = load_syntax_model()

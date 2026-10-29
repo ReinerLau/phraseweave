@@ -21,6 +21,36 @@ class InMemoryOutputTests(TestCase):
 
 
 class SentenceGenerationTests(TestCase):
+    def test_default_generation_saves_fronted_parts_and_parent_in_preview_order(self):
+        sentence = "time marched on, indifferent to my concerns; and soon enough another month had passed."
+        with patch("worker._emit") as emit:
+            _generate({"text": sentence, "format": "phraseweave"})
+        result = emit.call_args.args[0]
+        saved = json.loads(result["outputs"][0]["content"])
+        steps = saved["statements"][0]["practice_steps"]
+        segment_texts = [sentence.encode("utf-16-le")[step["span"][0] * 2:step["span"][1] * 2]
+                         .decode("utf-16-le") for step in steps if step["kind"] in {"segment", "sentence"}]
+        self.assertEqual(segment_texts, [
+            "time marched on", "indifferent to my concerns", "and soon enough",
+            "another month had passed.", "and soon enough another month had passed.", sentence,
+        ])
+        self.assertEqual([label for label in result["preview"][0]["steps"]
+                          if label.startswith(("组合片段：", "整句："))],
+                         [f"组合片段：{text}" for text in segment_texts[:-1]] + [f"整句：{sentence}"])
+
+    def test_opt_in_clause_mode_does_not_use_fronted_adjunct_split(self):
+        sentence = "time marched on, indifferent to my concerns; and soon enough another month had passed."
+        with patch("worker._emit") as emit:
+            _generate({"text": sentence, "format": "phraseweave", "splitClauses": True})
+        saved = json.loads(emit.call_args.args[0]["outputs"][0]["content"])
+        steps = saved["statements"][0]["practice_steps"]
+        segment_texts = [sentence.encode("utf-16-le")[step["span"][0] * 2:step["span"][1] * 2]
+                         .decode("utf-16-le") for step in steps if step["kind"] in {"segment", "sentence"}]
+        self.assertEqual(segment_texts, [
+            "time marched on", "indifferent to my concerns",
+            "and soon enough another month had passed.", sentence,
+        ])
+
     def test_opt_in_clause_generation_exports_preview_even_for_markdown_only(self):
         with (
             patch("worker.load_syntax_model") as model,
