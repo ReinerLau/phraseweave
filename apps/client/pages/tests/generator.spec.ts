@@ -120,7 +120,7 @@ async function mountAndGenerate() {
 }
 
 describe("generator capture preview", () => {
-  it("previews the generated sequence without a clause option", async () => {
+  it("keeps the preview collapsed and shows one selected sentence at a time", async () => {
     await mount();
     expect(wrapper!.find('input[type="checkbox"]').exists()).toBe(false);
     mocks.job.mockResolvedValueOnce({
@@ -129,14 +129,32 @@ describe("generator capture preview", () => {
       result: {
         outputs,
         preview: [
-          { sentence: "The cat sleeps.", steps: ["The cat", "sleeps.", "The cat sleeps."] },
+          { sentence: "The cat sleeps.", steps: ["The cat", "sleeps."] },
+          { sentence: "Birds sing!", steps: ["Birds", "sing!"] },
         ],
       },
     });
     await submit();
     expect(mocks.start).toHaveBeenCalledWith({ text });
-    expect(wrapper!.text()).toContain("首次练习题序预览");
-    expect(wrapper!.text()).toContain("The cat");
+    expect(wrapper!.text()).toContain("首次练习题序预览（2 句）");
+    expect(button("展开预览").attributes("aria-expanded")).toBe("false");
+    expect(wrapper!.find("#preview-sentence").exists()).toBe(false);
+    expect(wrapper!.text()).not.toContain("The cat");
+    await button("展开预览").trigger("click");
+    expect(button("收起预览").attributes("aria-expanded")).toBe("true");
+    expect(wrapper!.find("#practice-preview-content ol").text()).toContain("The cat");
+    expect(wrapper!.find("#practice-preview-content ol").text()).not.toContain("Birds");
+    await wrapper!.find("#preview-sentence").setValue("1");
+    expect(wrapper!.find("#practice-preview-content ol").text()).toContain("Birds");
+    expect(wrapper!.find("#practice-preview-content ol").text()).not.toContain("The cat");
+    await button("收起预览").trigger("click");
+    expect(wrapper!.find("#preview-sentence").exists()).toBe(false);
+    await button("展开预览").trigger("click");
+    await submit();
+    expect(button("展开预览").attributes("aria-expanded")).toBe("false");
+    expect(wrapper!.find("#preview-sentence").exists()).toBe(false);
+    await button("展开预览").trigger("click");
+    expect(wrapper!.find("#practice-preview-content ol").text()).toContain("The cat sleeps.");
   });
 
   it("prefills the editable form and generates only after submission", async () => {
@@ -148,7 +166,7 @@ describe("generator capture preview", () => {
     expect(mocks.start).toHaveBeenCalledWith({ text });
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("");
-    expect(wrapper!.text()).toContain("The cat sleeps.");
+    expect(wrapper!.text()).toContain("首次练习题序预览（1 句）");
     expect(wrapper!.text()).not.toContain("中文提示：猫在睡觉。");
     expect(wrapper!.text()).toContain("下载 JSON");
     expect(wrapper!.text()).not.toContain("下载 units.json");
@@ -220,6 +238,7 @@ describe("generator capture preview", () => {
     await button("保存并进入练习").trigger("click");
     await flushPromises();
     expect(wrapper!.text()).toContain("保存失败");
+    await button("展开预览").trigger("click");
     expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect((wrapper!.find('input[type="text"]').element as HTMLInputElement).value).toBe(
@@ -247,7 +266,7 @@ describe("generator capture preview", () => {
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).toHaveBeenCalledTimes(2);
     expect(mocks.start).toHaveBeenLastCalledWith({ text });
-    expect(wrapper!.text()).toContain("The cat sleeps.");
+    expect(wrapper!.text()).toContain("首次练习题序预览（1 句）");
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
@@ -312,7 +331,7 @@ describe("generator capture preview", () => {
     await wrapper!.find("form").trigger("submit");
     await flushPromises();
     expect(mocks.start).toHaveBeenCalledWith({ text });
-    expect(wrapper!.text()).toContain("The cat sleeps.");
+    expect(wrapper!.text()).toContain("首次练习题序预览（1 句）");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
   });

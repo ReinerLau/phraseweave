@@ -175,23 +175,50 @@
       v-if="practicePreview.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
-      <h2 class="text-xl font-semibold">首次练习题序预览</h2>
-      <ol class="mt-4 space-y-4">
-        <li
-          v-for="(item, index) in practicePreview"
-          :key="index"
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold">首次练习题序预览（{{ practicePreview.length }} 句）</h2>
+        <button
+          class="btn btn-outline btn-sm"
+          type="button"
+          :aria-expanded="previewExpanded"
+          @click="previewExpanded = !previewExpanded"
         >
-          <p class="font-semibold">第 {{ index + 1 }} 句：{{ item.sentence }}</p>
-          <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm">
-            <li
-              v-for="(step, stepIndex) in item.steps"
-              :key="stepIndex"
-            >
-              {{ step }}
-            </li>
-          </ol>
-        </li>
-      </ol>
+          {{ previewExpanded ? "收起预览" : "展开预览" }}
+        </button>
+      </div>
+      <div
+        v-if="previewExpanded && selectedPreview"
+        id="practice-preview-content"
+        class="mt-4"
+      >
+        <label
+          for="preview-sentence"
+          class="mb-2 block text-sm font-semibold"
+          >选择句子</label
+        >
+        <select
+          id="preview-sentence"
+          v-model.number="selectedPreviewIndex"
+          class="select select-bordered w-full"
+        >
+          <option
+            v-for="(item, index) in practicePreview"
+            :key="index"
+            :value="index"
+          >
+            第 {{ index + 1 }} 句：{{ item.sentence }}
+          </option>
+        </select>
+        <p class="mt-4 font-semibold">{{ selectedPreview.sentence }}</p>
+        <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm">
+          <li
+            v-for="(step, index) in selectedPreview.steps"
+            :key="index"
+          >
+            {{ step }}
+          </li>
+        </ol>
+      </div>
     </section>
   </main>
 </template>
@@ -236,6 +263,9 @@ const generationBusy = computed(() => submitting.value || Boolean(activeJob.valu
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
 const practicePreview = ref<Array<{ sentence: string; steps: string[] }>>([]);
+const previewExpanded = ref(false);
+const selectedPreviewIndex = ref(0);
+const selectedPreview = computed(() => practicePreview.value[selectedPreviewIndex.value]);
 const generatedText = ref("");
 const defaultExerciseTitle = computed(() =>
   generatedText.value.replace(/\s+/g, " ").trim().slice(0, 80),
@@ -399,6 +429,8 @@ async function startJob(payload: { text: string }): Promise<OutputFile[] | undef
 function clearGeneratedOutputs() {
   outputFiles.value = [];
   practicePreview.value = [];
+  previewExpanded.value = false;
+  selectedPreviewIndex.value = 0;
 }
 
 async function generate() {
