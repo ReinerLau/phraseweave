@@ -412,51 +412,6 @@ def _validate_plan(payload: Any, nlp: Any) -> dict[str, Any]:
     }
 
 
-def _markdown_escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
-
-
-def _render_dependency_tree(tokens: Sequence[Mapping[str, Any]]) -> str:
-    by_index = {token["index"]: token for token in tokens}
-    children: dict[int, list[int]] = {index: [] for index in by_index}
-    roots = []
-    for index, token in by_index.items():
-        head_index = token["head_index"]
-        if head_index == index or head_index not in by_index:
-            roots.append(index)
-        else:
-            children[head_index].append(index)
-    for child_indices in children.values():
-        child_indices.sort()
-
-    lines: list[str] = []
-    visited: set[int] = set()
-
-    def add_node(index: int, prefix: str, is_last: bool, is_root: bool = False) -> None:
-        if index in visited:
-            return
-        visited.add(index)
-        token = by_index[index]
-        label = "ROOT" if is_root else token["dep"]
-        connector = "" if is_root else ("└── " if is_last else "├── ")
-        lines.append(f"{prefix}{connector}{token['text']} [{label}, {token['pos']}]")
-        descendants = children[index]
-        child_prefix = prefix if is_root else prefix + ("    " if is_last else "│   ")
-        for child_position, child_index in enumerate(descendants):
-            add_node(
-                child_index,
-                child_prefix,
-                child_position == len(descendants) - 1,
-            )
-
-    for root_index in roots:
-        add_node(root_index, "", True, is_root=True)
-    for index in by_index:
-        if index not in visited:
-            add_node(index, "", True, is_root=True)
-    return "\n".join(lines)
-
-
 def _exercise_steps(
     sentence: Mapping[str, Any],
     trace: Mapping[str, Any] | None,
@@ -488,44 +443,6 @@ def _exercise_steps(
         steps.append((index, False))
     return steps
 
-
-def render_markdown(
-    plan: Mapping[str, Any],
-    translations: Mapping[str, Any],
-    traces: Sequence[Mapping[str, Any]] | None = None,
-) -> str:
-    lines = ["# 渐进学习单元", ""]
-    for sentence_index, (sentence, translated) in enumerate(zip(plan["sentences"], translations["sentences"], strict=True), start=1):
-        lines.extend([
-            f"## 第 {sentence_index} 句",
-            "",
-            "### 依存关系树",
-            "",
-            "```text",
-            _render_dependency_tree(traces[sentence_index - 1]["tree_tokens"])
-            if traces is not None
-            else "（依存关系树不可用）",
-            "```",
-            "",
-            f"中文提示：{translated['sentence_chinese']}",
-            "",
-            "| 序号 | 英文答案 | 组合说明 |",
-            "|---:|---|---|",
-        ])
-        explanations = traces[sentence_index - 1]["explanations"] if traces is not None else [
-            "" for _ in sentence["units"]
-        ]
-        sentence_trace = traces[sentence_index - 1] if traces is not None else None
-        for step, (unit_index, is_review) in enumerate(
-            _exercise_steps(sentence, sentence_trace), start=1
-        ):
-            unit = sentence["units"][unit_index]
-            explanation = "复习" if is_review else explanations[unit_index]
-            lines.append(
-                f"| {step} | {_markdown_escape(unit['text'])} | {_markdown_escape(explanation)} |"
-            )
-        lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
 
 def render_phraseweave(
     plan: Mapping[str, Any],
@@ -559,27 +476,3 @@ def render_phraseweave(
                 "source_unit_ids": source_ids,
             })
     return json.dumps({"schema_version": PHRASEWEAVE_SCHEMA_VERSION, "statements": statements}, ensure_ascii=False, indent=2) + "\n"
-
-
-def render_trace(traces: Sequence[Mapping[str, Any]]) -> str:
-    lines = ["# 组合结果", ""]
-    for index, trace in enumerate(traces, start=1):
-        # Keep wrapped source text on one Markdown line, with ordinary spaces.
-        sentence = " ".join(trace["sentence"].split())
-        lines.extend([
-            f"## 第 {index} 句：{sentence}",
-            "",
-            "| 序号 | 学习单元 | 组合说明 |",
-            "|---:|---|---|",
-        ])
-        for unit_index, (unit, explanation) in enumerate(
-            zip(trace["units"], trace["explanations"], strict=True), start=1
-        ):
-            unit_text = _markdown_escape(" ".join(unit["text"].split()))
-            lines.append(f"| {unit_index} | {unit_text} | {_markdown_escape(explanation)} |")
-        if trace["blocked"]:
-            lines.extend(["", "未闭合分支："])
-            for item in trace["blocked"]:
-                lines.append(f"- {item['head']} → {item['child']}：{item['reason']}")
-        lines.append("")
-    return "\n".join(lines).rstrip() + "\n"

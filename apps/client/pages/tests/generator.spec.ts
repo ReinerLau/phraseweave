@@ -38,10 +38,6 @@ vi.mock("~/composables/courses/activeCourse", () => ({
 const text = "The cat sleeps.";
 const outputs = [
   {
-    name: "units.md",
-    content: "# 原句复现练习\n\n## 第 1 句\n\nThe cat sleeps.\n",
-  },
-  {
     name: "units.json",
     content: JSON.stringify({
       schema_version: 5,
@@ -138,7 +134,7 @@ describe("generator capture preview", () => {
       },
     });
     await submit();
-    expect(mocks.start).toHaveBeenCalledWith({ text, format: "both" });
+    expect(mocks.start).toHaveBeenCalledWith({ text });
     expect(wrapper!.text()).toContain("首次练习题序预览");
     expect(wrapper!.text()).toContain("The cat");
   });
@@ -149,17 +145,13 @@ describe("generator capture preview", () => {
     expect(mocks.start).not.toHaveBeenCalled();
     expect(wrapper!.find("textarea").element.value).toBe(text);
     await submit();
-    expect(mocks.start).toHaveBeenCalledWith({
-      text,
-      format: "both",
-    });
+    expect(mocks.start).toHaveBeenCalledWith({ text });
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(window.location.hash).toBe("");
     expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(wrapper!.text()).not.toContain("中文提示：猫在睡觉。");
-    expect(wrapper!.text()).toContain("下载 units.md");
     expect(wrapper!.text()).toContain("下载 units.json");
-    expect(wrapper!.text()).not.toContain("Markdown 文件内容");
+    expect(wrapper!.findAll("select")).toHaveLength(0);
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
@@ -253,10 +245,7 @@ describe("generator capture preview", () => {
     await submit();
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).toHaveBeenCalledTimes(2);
-    expect(mocks.start).toHaveBeenLastCalledWith({
-      text,
-      format: "both",
-    });
+    expect(mocks.start).toHaveBeenLastCalledWith({ text });
     expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
@@ -316,32 +305,23 @@ describe("generator capture preview", () => {
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.start).not.toHaveBeenCalled();
     expect(wrapper!.text()).not.toContain("练习模式");
-    expect(wrapper!.findAll("select")).toHaveLength(1);
+    expect(wrapper!.findAll("select")).toHaveLength(0);
     expect(wrapper!.text()).not.toContain("Hy-MT2 本地翻译");
     await wrapper!.find("textarea").setValue(text);
     await wrapper!.find("form").trigger("submit");
     await flushPromises();
-    expect(mocks.start).toHaveBeenCalledWith({
-      text,
-      format: "both",
-    });
+    expect(mocks.start).toHaveBeenCalledWith({ text });
     expect(wrapper!.text()).toContain("The cat sleeps.");
     expect(button("保存并进入练习")).toBeDefined();
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
-  it("submits edited selection with the chosen export format", async () => {
+  it("submits edited selection for JSON generation", async () => {
     await mount();
     await wrapper!.find("textarea").setValue("The dog runs.");
-    const selects = wrapper!.findAll("select");
-    expect(selects).toHaveLength(1);
-    await selects[0].setValue("markdown");
     expect(wrapper!.text()).toContain("生成无需联网");
     await submit();
-    expect(mocks.start).toHaveBeenCalledWith({
-      text: "The dog runs.",
-      format: "markdown",
-    });
+    expect(mocks.start).toHaveBeenCalledWith({ text: "The dog runs." });
   });
 
   it("ignores the saved provider preference during generation", async () => {
@@ -395,7 +375,7 @@ describe("generator capture preview", () => {
     expect(mocks.start).not.toHaveBeenCalled();
   });
 
-  it("prevents duplicate submissions and export format changes while submitting", async () => {
+  it("prevents duplicate submissions while submitting", async () => {
     let accept!: (value: { id: string }) => void;
     mocks.start.mockImplementation(
       () =>
@@ -408,9 +388,6 @@ describe("generator capture preview", () => {
     await submit();
     expect(mocks.start).toHaveBeenCalledTimes(1);
     expect(button("生成分段练习").attributes("disabled")).toBeDefined();
-    expect(
-      wrapper!.findAll("select").every((select) => select.attributes("disabled") !== undefined),
-    ).toBe(true);
     accept({ id: "job-1" });
     await flushPromises();
     expect(button("生成分段练习").attributes("disabled")).toBeUndefined();

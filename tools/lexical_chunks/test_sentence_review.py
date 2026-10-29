@@ -2,8 +2,8 @@ import json
 from unittest import TestCase
 
 from sentence_review import (practice_spans, punctuation_practice_spans,
-                             render_lazy_markdown, render_lazy_phraseweave,
-                             render_markdown, render_phraseweave, split_sentences, utf16_spans)
+                             render_lazy_phraseweave, render_phraseweave,
+                             split_sentences, utf16_spans)
 
 
 class SentenceReviewTests(TestCase):
@@ -41,9 +41,6 @@ class SentenceReviewTests(TestCase):
         self.assertEqual(payload["practice_sequence"], "lazy-comma-segments-v1")
         self.assertEqual([row["english"] for row in payload["statements"]], sentences)
         self.assertTrue(all("sentence_chinese" not in row for row in payload["statements"]))
-        markdown = render_lazy_markdown(sentences)
-        self.assertIn("Read this, then write.", markdown)
-        self.assertNotIn("### 第", markdown)
 
     def test_splits_punctuation_quotes_and_paragraphs(self):
         source = '“Go now!” She left?\n\nHe stayed.'
@@ -120,4 +117,3 @@ class SentenceReviewTests(TestCase):
             row['context_before'] + row['english'] + row['context_after'] == sentence
             for row in rows
         ))
-        self.assertIn('### 第 2 段\n\n中文提示：然后写', render_markdown([sentence], prompts))

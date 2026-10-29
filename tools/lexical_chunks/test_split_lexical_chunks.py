@@ -9,9 +9,7 @@ from split_lexical_chunks import (
     _validate_plan,
     generate_plan,
     load_syntax_model,
-    render_markdown,
     render_phraseweave,
-    render_trace,
 )
 
 
@@ -121,7 +119,6 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertEqual(len(sentence["units"]), len(clean_plan["sentences"][0]["units"]))
         self.assertIsNotNone(traces[0]["sources"][-1])
         prompts = {"sentences": [{"sentence_chinese": "整句提示"}]}
-        self.assertIn(f"| {source} | 整句 |", render_markdown(plan, prompts, traces))
         rows = json.loads(render_phraseweave(plan, prompts, traces))["statements"]
         self.assertEqual(rows[-1]["english"], source)
         self.assertEqual(rows[-1]["context_before"], "")
@@ -410,16 +407,6 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
         self.assertEqual(payload["statements"][-1]["english"], "Birdsong is good.")
         self.assertEqual(set(payload["statements"][0]), {"sentence_chinese", "english", "context_before", "context_after", "unit_id", "source_unit_ids"})
 
-    def test_markdown_and_trace_show_composition_explanations(self):
-        plan, traces = generate_plan("the USA grows.", self.nlp)
-        prompts = {"sentences": [{"sentence_chinese": "美国在增长。"}]}
-        markdown = render_markdown(plan, prompts, traces)
-        report = render_trace(traces)
-        self.assertIn("| 序号 | 英文答案 | 组合说明 |", markdown)
-        self.assertIn("中心词 USA；左接 the", markdown)
-        self.assertIn("| 序号 | 学习单元 | 组合说明 |", report)
-        self.assertIn("整句", report)
-
     def test_review_replays_both_direct_sources_in_example_order(self):
         plan, traces = generate_plan(FIRST_SENTENCE + ".", self.nlp)
         sentence = plan["sentences"][0]
@@ -445,14 +432,12 @@ class AdjacentSubtreeLearningUnitTests(TestCase):
             list(range(len(sentence["units"]))),
         )
 
-    def test_review_renderers_reuse_prompts_and_phraseweave_schema(self):
+    def test_review_export_reuses_prompts_and_phraseweave_schema(self):
         plan, traces = generate_plan("the USA grows.", self.nlp)
         sentence = plan["sentences"][0]
         translations = {"sentences": [{"sentence_chinese": "美国在增长。"}]}
         steps = _exercise_steps(sentence, traces[0])
 
-        markdown = render_markdown(plan, translations, traces)
-        self.assertEqual(markdown.count("| 复习 |"), sum(is_review for _, is_review in steps))
         payload = json.loads(render_phraseweave(plan, translations, traces))
         self.assertEqual(payload["schema_version"], 4)
         source_row = next(row for row in payload["statements"] if row["english"] == "the USA")

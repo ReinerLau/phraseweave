@@ -8,15 +8,12 @@ from worker import _build_outputs, _generate, main
 
 
 class InMemoryOutputTests(TestCase):
-    def test_both_exports_share_a_timestamped_name(self):
+    def test_json_export_has_a_timestamped_name(self):
         created_at = datetime(2026, 9, 30, 6, 30, 12, 123456, tzinfo=timezone.utc)
-        outputs = _build_outputs("# Markdown", '{"schema_version":4}', "both", created_at)
+        outputs = _build_outputs('{"schema_version":4}', created_at)
         self.assertEqual(
             [output["name"] for output in outputs],
-            [
-                "text.sentence-review-20260930T063012123456Z.md",
-                "text.sentence-review-20260930T063012123456Z.json",
-            ],
+            ["text.sentence-review-20260930T063012123456Z.json"],
         )
 
 
@@ -24,7 +21,7 @@ class SentenceGenerationTests(TestCase):
     def test_default_generation_saves_fronted_parts_and_parent_in_preview_order(self):
         sentence = "time marched on, indifferent to my concerns; and soon enough another month had passed."
         with patch("worker._emit") as emit:
-            _generate({"text": sentence, "format": "phraseweave"})
+            _generate({"text": sentence})
         result = emit.call_args.args[0]
         saved = json.loads(result["outputs"][0]["content"])
         steps = saved["statements"][0]["practice_steps"]
@@ -41,7 +38,7 @@ class SentenceGenerationTests(TestCase):
     def test_clause_option_is_unavailable_for_new_generation(self):
         with patch("worker.load_syntax_model") as model:
             with self.assertRaisesRegex(ValueError, "Clause splitting is temporarily unavailable"):
-                _generate({"text": "I think that she is right.", "format": "both", "splitClauses": True})
+                _generate({"text": "I think that she is right.", "splitClauses": True})
         model.assert_not_called()
 
     def test_generation_exports_one_whole_statement_per_sentence_without_commas(self):
@@ -51,14 +48,14 @@ class SentenceGenerationTests(TestCase):
             patch("worker.model_status", return_value={"model_downloaded": False}),
             patch("worker._emit") as emit,
         ):
-            _generate({"text": "The cat sleeps. Birds sing!", "format": "both"})
+            _generate({"text": "The cat sleeps. Birds sing!"})
 
         translate.assert_not_called()
         syntax_model.assert_called_once()
-        markdown, phraseweave = emit.call_args.args[0]["outputs"]
-        self.assertIn("The cat sleeps.", markdown["content"])
-        self.assertNotIn("中文提示", markdown["content"])
-        generated = json.loads(phraseweave["content"])
+        outputs = emit.call_args.args[0]["outputs"]
+        self.assertEqual(len(outputs), 1)
+        self.assertTrue(outputs[0]["name"].endswith(".json"))
+        generated = json.loads(outputs[0]["content"])
         self.assertEqual(generated["schema_version"], 8)
         self.assertEqual(generated["practice_sequence"], "lazy-content-function-v1")
         rows = generated["statements"]
@@ -76,27 +73,35 @@ class SentenceGenerationTests(TestCase):
             patch("worker.translate_sentences") as translate,
             patch("worker._emit") as emit,
         ):
-            _generate({"text": source, "format": "both"})
+            _generate({"text": source})
         translate.assert_not_called()
         outputs = emit.call_args.args[0]["outputs"]
-        rows = json.loads(outputs[1]["content"])["statements"]
+        rows = json.loads(outputs[0]["content"])["statements"]
         self.assertEqual([row["english"] for row in rows],
                          ["Read this, then write, and check.", "Birds sing!"])
         self.assertEqual(len(rows), 2)
 
     def test_default_preview_matches_saved_punctuation_steps(self):
         with patch("worker._emit") as emit:
-            _generate({"text": "A, B; C: D—E.", "format": "both"})
+            _generate({"text": "A, B; C: D—E."})
         result = emit.call_args.args[0]
         self.assertEqual(result["preview"][0]["steps"][-1], "整句：A, B; C: D—E.")
-        saved = json.loads(result["outputs"][1]["content"])
+        saved = json.loads(result["outputs"][0]["content"])
         self.assertEqual(saved["statements"][0]["practice_steps"][-1],
                          {"kind": "sentence", "span": [0, 13]})
 
     def test_generation_ignores_translation_provider(self):
         with patch("worker.translate_sentences") as translate, patch("worker._emit"):
-            _generate({"text": "Text.", "format": "both", "translationProvider": "unknown"})
+            _generate({"text": "Text.", "translationProvider": "unknown"})
         translate.assert_not_called()
+
+    def test_markdown_formats_are_rejected(self):
+        for output_format in ("markdown", "both"):
+            with self.subTest(output_format=output_format):
+                with patch("worker.load_syntax_model") as model:
+                    with self.assertRaisesRegex(ValueError, "Unsupported output format"):
+                        _generate({"text": "Text.", "format": output_format})
+                model.assert_not_called()
 
     def test_single_step_failure_does_not_emit_translation(self):
         with (

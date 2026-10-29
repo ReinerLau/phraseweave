@@ -113,21 +113,6 @@
         <span class="mt-1 text-right text-xs opacity-60">{{ englishText.length }} / 30,000</span>
       </label>
 
-      <div>
-        <label class="form-control">
-          <span class="label-text mb-2 font-semibold">导出格式</span>
-          <select
-            v-model="outputFormat"
-            class="select select-bordered"
-            :disabled="generationBusy || savingExercise"
-          >
-            <option value="markdown">Markdown</option>
-            <option value="phraseweave">PhraseWeave JSON</option>
-            <option value="both">两种格式</option>
-          </select>
-        </label>
-      </div>
-
       <div class="flex flex-wrap items-center gap-3">
         <button
           class="btn btn-primary"
@@ -234,7 +219,6 @@ import {
 } from "~/services/generatorClient";
 import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExerciseDb";
 
-type OutputFormat = "markdown" | "phraseweave" | "both";
 type OutputFile = GeneratorOutput;
 const route = useRoute();
 const rawCaptureId = route.query.capture;
@@ -245,7 +229,6 @@ const selectedText =
     ? null
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
 const supportsPublicTranslation = ref(false);
-const outputFormat = ref<OutputFormat>("both");
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
@@ -339,7 +322,7 @@ function receiveCaptureText(text: string) {
     return;
   }
   englishText.value = text;
-  captureStatus.value = "选中文本已填入下方，可编辑文本并选择导出格式，再点击“生成分段练习”。";
+  captureStatus.value = "选中文本已填入下方，可编辑文本，再点击“生成分段练习”。";
 }
 
 async function connectService() {
@@ -404,10 +387,7 @@ async function refreshService() {
   await connectService();
 }
 
-async function startJob(payload: {
-  text: string;
-  format: OutputFormat;
-}): Promise<OutputFile[] | undefined> {
+async function startJob(payload: { text: string }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   clearGeneratedOutputs();
   generatedText.value = payload.text;
@@ -434,7 +414,6 @@ async function generate() {
   try {
     await startJob({
       text: englishText.value,
-      format: outputFormat.value,
     });
   } finally {
     submitting.value = false;
@@ -503,10 +482,9 @@ async function importGeneratedExercise(outputs: OutputFile[], sourceText: string
 }
 
 function downloadFile(file: OutputFile) {
-  const type = file.name.endsWith(".json")
-    ? "application/json;charset=utf-8"
-    : "text/markdown;charset=utf-8";
-  const url = URL.createObjectURL(new Blob([file.content], { type }));
+  const url = URL.createObjectURL(
+    new Blob([file.content], { type: "application/json;charset=utf-8" }),
+  );
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = file.name;
