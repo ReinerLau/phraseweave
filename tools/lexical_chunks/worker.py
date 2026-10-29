@@ -8,8 +8,14 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_sentences
-from sentence_review import render_lazy_markdown, render_lazy_phraseweave, split_sentences
+from clause_practice import punctuation_clause_practice_spans
+from content_function_practice import build_practice_steps, preview_step
+from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_contextual_word, translate_sentences
+from sentence_review import (
+    punctuation_practice_spans, render_lazy_markdown,
+    split_sentences, utf16_spans,
+)
+from split_lexical_chunks import load_syntax_model
 
 
 def _read_request() -> Mapping[str, Any]:
@@ -49,24 +55,61 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Input is too long. Keep it under 30,000 characters.")
     if output_format not in {"markdown", "phraseweave", "both"}:
         raise ValueError("Choose an output format.")
+    split_clauses = payload.get("splitClauses", False)
+    if not isinstance(split_clauses, bool):
+        raise ValueError("splitClauses must be a boolean.")
     sentences = split_sentences(text)
+    nlp = load_syntax_model()
+    segment_spans = []
+    if split_clauses:
+        for index, sentence in enumerate(sentences, start=1):
+            try:
+                segment_spans.append(punctuation_clause_practice_spans(sentence, nlp))
+            except Exception as error:
+                raise RuntimeError(f"Clause parsing failed for sentence {index}: {error}") from error
+    else:
+        segment_spans = [
+            utf16_spans(sentence, punctuation_practice_spans(sentence))
+            for sentence in sentences
+        ]
+    practice_steps = [
+        build_practice_steps(sentence, spans, nlp)
+        for sentence, spans in zip(sentences, segment_spans, strict=True)
+    ]
     markdown = (
         render_lazy_markdown(sentences)
         if output_format in {"markdown", "both"}
         else ""
     )
-    phraseweave = (
-        render_lazy_phraseweave(sentences)
-        if output_format in {"phraseweave", "both"}
-        else ""
-    )
+    phraseweave = ""
+    if output_format in {"phraseweave", "both"}:
+        phraseweave = json.dumps({
+            "schema_version": 8,
+            "practice_sequence": (
+                "lazy-content-function-clause-v1" if split_clauses
+                else "lazy-content-function-v1"
+            ),
+            "statements": [{
+                "english": sentence,
+                "context_before": "",
+                "context_after": "",
+                "unit_id": f"{index}:whole",
+                "source_unit_ids": [],
+                "practice_steps": steps,
+            } for index, (sentence, steps) in enumerate(zip(sentences, practice_steps, strict=True))],
+        }, ensure_ascii=False, indent=2) + "\n"
     outputs = _build_outputs(markdown, phraseweave, output_format)
 
-    _emit({
+    result = {
         "ok": True,
         "outputs": outputs,
         "model": model_status(),
-    })
+    }
+    result["preview"] = [{
+        "sentence": sentence,
+        "steps": [preview_step(sentence, step) for step in steps],
+    } for sentence, steps in zip(sentences, practice_steps, strict=True)]
+    _emit(result)
 
 
 def _translate(payload: Mapping[str, Any]) -> None:
@@ -76,7 +119,13 @@ def _translate(payload: Mapping[str, Any]) -> None:
     provider = payload.get("translationProvider", "index-translate")
     if provider not in TRANSLATION_PROVIDERS:
         raise ValueError("Choose a supported translation provider.")
-    translated = translate_sentences([text], provider)
+    context = payload.get("context")
+    if context is not None and (not isinstance(context, str) or not context.strip() or len(context) > 30_000):
+        raise ValueError("Choose a nonempty context under 30,000 characters.")
+    translated = (
+        [translate_contextual_word(text, context, provider)]
+        if context else translate_sentences([text], provider)
+    )
     if len(translated) != 1 or not translated[0].strip():
         raise RuntimeError("The translation engine did not return a prompt.")
     _emit({"ok": True, "chinese": translated[0].strip()})

@@ -55,6 +55,35 @@ ACTIVE_JOB: str | None = None
 INITIALIZATION: dict[str, str] = {"state": "starting", "message": "Starting local generator"}
 
 
+def _practice_steps(course: dict[str, Any], statement: dict[str, Any]) -> list[Any]:
+    sequence = course.get("practiceSequence")
+    if sequence not in (
+        "lazy-clause-segments-v1", "lazy-punctuation-segments-v1",
+        "lazy-punctuation-clause-segments-v1", "lazy-content-function-v1",
+        "lazy-content-function-clause-v1",
+    ):
+        return practice_spans(statement.get("english", ""))
+    english = statement.get("english")
+    typed_steps = sequence in ("lazy-content-function-v1", "lazy-content-function-clause-v1")
+    spans = statement.get("practiceSteps" if typed_steps else "practiceSpans")
+    size = len(english.encode("utf-16-le")) // 2 if isinstance(english, str) else -1
+    if not isinstance(spans, list) or not spans or not all(
+        isinstance(span, dict) and isinstance(span.get("span"), list)
+        if typed_steps else isinstance(span, list) and len(span) == 2
+        for span in spans
+    ):
+        raise ValueError("Saved practice steps are invalid.")
+    ranges = [step["span"] if isinstance(step, dict) else step for step in spans]
+    if not all(
+        isinstance(span, list) and len(span) == 2
+        and all(isinstance(offset, int) and not isinstance(offset, bool) and offset >= 0 for offset in span)
+        and span[0] < span[1] <= size
+        for span in ranges
+    ) or ranges[-1] != [0, size]:
+        raise ValueError("Saved practice steps are invalid.")
+    return spans
+
+
 def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, Any]:
     if not getattr(sys, "frozen", False) and not PYTHON.is_file():
         raise RuntimeError("The local Python environment is missing. Restart the service to initialize it.")
@@ -238,7 +267,10 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
             *(previous_units if isinstance(previous_units, list) else []),
             *(current_units if isinstance(current_units, list) else []),
         ]))
-        if course.get("practiceSequence") == "lazy-comma-segments-v1":
+        if course.get("practiceSequence") in (
+            "lazy-comma-segments-v1", "lazy-clause-segments-v1",
+            "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1",
+        ):
             for statement, old_statement in zip(course.get("statements", []), previous.get("statements", [])):
                 statement["stepTranslations"] = {
                     **statement.get("stepTranslations", {}),
@@ -457,6 +489,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Choose a supported translation provider.")
                 if not isinstance(payload.get("text"), str) or not payload["text"].strip() or len(payload["text"]) > 30_000:
                     raise ValueError("Choose one nonempty practice step under 30,000 characters.")
+                if "context" in payload and (not isinstance(payload["context"], str) or not payload["context"].strip() or len(payload["context"]) > 30_000):
+                    raise ValueError("Choose one nonempty context under 30,000 characters.")
                 result = _run_worker({**payload, "action": "translate"})
             except (ValueError, json.JSONDecodeError) as error:
                 self._json({"error": str(error)}, 400)
@@ -550,14 +584,17 @@ class Handler(BaseHTTPRequestHandler):
                         step_index = payload.get("stepIndex")
                         chinese = payload.get("chinese")
                         statements = course.get("statements", [])
-                        if (course.get("practiceSequence") != "lazy-comma-segments-v1"
+                        if (course.get("practiceSequence") not in (
+                                "lazy-comma-segments-v1", "lazy-clause-segments-v1",
+                                "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1",
+                                "lazy-content-function-v1", "lazy-content-function-clause-v1")
                             or not isinstance(statement_index, int) or isinstance(statement_index, bool)
                             or statement_index < 0 or statement_index >= len(statements)
                             or not isinstance(step_index, int) or isinstance(step_index, bool)
                             or step_index < 0
                             or not isinstance(chinese, str) or not chinese.strip()):
                             raise ValueError("Practice translation is invalid.")
-                        spans = practice_spans(statements[statement_index].get("english", ""))
+                        spans = _practice_steps(course, statements[statement_index])
                         if step_index >= len(spans) or (payload.get("whole") is True) != (step_index == len(spans) - 1):
                             raise ValueError("Practice translation step is invalid.")
                         translations = statements[statement_index].setdefault("stepTranslations", {})
@@ -608,7 +645,7 @@ class Handler(BaseHTTPRequestHandler):
                             statements = course.get("statements", [])
                             if (not isinstance(step_index, int) or isinstance(step_index, bool)
                                 or not isinstance(resume_index, int) or resume_index < 0 or resume_index >= len(statements)
-                                or step_index < 0 or step_index >= len(practice_spans(statements[resume_index].get("english", "")))):
+                                or step_index < 0 or step_index >= len(_practice_steps(course, statements[resume_index]))):
                                 raise ValueError("Resume step index is invalid.")
                             course["resumeStepIndex"] = step_index
                     else:

@@ -14,36 +14,45 @@
       <ClozeText :tokens="courseStore.clozeTokens">
         <template #word="{ token }">
           <span
+            v-if="answerIndex(token.wordIndex) < 0"
+            class="question-input-word text-[#202020] dark:text-gray-50"
+            data-testid="fixed-practice-word"
+            >{{ token.text }}</span
+          >
+          <span
+            v-else
             class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid leading-none"
             :class="[
-              getWordsClassNames(token.wordIndex),
+              getWordsClassNames(answerIndex(token.wordIndex)),
               {
                 'fixed-underline': isCurrentWordMode(),
-                'speech-word': isSpeakableWord(displayedWord(token.wordIndex, token.text)),
-                'speech-hover': hoveredWordIndex === token.wordIndex,
+                'speech-word': isSpeakableWord(
+                  displayedWord(answerIndex(token.wordIndex), token.text),
+                ),
+                'speech-hover': hoveredWordIndex === answerIndex(token.wordIndex),
                 'speech-loading':
-                  loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+                  loadingElement?.dataset.wordIndex === String(answerIndex(token.wordIndex)) &&
                   questionInputWordsEl?.contains(loadingElement),
               },
             ]"
-            :data-word-index="token.wordIndex"
-            :data-speech-text="displayedWord(token.wordIndex, token.text)"
+            :data-word-index="answerIndex(token.wordIndex)"
+            :data-speech-text="displayedWord(answerIndex(token.wordIndex), token.text)"
             :title="
-              isSpeakableWord(displayedWord(token.wordIndex, token.text))
-                ? `朗读 ${displayedWord(token.wordIndex, token.text)}`
+              isSpeakableWord(displayedWord(answerIndex(token.wordIndex), token.text))
+                ? `朗读 ${displayedWord(answerIndex(token.wordIndex), token.text)}`
                 : undefined
             "
             :aria-busy="
-              (loadingElement?.dataset.wordIndex === String(token.wordIndex) &&
+              (loadingElement?.dataset.wordIndex === String(answerIndex(token.wordIndex)) &&
                 questionInputWordsEl?.contains(loadingElement)) ||
               undefined
             "
             :style="{
-              width: `${inputWidth(token.wordIndex)}em`,
+              width: `${inputWidth(answerIndex(token.wordIndex))}em`,
               '--word-underline-width': `${wordWidth(token.text)}em`,
             }"
           >
-            {{ displayedWord(token.wordIndex, token.text) }}
+            {{ displayedWord(answerIndex(token.wordIndex), token.text) }}
           </span>
         </template>
       </ClozeText>
@@ -152,7 +161,7 @@ const {
   clearWordFeedback,
   getWordHelpRequest,
 } = useInput({
-  source: () => courseStore.currentStatement?.english ?? "",
+  source: () => courseStore.words.join(" "),
   setInputCursorPosition,
   getInputCursorPosition,
   inputChangedCallback,
@@ -164,6 +173,10 @@ const { showAnswerTip, hiddenAnswerTip, isAnswerTip } = useAnswerTip();
 const inputMaxLength = computed(() =>
   isCurrentWordMode() ? userInputWords.find((word) => word.isActive)?.text.length ?? 0 : undefined,
 );
+
+function answerIndex(wordIndex: number) {
+  return courseStore.answerWordIndices.indexOf(wordIndex);
+}
 
 // Re-check after visible text changes, even when the pointer stays still.
 watch(() => [inputValue.value, isAnswerTip()], refreshWordHover, { flush: "post" });
