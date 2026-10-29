@@ -10,11 +10,11 @@ Use the single-context layout with root `CONTEXT.md` and `docs/adr/` when docume
 
 ### Manual iteration
 
-The delivery loop is intentionally manual: develop on a `codex/` worktree branch based on the latest `origin/dev`, run useful checks, and integrate through a pull request targeting `dev`, using squash merge by default. Test the combined changes on `dev`. Both `dev` and `main` require pull requests; agents must never push changes directly to either branch. When developing, integrating, or publishing, read `docs/agents/delivery-workflow.md` for the sequence and merge methods.
+The delivery loop is intentionally manual: develop on a `codex/` worktree branch based on the latest `origin/dev`, run useful checks, then integrate into `dev` with a squash commit by default and push it directly. A pull request targeting `dev` is optional. Test the combined changes on `dev`. `main` requires a pull request and must never receive direct pushes. When developing, integrating, or publishing, read `docs/agents/delivery-workflow.md` for the sequence and merge methods.
 
 ### Protected release branch
 
-Treat `main` as the production release branch. Only when the user explicitly requests publishing, inspect the integrated changes and prepare or update a `dev` → `main` pull request. Use a merge commit for this release PR so the batch produces one version tag, which publishes the GitHub Packages npm runtime and a GitHub Release. After publishing, synchronize `main` back into the long-lived `dev` through a pull request using a merge commit. Build the desktop launcher installer from an existing merged tag only when the launcher changes; see `docs/desktop.md`.
+Treat `main` as the production release branch. Only when the user explicitly requests publishing, inspect the integrated changes and prepare or update a `dev` → `main` pull request. Use a merge commit for this release PR so the batch produces one version tag, which publishes the GitHub Packages npm runtime and a GitHub Release. After publishing, synchronize `main` back into the long-lived `dev` with a merge commit and a direct push. Build the desktop launcher installer from an existing merged tag only when the launcher changes; see `docs/desktop.md`.
 
 ### Worktree and branch synchronization
 
