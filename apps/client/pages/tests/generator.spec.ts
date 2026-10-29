@@ -184,7 +184,7 @@ describe("generator capture preview", () => {
     await mountAndGenerate();
     const input = wrapper!.find('input[type="text"]');
     expect((input.element as HTMLInputElement).value).toBe(text);
-    expect(input.element.closest("section")?.textContent).toContain("生成文件");
+    expect(input.element.closest("section")?.textContent).not.toContain("生成文件");
     await input.setValue("  猫的练习  ");
     await button("保存并进入练习").trigger("click");
     await flushPromises();

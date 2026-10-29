@@ -135,45 +135,39 @@
       v-if="outputFiles.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-semibold">生成文件</h2>
-          <p class="mt-1 text-sm opacity-70">下载本次生成的文件。</p>
-        </div>
-        <div class="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:max-w-full">
-          <label
-            v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
-            class="form-control w-full min-w-0"
-          >
-            <span class="label-text mb-2 font-semibold">练习名称</span>
-            <input
-              v-model="exerciseTitle"
-              class="input input-bordered w-full"
-              type="text"
-              :placeholder="defaultExerciseTitle"
-              :disabled="savingExercise"
-            />
-            <span class="mb-2 mt-1 text-xs opacity-60">留空使用默认名称</span>
-          </label>
-          <button
-            v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
-            class="btn btn-primary btn-sm"
-            type="button"
+      <div class="flex w-full min-w-0 flex-wrap gap-2">
+        <label
+          v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
+          class="form-control w-full min-w-0"
+        >
+          <span class="label-text mb-2 font-semibold">练习名称</span>
+          <input
+            v-model="exerciseTitle"
+            class="input input-bordered w-full"
+            type="text"
+            :placeholder="defaultExerciseTitle"
             :disabled="savingExercise"
-            @click="saveAndOpenExercise"
-          >
-            {{ savingExercise ? "正在保存…" : "保存并进入练习" }}
-          </button>
-          <button
-            v-for="file in outputFiles"
-            :key="file.name"
-            class="btn btn-outline btn-sm"
-            type="button"
-            @click="downloadFile(file)"
-          >
-            下载 JSON
-          </button>
-        </div>
+          />
+          <span class="mb-2 mt-1 text-xs opacity-60">留空使用默认名称</span>
+        </label>
+        <button
+          v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
+          class="btn btn-primary btn-sm"
+          type="button"
+          :disabled="savingExercise"
+          @click="saveAndOpenExercise"
+        >
+          {{ savingExercise ? "正在保存…" : "保存并进入练习" }}
+        </button>
+        <button
+          v-for="file in outputFiles"
+          :key="file.name"
+          class="btn btn-outline btn-sm"
+          type="button"
+          @click="downloadFile(file)"
+        >
+          下载 JSON
+        </button>
       </div>
     </section>
 
