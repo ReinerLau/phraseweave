@@ -27,11 +27,11 @@ def _part_role(parent: Any, child: Any) -> str:
     if relation in SUBJECTS:
         return "主语"
     if parent.pos_ == "ADP" and relation in PREPOSITION_PARTS:
-        return "片段"
+        return "宾语"
     if relation in {"dobj", "obj"}:
         return "宾语"
     if relation in {"iobj", "dative"}:
-        return "间接宾语"
+        return "宾语"
     if relation in {"ccomp", "xcomp", "acomp", "attr", "oprd"}:
         return "补语"
     if parent.pos_ in {"NOUN", "PROPN", "PRON"} and relation in NOUN_PARTS:

@@ -32,14 +32,14 @@ class DependencyPracticeTests(TestCase):
         self.assertFalse(any(step.get("text", "").startswith("’d") for step in steps))
         self.assertEqual(self.labeled_segments(sentence), [
             "主谓：we’d finished", "宾语：the project",
-            "接入宾语：we’d finished the project", "片段：only three months",
+            "接入宾语：we’d finished the project", "宾语：only three months",
             "状语：in only three months", f"整句：{sentence}",
         ])
 
     def test_preview_names_preposition_by_its_sentence_role(self):
         sentence = "Somehow, we’d finished the project in only three months."
         labels = self.labeled_segments(sentence)
-        self.assertIn("片段：only three months", labels)
+        self.assertIn("宾语：only three months", labels)
         self.assertIn("状语：in only three months", labels)
         self.assertIn("接入状语：we’d finished the project in only three months", labels)
         self.assertFalse(any(label.startswith(("介词宾语：", "介词短语："))
@@ -68,8 +68,8 @@ class DependencyPracticeTests(TestCase):
             "She gave him the book.",
         ])
         self.assertEqual(self.labeled_segments("She gave him the book."), [
-            "主语：She", "谓语：gave", "主谓：She gave", "间接宾语：him",
-            "接入间接宾语：She gave him", "宾语：the book", "整句：She gave him the book.",
+            "主语：She", "谓语：gave", "主谓：She gave", "宾语：him",
+            "接入宾语：She gave him", "宾语：the book", "整句：She gave him the book.",
         ])
         sentence = "She took the project that we had finished in three months."
         segments = self.segments(sentence)
@@ -79,7 +79,7 @@ class DependencyPracticeTests(TestCase):
                         segments.index(sentence))
         labeled = self.labeled_segments(sentence)
         self.assertIn("主谓：we had finished", labeled)
-        self.assertIn("片段：three months", labeled)
+        self.assertIn("宾语：three months", labeled)
         self.assertIn("状语：in three months", labeled)
         self.assertIn("定语：that we had finished in three months", labeled)
         self.assertIn("宾语：the project that we had finished in three months", labeled)

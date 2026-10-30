@@ -39,7 +39,7 @@ class SentenceGenerationTests(TestCase):
                            if not label.startswith(("实义词：", "功能词填空："))]
         self.assertEqual([label.split("：", 1)[1] for label in segment_preview], segment_texts)
         self.assertEqual([label.split("：", 1)[0] for label in segment_preview], [
-            "主语", "谓语", "主谓", "片段", "片段", "补语", "接入补语",
+            "主语", "谓语", "主谓", "片段", "宾语", "补语", "接入补语",
             "主语", "谓语", "主谓", "状语", "接入状语", "片段", "整句",
         ])
 
