@@ -97,7 +97,8 @@ def build_dependency_practice(sentence: str, document: Any) -> DependencyPractic
             markers = []
         elif token.pos_ in {"NOUN", "PROPN", "PRON"}:
             subjects = []
-            parts = [child for child in children if child.dep_ in NOUN_PARTS and detachable(child)]
+            parts = [child for child in children if child.dep_ in NOUN_PARTS and detachable(child)
+                     and not (child.dep_ == "prep" and child.lower_ == "of")]
             markers = []
         elif token.pos_ == "ADJ":
             subjects = []

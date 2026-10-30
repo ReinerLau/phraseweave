@@ -45,6 +45,25 @@ class DependencyPracticeTests(TestCase):
         self.assertFalse(any(label.startswith(("介词宾语：", "介词短语："))
                              for label in labels))
 
+    def test_noun_of_phrases_remain_whole(self):
+        for sentence, noun_phrase in [
+            ("I spent a lot of money.", "a lot of money"),
+            ("She bought a cup of coffee.", "a cup of coffee"),
+            ("I read the end of the story.", "the end of the story"),
+            ("I’d thrown a lot of money at it near the end, hiring additional workers to cover the more monotonous tasks, which had definitely sped things up.", "a lot of money"),
+        ]:
+            with self.subTest(sentence=sentence):
+                practice = build_dependency_practice(sentence, self.nlp(sentence))
+                segments = [step.get("text", "") for step in practice.steps if step["kind"] == "segment"]
+                self.assertIn(noun_phrase, segments)
+                self.assertFalse(any(text.startswith("of ") for text in segments))
+                words = [sentence[step["span"][0]:step["span"][1]]
+                         for step in practice.steps if step["kind"] == "content-word"]
+                self.assertIn(noun_phrase.split()[-1], words)
+
+    def test_other_noun_prepositions_remain_detachable(self):
+        self.assertIn("on the table", self.segments("She opened the box on the table."))
+
     def test_intervening_adjunct_builds_discontinuous_core(self):
         sentence = "She quietly finished the project."
         self.assertEqual(self.segments(sentence), [

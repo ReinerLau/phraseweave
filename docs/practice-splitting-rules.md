@@ -273,6 +273,8 @@ in only three months
 we’d finished the project in only three months.
 ```
 
+名词后的 `of` 短语与其中心名词保持整体，例如 `a lot of money`、`a cup of coffee` 和 `the end of the story`；不单独生成 `of money` 等片段题，整体内部仍练实义词和功能词。其他介词短语及从句仍按现有规则拆分。
+
 ### D2 句中状语的逐步组合
 
 **输入：** `She quietly finished the project.`
