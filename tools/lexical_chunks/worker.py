@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from dependency_practice import build_dependency_steps, preview_dependency_step
+from dependency_practice import build_dependency_practice, preview_dependency_step
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_contextual_word, translate_sentences
 from sentence_review import split_sentences
 from split_lexical_chunks import load_syntax_model
@@ -48,8 +48,8 @@ def _generate(payload: Mapping[str, Any]) -> None:
     sentences = split_sentences(text)
     nlp = load_syntax_model()
     documents = [nlp(sentence) for sentence in sentences]
-    practice_steps = [
-        build_dependency_steps(sentence, document)
+    practice = [
+        build_dependency_practice(sentence, document)
         for sentence, document in zip(sentences, documents, strict=True)
     ]
     phraseweave = json.dumps({
@@ -61,8 +61,8 @@ def _generate(payload: Mapping[str, Any]) -> None:
             "context_after": "",
             "unit_id": f"{index}:whole",
             "source_unit_ids": [],
-            "practice_steps": steps,
-        } for index, (sentence, steps) in enumerate(zip(sentences, practice_steps, strict=True))],
+            "practice_steps": result.steps,
+        } for index, (sentence, result) in enumerate(zip(sentences, practice, strict=True))],
     }, ensure_ascii=False, indent=2) + "\n"
     outputs = _build_outputs(phraseweave)
 
@@ -73,8 +73,10 @@ def _generate(payload: Mapping[str, Any]) -> None:
     }
     result["preview"] = [{
         "sentence": sentence,
-        "steps": [preview_dependency_step(sentence, step) for step in steps],
-    } for sentence, steps in zip(sentences, practice_steps, strict=True)]
+        "steps": [preview_dependency_step(sentence, step, label)
+                  for step, label in zip(practice_result.steps, practice_result.preview_labels,
+                                         strict=True)],
+    } for sentence, practice_result in zip(sentences, practice, strict=True)]
     _emit(result)
 
 

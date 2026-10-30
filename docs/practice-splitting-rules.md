@@ -570,16 +570,16 @@ She quietly finished the project.
 **片段复现题序：**
 
 ```text
-She
-finished
-She finished
-quietly
-She quietly finished
-the project
-She quietly finished the project.
+主语：She
+谓语：finished
+主谓：She finished
+状语：quietly
+接入状语：She quietly finished
+宾语：the project
+整句：She quietly finished the project.
 ```
 
-- **说明：** 此处只列片段复现题；最小片段内的词题见 W1–W5。
+- **说明：** 此处展示生成器预览标签，只列片段复现题；最小片段内的词题见 W1–W5。状语不细分时间、地点或方式。介词内部的宾语标“介词宾语”，组成后标“介词短语”，接回句子时标“接入状语”。解析不足以可靠判断时标“片段”。标签只用于预览，不写入保存的题序。
 
 ## 5. 旧语块生成（保留备用，不用于新生成卡片）
 

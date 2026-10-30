@@ -35,9 +35,13 @@ class SentenceGenerationTests(TestCase):
             "soon enough another month had passed", "and soon enough another month had passed",
             sentence,
         ])
-        self.assertEqual([label for label in result["preview"][0]["steps"]
-                          if label.startswith(("组合片段：", "整句："))],
-                         [f"组合片段：{text}" for text in segment_texts[:-1]] + [f"整句：{sentence}"])
+        segment_preview = [label for label in result["preview"][0]["steps"]
+                           if not label.startswith(("实义词：", "功能词填空："))]
+        self.assertEqual([label.split("：", 1)[1] for label in segment_preview], segment_texts)
+        self.assertEqual([label.split("：", 1)[0] for label in segment_preview], [
+            "主语", "谓语", "主谓", "片段", "介词宾语", "介词短语", "接入补语",
+            "主语", "谓语", "主谓", "状语", "接入状语", "片段", "整句",
+        ])
 
     def test_target_sentence_drills_each_leaf_before_replaying_the_whole(self):
         sentence = "The Magic Armor Mark One was now complete."
@@ -45,10 +49,10 @@ class SentenceGenerationTests(TestCase):
             _generate({"text": sentence})
         result = emit.call_args.args[0]
         self.assertEqual([step for step in result["preview"][0]["steps"]
-                          if step.startswith(("组合片段：", "整句："))], [
-            "组合片段：The Magic Armor Mark One", "组合片段：was",
-            "组合片段：The Magic Armor Mark One was", "组合片段：now",
-            "组合片段：The Magic Armor Mark One was now", "组合片段：complete",
+                          if not step.startswith(("实义词：", "功能词填空："))], [
+            "主语：The Magic Armor Mark One", "谓语：was",
+            "主谓：The Magic Armor Mark One was", "状语：now",
+            "接入状语：The Magic Armor Mark One was now", "补语：complete",
             f"整句：{sentence}",
         ])
         saved = json.loads(result["outputs"][0]["content"])

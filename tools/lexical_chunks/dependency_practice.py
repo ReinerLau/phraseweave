@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NamedTuple
 
 from content_function_practice import CONTENT_POS, _word_bounds
 from sentence_review import punctuation_practice_spans, utf16_spans
@@ -16,8 +16,35 @@ PREPOSITION_PARTS = frozenset({"pobj", "pcomp"})
 SUBJECTS = frozenset({"nsubj", "nsubjpass", "csubj", "csubjpass"})
 
 
-def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]:
-    """Return ordered schema 10 steps, including reconstructed intermediate text."""
+class DependencyPractice(NamedTuple):
+    steps: list[dict[str, Any]]
+    preview_labels: list[str]
+
+
+def _part_role(parent: Any, child: Any) -> str:
+    """Name the child's role in its parent, without guessing semantic subtypes."""
+    relation = child.dep_
+    if relation in SUBJECTS:
+        return "主语"
+    if parent.pos_ == "ADP" and relation in PREPOSITION_PARTS:
+        return "介词宾语"
+    if relation in {"dobj", "obj"}:
+        return "宾语"
+    if relation in {"iobj", "dative"}:
+        return "间接宾语"
+    if relation in {"ccomp", "xcomp", "acomp", "attr", "oprd"}:
+        return "补语"
+    if parent.pos_ in {"NOUN", "PROPN", "PRON"} and relation in NOUN_PARTS:
+        return "定语"
+    if parent.pos_ == "ADJ" and relation == "prep":
+        return "补语"
+    if relation in {"advmod", "npadvmod", "advcl", "prep", "agent"}:
+        return "状语"
+    return "片段"
+
+
+def build_dependency_practice(sentence: str, document: Any) -> DependencyPractice:
+    """Build saved steps and transient preview labels from the same dependency walk."""
     bounds = _word_bounds(sentence)
     token_words: dict[int, int] = {}
     for token in document:
@@ -28,19 +55,26 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
                 token_words[token.i] = index
                 break
 
-    units: list[tuple[frozenset[int], bool]] = []
-    seen: set[frozenset[int]] = set()
+    units: list[tuple[frozenset[int], bool, str]] = []
+    seen: dict[frozenset[int], int] = {}
 
     def words_in(token: Any, available: set[int]) -> frozenset[int]:
         return frozenset(token_words[part.i] for part in token.subtree
                          if part.i in available and part.i in token_words)
 
-    def emit(words: frozenset[int], leaf: bool = False) -> None:
-        if words and words not in seen:
-            seen.add(words)
-            units.append((words, leaf))
+    def emit(words: frozenset[int], leaf: bool = False, label: str = "片段",
+             replace_label: bool = False) -> None:
+        if not words:
+            return
+        index = seen.get(words)
+        if index is None:
+            seen[words] = len(units)
+            units.append((words, leaf, label))
+        elif replace_label:
+            previous_words, previous_leaf, _ = units[index]
+            units[index] = (previous_words, previous_leaf, label)
 
-    def drill(token: Any, available: set[int]) -> frozenset[int]:
+    def drill(token: Any, available: set[int], role: str = "") -> frozenset[int]:
         whole = words_in(token, available)
         if not whole:
             return whole
@@ -85,33 +119,44 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
         core = frozenset(token_words[part.i] for part in token.subtree
                          if part.i in available and part.i not in detached and part.i in token_words)
         if not core:
-            emit(whole, True)
+            emit(whole, True, role or "片段")
             return whole
 
         # A spaCy clitic may share one editable word with its subject. Keep that word whole.
         subject_words = frozenset().union(*(words_in(child, available) for child in subjects))
-        if subject_words & core:
+        fused_subject = bool(subject_words & core)
+        if fused_subject:
             subjects = []
             core = core | subject_words
         if subjects:
             for child in sorted(subjects, key=lambda item: item.idx):
-                drill(child, available)
-            emit(core, True)
+                drill(child, available, "主语")
+            emit(core, True, "谓语")
             current = core | subject_words
-            emit(current)
+            emit(current, label="主谓")
         else:
             current = core
             if token.pos_ != "ADP" or not parts:
-                emit(current, True)
+                core_label = "主谓" if fused_subject else (
+                    "谓语" if token.pos_ in {"VERB", "AUX"} else role or "片段")
+                emit(current, True, core_label)
 
         for child in sorted(parts, key=lambda item: item.idx):
-            child_words = drill(child, available)
+            part_role = _part_role(token, child)
+            child_words = drill(child, available, part_role)
             current = current | child_words
-            emit(current)
+            if token.pos_ == "ADP":
+                combination_label = "介词短语"
+            elif part_role == "片段":
+                combination_label = "片段"
+            else:
+                combination_label = f"接入{part_role}"
+            emit(current, label=combination_label)
         if markers:
             current = current | frozenset().union(*(words_in(child, available) for child in markers))
-            emit(current)
-        emit(whole)
+            emit(current, label="接入连接词")
+        whole_label = "介词短语" if token.pos_ == "ADP" and parts else role or "片段"
+        emit(whole, label=whole_label, replace_label=bool(role) and token.pos_ != "ADP")
         return whole
 
     parent_ranges = punctuation_practice_spans(sentence)
@@ -142,7 +187,8 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
         units.pop()
 
     steps: list[dict[str, Any]] = []
-    for word_set, leaf in units:
+    preview_labels: list[str] = []
+    for word_set, leaf, label in units:
         ordered = sorted(word_set)
         runs: list[tuple[int, int]] = []
         first = last = ordered[0]
@@ -169,16 +215,21 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
                 steps.append({"kind": "content-word",
                               "span": [runs[0][0] + left, runs[0][0] + right],
                               "context_span": [runs[0][0], runs[0][1]]})
+                preview_labels.append("实义词")
             functions = [index for index in range(len(local)) if index not in content]
             if content and functions:
                 steps.append({"kind": "function-fill", "span": [runs[0][0], runs[0][1]],
                               "answer_word_indices": functions})
+                preview_labels.append("功能词填空")
         steps.append(base)
+        preview_labels.append(label)
 
     if steps and steps[-1]["kind"] == "segment" and steps[-1]["text"] == sentence:
         steps[-1] = {"kind": "sentence", "span": [0, len(sentence)]}
+        preview_labels[-1] = "整句"
     else:
         steps.append({"kind": "sentence", "span": [0, len(sentence)]})
+        preview_labels.append("整句")
     ranges = [tuple(step["span"]) for step in steps if "span" in step]
     contexts = [tuple(step["context_span"]) for step in steps if "context_span" in step]
     encoded = iter(utf16_spans(sentence, ranges))
@@ -188,12 +239,17 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
             step["span"] = list(next(encoded))
         if "context_span" in step:
             step["context_span"] = list(next(context_encoded))
-    return steps
+    return DependencyPractice(steps, preview_labels)
 
 
-def preview_dependency_step(sentence: str, step: dict[str, Any]) -> str:
+def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]:
+    """Return ordered schema 10 steps, including reconstructed intermediate text."""
+    return build_dependency_practice(sentence, document).steps
+
+
+def preview_dependency_step(sentence: str, step: dict[str, Any], label: str = "片段") -> str:
     from content_function_practice import preview_step
 
     if "text" in step:
-        return f"组合片段：{step['text']}"
+        return f"{label}：{step['text']}"
     return preview_step(sentence, step)
