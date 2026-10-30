@@ -1,18 +1,15 @@
 # 手动迭代流程
 
-本仓库采用 `功能 worktree → dev 直接推送 → 整合测试 → 发布 PR → main → npm 发版` 的手动交付流程。功能改动完成检查后可直接进入 `dev`；只有用户明确要求发布时，才将整批改动合入 `main`。
+本仓库采用 `dev 开发并直接推送 → 整合测试 → 发布 PR → main → npm 发版` 的手动交付流程。功能改动完成检查后可直接进入 `dev`；只有用户明确要求发布时，才将整批改动合入 `main`。
 
 ## 开发与整合
 
-1. 明确目标，并在需要时先整理简短计划。
-2. 检查 `git worktree list` 和 `git status --short --branch`，执行 `git fetch origin`。从最新 `origin/dev` 创建 `codex/` 功能分支及独立 worktree；创建工具的默认基线可能是 `main`，必须明确指定 `origin/dev`。
-3. 根据改动风险和当前环境，按需运行检查、测试或构建。
-4. 提交工作分支的改动。在干净的主目录 `dev` 上执行 `git pull --ff-only`，默认使用 `git merge --squash <功能分支>` 合入并提交，再正常推送到 `origin/dev`。需要线上审阅时，可改用以 `dev` 为目标的 Pull Request；功能 PR 默认使用 squash merge。
-5. 推送后确认主目录 `dev` 与 `origin/dev` 一致，再测试多个功能组合后的行为。整合修复沿用功能分支开发与直接推送 `dev` 的流程。
+1. 明确目标，并在需要时先整理简短计划。检查主目录状态并获取远程更新；主目录干净时在 `dev` 执行 `git pull --ff-only`。保留已有未提交改动。
+2. 默认在主目录 `dev` 开发，根据改动风险和当前环境运行检查、测试或构建。
+3. 提交改动并正常推送 `dev`。推送后确认主目录 `dev` 与 `origin/dev` 一致，再测试多个功能组合后的行为。
+4. 需要隔离或用户要求时，可使用功能分支或 worktree：先检查 `git worktree list` 和 `git status --short --branch` 并获取远程更新，从最新 `origin/dev` 创建 `codex/` 分支；在干净的主目录 `dev` 上默认以 squash 合入并提交，再推送。需要线上审阅时，可改用以 `dev` 为目标的 Pull Request；功能 PR 默认使用 squash merge。保留其他 worktree 及其未提交改动。
 
-`dev` 是长期保留的整合分支，未设置 GitHub 分支保护，允许正常直接推送；仍不强推或删除。按改动风险手动运行检查；使用 PR 时在描述中记录检查结果。进入 `dev` 的改动不会触发版本标签或 npm 发布。
-
-主目录用于 `dev` 整合测试，功能开发使用独立 worktree。已有功能 worktree 保持原状；GitHub 默认分支仍为 `main`，创建 PR 时明确指定目标分支。
+`dev` 是长期保留的开发和整合分支，未设置 GitHub 分支保护，允许正常直接推送；仍不强推或删除。按改动风险手动运行检查；使用 PR 时在描述中记录检查结果。进入 `dev` 的改动不会触发版本标签或 npm 发布。GitHub 默认分支仍为 `main`，创建 PR 时明确指定目标分支。
 
 ## 按批次发布
 
