@@ -10,7 +10,7 @@ Use the single-context layout with root `CONTEXT.md` and `docs/adr/` when docume
 
 ### Manual iteration
 
-The delivery loop is intentionally manual: develop on a `codex/` worktree branch based on the latest `origin/dev`, run useful checks, then integrate into `dev` with a squash commit by default and push it directly. A pull request targeting `dev` is optional. Test the combined changes on `dev`. `main` requires a pull request and must never receive direct pushes. When developing, integrating, or publishing, read `docs/agents/delivery-workflow.md` for the sequence and merge methods.
+The delivery loop is intentionally manual: develop in the primary `dev` checkout by default, run useful checks, commit and push directly to `dev`. Use a feature branch or worktree when isolation is needed or requested; a pull request targeting `dev` is optional. Test the combined changes on `dev`. `main` requires a pull request and must never receive direct pushes. When developing, integrating, or publishing, read `docs/agents/delivery-workflow.md` for the sequence and merge methods.
 
 ### Protected release branch
 
@@ -18,4 +18,4 @@ Treat `main` as the production release branch. Only when the user explicitly req
 
 ### Worktree and branch synchronization
 
-The primary checkout uses `dev` for integration testing; GitHub's default branch remains `main`. Before creating a worktree or diagnosing branch behavior, inspect `git worktree list` and `git status --short --branch`, and fetch `origin`. Explicitly select `origin/dev` as the base for new feature worktrees rather than relying on the default branch. After merging changes elsewhere, update the relevant clean checkout with a fast-forward and verify it matches the intended remote revision. Preserve other worktrees and their uncommitted changes.
+The primary checkout uses `dev` for development and integration testing; GitHub's default branch remains `main`. Before creating a worktree or diagnosing branch behavior, inspect `git worktree list` and `git status --short --branch`, and fetch `origin`. Explicitly select `origin/dev` as the base for new feature worktrees rather than relying on the default branch. After merging changes elsewhere, update the relevant clean checkout with a fast-forward and verify it matches the intended remote revision. Preserve other worktrees and their uncommitted changes.

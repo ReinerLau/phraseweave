@@ -26,32 +26,37 @@ class SentenceGenerationTests(TestCase):
         result = emit.call_args.args[0]
         saved = json.loads(result["outputs"][0]["content"])
         steps = saved["statements"][0]["practice_steps"]
-        segment_texts = [sentence.encode("utf-16-le")[step["span"][0] * 2:step["span"][1] * 2]
+        segment_texts = [step.get("text") or sentence.encode("utf-16-le")[step["span"][0] * 2:step["span"][1] * 2]
                          .decode("utf-16-le") for step in steps if step["kind"] in {"segment", "sentence"}]
         self.assertEqual(segment_texts, [
-            "time", "marched on", "time marched on", "indifferent to my concerns",
-            "and soon enough", "another month", "had passed.",
-            "another month had passed.", "and soon enough another month had passed.", sentence,
+            "time", "marched on", "time marched on", "indifferent", "my concerns",
+            "to my concerns", "indifferent to my concerns", "another month", "had passed",
+            "another month had passed", "soon enough",
+            "soon enough another month had passed", "and soon enough another month had passed",
+            sentence,
         ])
-        self.assertEqual([label for label in result["preview"][0]["steps"]
-                          if label.startswith(("组合片段：", "整句："))],
-                         [f"组合片段：{text}" for text in segment_texts[:-1]] + [f"整句：{sentence}"])
+        segment_preview = [label for label in result["preview"][0]["steps"]
+                           if not label.startswith(("实义词：", "功能词填空："))]
+        self.assertEqual([label.split("：", 1)[1] for label in segment_preview], segment_texts)
+        self.assertEqual([label.split("：", 1)[0] for label in segment_preview], [
+            "主语", "谓语", "主谓", "片段", "宾语", "补语", "接入补语",
+            "主语", "谓语", "主谓", "状语", "接入状语", "片段", "整句",
+        ])
 
     def test_target_sentence_drills_each_leaf_before_replaying_the_whole(self):
         sentence = "The Magic Armor Mark One was now complete."
         with patch("worker._emit") as emit:
             _generate({"text": sentence})
         result = emit.call_args.args[0]
-        self.assertEqual(result["preview"][0]["steps"], [
-            "实义词：Magic", "实义词：Armor", "实义词：Mark", "实义词：One",
-            "功能词填空：___ Magic Armor Mark One",
-            "组合片段：The Magic Armor Mark One",
-            "实义词：now", "实义词：complete",
-            "功能词填空：___ now complete.", "组合片段：was now complete.",
+        self.assertEqual([step for step in result["preview"][0]["steps"]
+                          if not step.startswith(("实义词：", "功能词填空："))], [
+            "主语：The Magic Armor Mark One", "谓语：was",
+            "主谓：The Magic Armor Mark One was", "状语：now",
+            "接入状语：The Magic Armor Mark One was now", "补语：complete",
             f"整句：{sentence}",
         ])
         saved = json.loads(result["outputs"][0]["content"])
-        self.assertEqual(saved["schema_version"], 8)
+        self.assertEqual(saved["schema_version"], 10)
         self.assertEqual(saved["practice_sequence"], "lazy-content-function-v1")
         self.assertEqual(saved["statements"][0]["practice_steps"][-1],
                          {"kind": "sentence", "span": [0, len(sentence)]})
@@ -88,7 +93,7 @@ class SentenceGenerationTests(TestCase):
         self.assertEqual(len(outputs), 1)
         self.assertTrue(outputs[0]["name"].endswith(".json"))
         generated = json.loads(outputs[0]["content"])
-        self.assertEqual(generated["schema_version"], 8)
+        self.assertEqual(generated["schema_version"], 10)
         self.assertEqual(generated["practice_sequence"], "lazy-content-function-v1")
         rows = generated["statements"]
         self.assertEqual([row["english"] for row in rows], ["The cat sleeps.", "Birds sing!"])

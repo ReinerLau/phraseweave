@@ -61,6 +61,32 @@ describe("lazy sentence practice", () => {
     return store;
   }
 
+  it("uses reconstructed text for translation, input, audio text, and resume", async () => {
+    course.practiceSequence = "lazy-content-function-v1";
+    course.statements = [
+      {
+        ...course.statements[0],
+        english: "She quietly finished.",
+        practiceSteps: [
+          { kind: "segment", text: "She finished" },
+          { kind: "sentence", span: [0, 21] },
+        ],
+      },
+    ];
+    let store = await setup();
+    expect(store.currentStatement?.english).toBe("She finished");
+    expect(store.currentPracticeText).toBe("She finished");
+    expect(store.words).toEqual(["She", "finished"]);
+    expect(store.checkCorrect("She finished")).toBe(true);
+    expect(translatePracticeStep).toHaveBeenCalledWith("She finished");
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    setActivePinia(createPinia());
+    store = await setup();
+    expect(store.currentStatement?.english).toBe("She quietly finished.");
+  });
+
   it("uses contextual word prompts, function-only answers, resume, and whole review", async () => {
     course.practiceSequence = "lazy-content-function-v1";
     course.statements = [

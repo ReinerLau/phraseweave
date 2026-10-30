@@ -231,14 +231,14 @@ export const useExerciseStore = defineStore("exercise", () => {
       }
       const spans = lazySpans();
       lazyStepIndex.value = Math.min(Math.max(0, lazyStepIndex.value), spans.length - 1);
-      const [start, end] = spans[lazyStepIndex.value];
+      const range = spans[lazyStepIndex.value];
       const step = base.practiceSteps?.[lazyStepIndex.value];
       currentStatement.value = {
         ...base,
         id: `${base.id}:step:${lazyStepIndex.value}`,
-        english: base.english.slice(start, end),
-        contextBefore: base.english.slice(0, start),
-        contextAfter: base.english.slice(end),
+        english: step?.text ?? (range ? base.english.slice(...range) : ""),
+        contextBefore: step?.text ? "" : range ? base.english.slice(0, range[0]) : "",
+        contextAfter: step?.text ? "" : range ? base.english.slice(range[1]) : "",
         sentenceChinese: base.stepTranslations?.[lazyStepIndex.value] ?? "",
         answerWordIndices: step?.kind === "function-fill" ? step.answer_word_indices : undefined,
       };
@@ -666,13 +666,13 @@ export const useExerciseStore = defineStore("exercise", () => {
     const task = (async () => {
       let chinese = fetchedTranslations.get(key);
       if (!chinese) {
-        const [start, end] = lazySpans(index)[step];
+        const range = lazySpans(index)[step];
         const practiceStep = base.practiceSteps?.[step];
         const context =
           practiceStep?.kind === "content-word" && practiceStep.context_span
             ? base.english.slice(...practiceStep.context_span)
             : undefined;
-        const text = base.english.slice(start, end);
+        const text = practiceStep?.text ?? (range ? base.english.slice(...range) : "");
         const result = context
           ? await translatePracticeStep(text, context)
           : await translatePracticeStep(text);

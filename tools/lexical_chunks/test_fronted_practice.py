@@ -17,22 +17,22 @@ class FrontedAdjunctPracticeTests(TestCase):
     def test_fronted_time_modifier_replays_its_punctuation_parent(self):
         sentence = "time marched on, indifferent to my concerns; and soon enough another month had passed."
         self.assertEqual(self.steps(sentence), [
-            "time marched on", "indifferent to my concerns", "and soon enough",
-            "another month had passed.", "and soon enough another month had passed.",
+            "time marched on", "indifferent to my concerns",
+            "another month had passed.", "and soon enough", "and soon enough another month had passed.",
             sentence,
         ])
 
     def test_fronted_place_and_time_keep_the_core_clause_together(self):
         self.assertEqual(self.steps("In the morning she left."), [
-            "In the morning", "she left.", "In the morning she left.",
+            "she left.", "In the morning", "In the morning she left.",
         ])
         self.assertEqual(self.steps("In the morning she left; at night he returned."), [
-            "In the morning", "she left", "In the morning she left",
-            "at night", "he returned.", "at night he returned.",
+            "she left", "In the morning", "In the morning she left",
+            "he returned.", "at night", "at night he returned.",
             "In the morning she left; at night he returned.",
         ])
         self.assertEqual(self.steps("Yesterday in the morning we left."), [
-            "Yesterday in the morning", "we left.", "Yesterday in the morning we left.",
+            "we left.", "Yesterday in the morning", "Yesterday in the morning we left.",
         ])
 
     def test_fronted_clauses_remain_whole(self):
@@ -52,9 +52,9 @@ class FrontedAdjunctPracticeTests(TestCase):
         sentence = "😀 Hi; And then she left."
         spans = fronted_adjunct_practice_spans(sentence, self.nlp)
         self.assertEqual(self.steps(sentence), [
-            "😀 Hi", "And then", "she left.", "And then she left.", sentence,
+            "😀 Hi", "she left.", "And then", "And then she left.", sentence,
         ])
-        self.assertEqual(spans[1], (7, 15))
+        self.assertEqual(spans[2], (7, 15))
         self.assertEqual(spans[-1], (0, len(sentence.encode("utf-16-le")) // 2))
 
 
@@ -81,15 +81,15 @@ class SyntacticPracticeTests(TestCase):
     def test_fronted_adjunct_wraps_a_subject_predicate_core(self):
         sentence = "In the morning she left."
         self.assertEqual(self.steps(sentence), [
-            "In the morning", "she", "left.", "she left.", sentence,
+            "she", "left.", "she left.", "In the morning", sentence,
         ])
         self.assertNotIn("In the morning she", self.steps(sentence))
 
     def test_punctuation_parents_replay_after_their_syntax_children(self):
         sentence = "In the morning she left; at night he returned."
         self.assertEqual(self.steps(sentence), [
-            "In the morning", "she", "left", "she left", "In the morning she left",
-            "at night", "he", "returned.", "he returned.", "at night he returned.",
+            "she", "left", "she left", "In the morning", "In the morning she left",
+            "he", "returned.", "he returned.", "at night", "at night he returned.",
             sentence,
         ])
 
@@ -105,8 +105,8 @@ class SyntacticPracticeTests(TestCase):
         sentence = "😀 Hi; In the morning she left."
         spans = syntactic_practice_spans(sentence, self.nlp(sentence))
         self.assertEqual(self.steps(sentence), [
-            "😀 Hi", "In the morning", "she", "left.", "she left.",
+            "😀 Hi", "she", "left.", "she left.", "In the morning",
             "In the morning she left.", sentence,
         ])
-        self.assertEqual(spans[2], (22, 25))
+        self.assertEqual(spans[1], (22, 25))
         self.assertEqual(spans[-1], (0, len(sentence.encode("utf-16-le")) // 2))

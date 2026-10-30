@@ -288,6 +288,31 @@ class ExerciseProgressEndpointTests(TestCase):
         self.assertEqual(stored["resumeStepIndex"], 1)
         self.assertEqual(stored["statements"][0]["stepTranslations"], {"0": "放"})
 
+    def test_text_only_segments_save_translation_and_resume(self):
+        course = self.pack["courses"][0]
+        course["practiceSequence"] = "lazy-content-function-v1"
+        course["statements"][0].update({
+            "english": "She quietly finished.",
+            "practiceSteps": [
+                {"kind": "segment", "text": "She finished"},
+                {"kind": "sentence", "span": [0, 21]},
+            ],
+        })
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack", {
+            "coursePack": self.pack,
+        })[0], 200)
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
+            "courseId": "course", "statementIndex": 0, "stepIndex": 0,
+            "chinese": "她完成了", "whole": False,
+        })[0], 200)
+        self.assertEqual(self.request("PUT", "/api/local-exercises/pack/progress", {
+            "courseId": "course", "statementIndex": 0,
+            "resumeStatementIndex": 0, "resumeStepIndex": 1,
+        })[0], 200)
+        stored = self.stored_course()
+        self.assertEqual(stored["resumeStepIndex"], 1)
+        self.assertEqual(stored["statements"][0]["stepTranslations"], {"0": "她完成了"})
+
     def test_switch_and_restart_atomically_save_a_lower_cursor_and_mode(self):
         self.assertEqual(self.progress(3, "sentence-first", 3)[0], 200)
         self.assertEqual(self.stored_course()["statementIndex"], 3)
