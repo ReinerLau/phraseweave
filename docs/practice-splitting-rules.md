@@ -277,6 +277,8 @@ we’d finished the project in only three months.
 
 名词后的 `of` 短语与其中心名词保持整体，例如 `a lot of money`、`a cup of coffee` 和 `the end of the story`；不单独生成 `of money` 等片段题，整体内部仍练实义词和功能词。其他介词短语及从句仍按现有规则拆分。
 
+动词宾语中的形容词定语先暂时移出：先练带必要限定词的宾语并接入已有主谓或谓语，再单练定语并接回当前组合。例如 `I hired additional workers` 先练 `I hired workers`，再练 `additional`，最后复现原句；`to cover the more monotonous tasks` 先组合 `to cover the tasks`，再接入 `more monotonous`。含 `of` 短语的名词整体仍按上述规则保留。已保存的题序不变。
+
 ### D2 句中状语的逐步组合
 
 **输入：** `She quietly finished the project.`

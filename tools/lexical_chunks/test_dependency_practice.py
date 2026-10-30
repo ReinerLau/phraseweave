@@ -64,6 +64,24 @@ class DependencyPracticeTests(TestCase):
     def test_other_noun_prepositions_remain_detachable(self):
         self.assertIn("on the table", self.segments("She opened the box on the table."))
 
+    def test_object_adjective_is_added_after_clause_core(self):
+        sentence = "I hired additional workers."
+        self.assertEqual(self.labeled_segments(sentence), [
+            "主语：I", "谓语：hired", "主谓：I hired", "宾语：workers",
+            "接入宾语：I hired workers", "定语：additional", f"整句：{sentence}",
+        ])
+        sentence = "The company hired additional workers."
+        labels = self.labeled_segments(sentence)
+        self.assertLess(labels.index("接入宾语：The company hired workers"),
+                        labels.index("定语：additional"))
+
+    def test_object_adjective_with_determiner_and_modifier(self):
+        sentence = "They cover the more monotonous tasks today."
+        labels = self.labeled_segments(sentence)
+        self.assertIn("宾语：the tasks", labels)
+        self.assertIn("接入宾语：They cover the tasks", labels)
+        self.assertIn("接入定语：They cover the more monotonous tasks", labels)
+
     def test_detaches_purpose_when_subtree_extends_past_comma(self):
         sentence = ("I’d thrown a lot of money at it near the end, hiring additional "
                     "workers to cover the more monotonous tasks, which had definitely "
@@ -72,6 +90,8 @@ class DependencyPracticeTests(TestCase):
         hiring = segments.index("hiring additional workers")
         cover = segments.index("to cover the more monotonous tasks")
         combined = segments.index("hiring additional workers to cover the more monotonous tasks")
+        self.assertLess(segments.index("hiring workers"), hiring)
+        self.assertLess(segments.index("to cover the tasks"), cover)
         self.assertLess(hiring, cover)
         self.assertLess(cover, combined)
         self.assertNotIn("hiring to cover the more monotonous tasks", segments)

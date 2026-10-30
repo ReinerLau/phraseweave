@@ -158,7 +158,16 @@ def build_dependency_practice(sentence: str, document: Any) -> DependencyPractic
 
         for child in sorted(parts, key=lambda item: item.idx):
             part_role = _part_role(token, child)
-            child_words = drill(child, available, part_role)
+            # Introduce an object's noun before its adjectival modifiers, then
+            # attach each modifier to the existing clause. Keep determiners on
+            # the noun and preserve established noun + of phrase units.
+            modifiers = []
+            if token.pos_ in {"VERB", "AUX"} and part_role == "宾语" and child.pos_ in {"NOUN", "PROPN"}:
+                if not any(item.dep_ == "prep" and item.lower_ == "of" for item in child.children):
+                    modifiers = [item for item in child.children
+                                 if item.dep_ == "amod" and item.i in available and contained(item)]
+            modifier_indices = {part.i for item in modifiers for part in item.subtree}
+            child_words = drill(child, available - modifier_indices, part_role)
             current = current | child_words
             if token.pos_ == "ADP":
                 combination_label = role or "片段"
@@ -167,6 +176,9 @@ def build_dependency_practice(sentence: str, document: Any) -> DependencyPractic
             else:
                 combination_label = f"接入{part_role}"
             emit(current, label=combination_label)
+            for modifier in sorted(modifiers, key=lambda item: item.idx):
+                current = current | drill(modifier, available, "定语")
+                emit(current, label="接入定语")
         if markers:
             current = current | frozenset().union(*(words_in(child, available) for child in markers))
             emit(current, label="接入连接词")
