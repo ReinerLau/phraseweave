@@ -10,9 +10,6 @@ SCHEMA_VERSION = 4
 PRACTICE_SEQUENCE = "comma-segments-v1"
 LAZY_SCHEMA_VERSION = 5
 LAZY_PRACTICE_SEQUENCE = "lazy-comma-segments-v1"
-PUNCTUATION_SCHEMA_VERSION = 7
-PUNCTUATION_PRACTICE_SEQUENCE = "lazy-punctuation-segments-v1"
-PUNCTUATION_CLAUSE_PRACTICE_SEQUENCE = "lazy-punctuation-clause-segments-v1"
 ABBREVIATIONS = frozenset(
     {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc", "e.g", "i.e"}
 )
@@ -91,7 +88,7 @@ def split_sentences(text: str) -> list[str]:
 
 
 def practice_spans(sentence: str) -> list[tuple[int, int]]:
-    """Return clauses with words, then the complete sentence."""
+    """Return comma segments with words, then the complete sentence."""
     segments: list[tuple[int, int]] = []
 
     def append_segment(start: int, end: int) -> None:
@@ -163,41 +160,6 @@ def utf16_spans(sentence: str, spans: Sequence[tuple[int, int]]) -> list[tuple[i
     return [(offsets[start], offsets[end]) for start, end in spans]
 
 
-def render_punctuation_phraseweave(
-    sentences: Sequence[str], spans: Sequence[Sequence[tuple[int, int]]], *, split_clauses: bool
-) -> str:
-    if len(sentences) != len(spans):
-        raise ValueError("Practice span count does not match sentences.")
-    return json.dumps({
-        "schema_version": PUNCTUATION_SCHEMA_VERSION,
-        "practice_sequence": (
-            PUNCTUATION_CLAUSE_PRACTICE_SEQUENCE if split_clauses
-            else PUNCTUATION_PRACTICE_SEQUENCE
-        ),
-        "statements": [{
-            "english": sentence,
-            "context_before": "",
-            "context_after": "",
-            "unit_id": f"{index}:whole",
-            "source_unit_ids": [],
-            "practice_spans": [list(span) for span in sentence_spans],
-        } for index, (sentence, sentence_spans) in enumerate(zip(sentences, spans, strict=True))],
-    }, ensure_ascii=False, indent=2) + "\n"
-
-
-def render_markdown(sentences: Sequence[str], chinese: Sequence[Sequence[str]]) -> str:
-    lines = ["# 逗号分段与整句复现", ""]
-    for index, (sentence, prompts) in enumerate(zip(sentences, chinese, strict=True), start=1):
-        spans = practice_spans(sentence)
-        if len(prompts) != len(spans):
-            raise ValueError("Translation count does not match practice spans.")
-        lines.extend([f"## 第 {index} 句", ""])
-        for step, ((start, end), prompt) in enumerate(zip(spans, prompts, strict=True), start=1):
-            label = "整句" if step == len(spans) else f"第 {step} 段"
-            lines.extend([f"### {label}", "", f"中文提示：{prompt}", "", sentence[start:end], ""])
-    return "\n".join(lines).rstrip() + "\n"
-
-
 def render_phraseweave(sentences: Sequence[str], chinese: Sequence[Sequence[str]]) -> str:
     statements = []
     for index, (sentence, prompts) in enumerate(zip(sentences, chinese, strict=True)):
@@ -225,13 +187,6 @@ def render_phraseweave(sentences: Sequence[str], chinese: Sequence[Sequence[str]
         )
         + "\n"
     )
-
-
-def render_lazy_markdown(sentences: Sequence[str]) -> str:
-    lines = ["# 原句复现练习", ""]
-    for index, sentence in enumerate(sentences, start=1):
-        lines.extend([f"## 第 {index} 句", "", sentence, ""])
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_lazy_phraseweave(sentences: Sequence[str]) -> str:

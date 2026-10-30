@@ -113,37 +113,6 @@
         <span class="mt-1 text-right text-xs opacity-60">{{ englishText.length }} / 30,000</span>
       </label>
 
-      <div>
-        <label class="form-control">
-          <span class="label-text mb-2 font-semibold">导出格式</span>
-          <select
-            v-model="outputFormat"
-            class="select select-bordered"
-            :disabled="generationBusy || savingExercise"
-          >
-            <option value="markdown">Markdown</option>
-            <option value="phraseweave">PhraseWeave JSON</option>
-            <option value="both">两种格式</option>
-          </select>
-        </label>
-      </div>
-
-      <label class="flex cursor-pointer items-start gap-3">
-        <input
-          v-model="splitClauses"
-          class="checkbox-primary checkbox mt-0.5"
-          type="checkbox"
-          :disabled="generationBusy || savingExercise"
-          @change="clearGeneratedOutputs"
-        />
-        <span>
-          <span class="font-semibold">在标点分隔片段内拆分从句</span>
-          <span class="block text-sm opacity-70"
-            >默认按逗号、分号、冒号和长破折号分段，逐个练实义词，再填功能词；勾选后进一步拆分从句。生成后可预览题序，不影响已有卡片。</span
-          >
-        </span>
-      </label>
-
       <div class="flex flex-wrap items-center gap-3">
         <button
           class="btn btn-primary"
@@ -166,45 +135,39 @@
       v-if="outputFiles.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-semibold">生成文件</h2>
-          <p class="mt-1 text-sm opacity-70">下载本次生成的文件。</p>
-        </div>
-        <div class="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:max-w-full">
-          <label
-            v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
-            class="form-control w-full min-w-0"
-          >
-            <span class="label-text mb-2 font-semibold">练习名称</span>
-            <input
-              v-model="exerciseTitle"
-              class="input input-bordered w-full"
-              type="text"
-              :placeholder="defaultExerciseTitle"
-              :disabled="savingExercise"
-            />
-            <span class="mb-2 mt-1 text-xs opacity-60">留空使用默认名称</span>
-          </label>
-          <button
-            v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
-            class="btn btn-primary btn-sm"
-            type="button"
+      <div class="flex w-full min-w-0 flex-wrap gap-2">
+        <label
+          v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
+          class="form-control w-full min-w-0"
+        >
+          <span class="label-text mb-2 font-semibold">练习名称</span>
+          <input
+            v-model="exerciseTitle"
+            class="input input-bordered w-full"
+            type="text"
+            :placeholder="defaultExerciseTitle"
             :disabled="savingExercise"
-            @click="saveAndOpenExercise"
-          >
-            {{ savingExercise ? "正在保存…" : "保存并进入练习" }}
-          </button>
-          <button
-            v-for="file in outputFiles"
-            :key="file.name"
-            class="btn btn-outline btn-sm"
-            type="button"
-            @click="downloadFile(file)"
-          >
-            下载 {{ file.name }}
-          </button>
-        </div>
+          />
+          <span class="mb-2 mt-1 text-xs opacity-60">留空使用默认名称</span>
+        </label>
+        <button
+          v-if="outputFiles.some((file) => file.name.endsWith('.json'))"
+          class="btn btn-primary btn-sm"
+          type="button"
+          :disabled="savingExercise"
+          @click="saveAndOpenExercise"
+        >
+          {{ savingExercise ? "正在保存…" : "保存并进入练习" }}
+        </button>
+        <button
+          v-for="file in outputFiles"
+          :key="file.name"
+          class="btn btn-outline btn-sm"
+          type="button"
+          @click="downloadFile(file)"
+        >
+          下载 JSON
+        </button>
       </div>
     </section>
 
@@ -212,98 +175,50 @@
       v-if="practicePreview.length"
       class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
     >
-      <h2 class="text-xl font-semibold">首次练习题序预览</h2>
-      <ol class="mt-4 space-y-4">
-        <li
-          v-for="(item, index) in practicePreview"
-          :key="index"
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-xl font-semibold">首次练习题序预览（{{ practicePreview.length }} 句）</h2>
+        <button
+          class="btn btn-outline btn-sm"
+          type="button"
+          :aria-expanded="previewExpanded"
+          @click="previewExpanded = !previewExpanded"
         >
-          <p class="font-semibold">第 {{ index + 1 }} 句：{{ item.sentence }}</p>
-          <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm">
-            <li
-              v-for="(step, stepIndex) in item.steps"
-              :key="stepIndex"
-            >
-              {{ step }}
-            </li>
-          </ol>
-        </li>
-      </ol>
-    </section>
-
-    <section
-      v-if="markdownContent !== null"
-      class="rounded-xl border border-base-300 bg-base-100 p-5 shadow-sm"
-    >
-      <div class="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 class="text-xl font-semibold">Markdown 文件内容</h2>
-        <span class="text-sm opacity-60">{{ markdownFileName }}</span>
+          {{ previewExpanded ? "收起预览" : "展开预览" }}
+        </button>
       </div>
-      <article class="mt-4 max-h-[36rem] overflow-auto rounded-lg bg-base-200 p-4">
-        <template
-          v-for="(block, index) in markdownBlocks"
-          :key="index"
+      <div
+        v-if="previewExpanded && selectedPreview"
+        id="practice-preview-content"
+        class="mt-4"
+      >
+        <label
+          for="preview-sentence"
+          class="mb-2 block text-sm font-semibold"
+          >选择句子</label
         >
-          <h1
-            v-if="block.type === 'heading' && block.level === 1"
-            class="mt-0 text-2xl font-bold"
+        <select
+          id="preview-sentence"
+          v-model.number="selectedPreviewIndex"
+          class="select select-bordered w-full"
+        >
+          <option
+            v-for="(item, index) in practicePreview"
+            :key="index"
+            :value="index"
           >
-            {{ block.text }}
-          </h1>
-          <h2
-            v-else-if="block.type === 'heading' && block.level === 2"
-            class="mt-6 text-xl font-semibold"
+            第 {{ index + 1 }} 句：{{ item.sentence }}
+          </option>
+        </select>
+        <p class="mt-4 font-semibold">{{ selectedPreview.sentence }}</p>
+        <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm">
+          <li
+            v-for="(step, index) in selectedPreview.steps"
+            :key="index"
           >
-            {{ block.text }}
-          </h2>
-          <h3
-            v-else-if="block.type === 'heading'"
-            class="mt-4 text-lg font-semibold"
-          >
-            {{ block.text }}
-          </h3>
-          <p
-            v-else-if="block.type === 'paragraph'"
-            class="my-3 whitespace-pre-wrap"
-          >
-            {{ block.text }}
-          </p>
-          <pre
-            v-else-if="block.type === 'code'"
-            class="whitespace-pre-wrap rounded bg-base-300"
-          ><code>{{ block.text }}</code></pre>
-          <div
-            v-else-if="block.type === 'table'"
-            class="overflow-x-auto"
-          >
-            <table class="table table-zebra table-sm">
-              <thead>
-                <tr>
-                  <th
-                    v-for="(cell, cellIndex) in block.headers"
-                    :key="cellIndex"
-                  >
-                    {{ cell }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(row, rowIndex) in block.rows"
-                  :key="rowIndex"
-                >
-                  <td
-                    v-for="(cell, cellIndex) in row"
-                    :key="cellIndex"
-                  >
-                    {{ cell }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
-      </article>
+            {{ step }}
+          </li>
+        </ol>
+      </div>
     </section>
   </main>
 </template>
@@ -325,13 +240,7 @@ import {
 } from "~/services/generatorClient";
 import { normalizeExerciseImport, saveLocalExercise } from "~/services/localExerciseDb";
 
-type OutputFormat = "markdown" | "phraseweave" | "both";
 type OutputFile = GeneratorOutput;
-type MarkdownBlock =
-  | { type: "heading"; level: number; text: string }
-  | { type: "paragraph"; text: string }
-  | { type: "code"; text: string }
-  | { type: "table"; headers: string[]; rows: string[][] };
 const route = useRoute();
 const rawCaptureId = route.query.capture;
 const captureId = typeof rawCaptureId === "string" ? rawCaptureId : "";
@@ -341,8 +250,6 @@ const selectedText =
     ? null
     : new URLSearchParams(window.location.hash.slice(1)).get("text");
 const supportsPublicTranslation = ref(false);
-const outputFormat = ref<OutputFormat>("both");
-const splitClauses = ref(false);
 const englishText = ref("");
 const serviceConnected = ref(false);
 const connecting = ref(false);
@@ -356,15 +263,15 @@ const generationBusy = computed(() => submitting.value || Boolean(activeJob.valu
 const jobError = ref("");
 const outputFiles = ref<OutputFile[]>([]);
 const practicePreview = ref<Array<{ sentence: string; steps: string[] }>>([]);
+const previewExpanded = ref(false);
+const selectedPreviewIndex = ref(0);
+const selectedPreview = computed(() => practicePreview.value[selectedPreviewIndex.value]);
 const generatedText = ref("");
 const defaultExerciseTitle = computed(() =>
   generatedText.value.replace(/\s+/g, " ").trim().slice(0, 80),
 );
 const exerciseTitle = ref("");
 const savingExercise = ref(false);
-const markdownFileName = ref("");
-const markdownContent = ref<string | null>(null);
-const markdownBlocks = computed(() => parseMarkdown(markdownContent.value || ""));
 const captureStatus = ref("");
 const captureError = ref("");
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -439,7 +346,7 @@ function receiveCaptureText(text: string) {
     return;
   }
   englishText.value = text;
-  captureStatus.value = "选中文本已填入下方，可编辑文本并选择导出格式，再点击“生成分段练习”。";
+  captureStatus.value = "选中文本已填入下方，可编辑文本，再点击“生成分段练习”。";
 }
 
 async function connectService() {
@@ -504,11 +411,7 @@ async function refreshService() {
   await connectService();
 }
 
-async function startJob(payload: {
-  text: string;
-  format: OutputFormat;
-  splitClauses?: boolean;
-}): Promise<OutputFile[] | undefined> {
+async function startJob(payload: { text: string }): Promise<OutputFile[] | undefined> {
   jobError.value = "";
   clearGeneratedOutputs();
   generatedText.value = payload.text;
@@ -526,8 +429,8 @@ async function startJob(payload: {
 function clearGeneratedOutputs() {
   outputFiles.value = [];
   practicePreview.value = [];
-  markdownFileName.value = "";
-  markdownContent.value = null;
+  previewExpanded.value = false;
+  selectedPreviewIndex.value = 0;
 }
 
 async function generate() {
@@ -537,8 +440,6 @@ async function generate() {
   try {
     await startJob({
       text: englishText.value,
-      format: outputFormat.value,
-      ...(splitClauses.value ? { splitClauses: true } : {}),
     });
   } finally {
     submitting.value = false;
@@ -568,11 +469,6 @@ async function pollJob(jobId: string): Promise<OutputFile[] | undefined> {
     if (job.result) {
       outputFiles.value = outputs;
       practicePreview.value = job.result.preview ?? [];
-      const markdownFile = outputFiles.value.find((file) => file.name.endsWith(".md"));
-      if (markdownFile) {
-        markdownFileName.value = markdownFile.name;
-        markdownContent.value = markdownFile.content;
-      }
     }
     await releaseGeneratorJob(jobId);
     return outputs;
@@ -612,10 +508,9 @@ async function importGeneratedExercise(outputs: OutputFile[], sourceText: string
 }
 
 function downloadFile(file: OutputFile) {
-  const type = file.name.endsWith(".json")
-    ? "application/json;charset=utf-8"
-    : "text/markdown;charset=utf-8";
-  const url = URL.createObjectURL(new Blob([file.content], { type }));
+  const url = URL.createObjectURL(
+    new Blob([file.content], { type: "application/json;charset=utf-8" }),
+  );
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = file.name;
@@ -629,85 +524,10 @@ function describeError(error: unknown) {
   return error instanceof Error ? error.message : "本地服务请求失败。";
 }
 
-function parseMarkdown(source: string): MarkdownBlock[] {
-  const lines = source.split(/\r?\n/);
-  const blocks: MarkdownBlock[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index].trim();
-    if (!line) {
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !lines[index].trim().startsWith("```")) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-      blocks.push({ type: "code", text: codeLines.join("\n") });
-      index += 1;
-      continue;
-    }
-
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
-      index += 1;
-      continue;
-    }
-
-    if (
-      line.startsWith("|") &&
-      index + 1 < lines.length &&
-      /^\|?[\s:|-]+\|?$/.test(lines[index + 1].trim())
-    ) {
-      const headers = parseMarkdownTableRow(line);
-      const rows: string[][] = [];
-      index += 2;
-      while (index < lines.length && lines[index].trim().startsWith("|")) {
-        rows.push(parseMarkdownTableRow(lines[index].trim()));
-        index += 1;
-      }
-      blocks.push({ type: "table", headers, rows });
-      continue;
-    }
-
-    blocks.push({ type: "paragraph", text: line });
-    index += 1;
-  }
-
-  return blocks;
-}
-
-function parseMarkdownTableRow(line: string): string[] {
-  const trimmed = line.replace(/^\|/, "").replace(/\|$/, "");
-  const cells: string[] = [];
-  let cell = "";
-  for (let index = 0; index < trimmed.length; index += 1) {
-    const character = trimmed[index];
-    if (character === "\\" && trimmed[index + 1] === "|") {
-      cell += "|";
-      index += 1;
-    } else if (character === "|") {
-      cells.push(cell.trim().replaceAll("<br>", "\n"));
-      cell = "";
-    } else {
-      cell += character;
-    }
-  }
-  cells.push(cell.trim().replaceAll("<br>", "\n"));
-  return cells;
-}
-
 onUnmounted(() => {
   disposed = true;
   if (pollTimer) clearTimeout(pollTimer);
   if (statusTimer) clearTimeout(statusTimer);
   outputFiles.value = [];
-  markdownContent.value = null;
 });
 </script>

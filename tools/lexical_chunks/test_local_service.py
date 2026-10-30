@@ -37,7 +37,6 @@ class CompletedJobEndpointTests(TestCase):
                 "state": "complete",
                 "result": {
                     "outputs": [
-                        {"name": "learning-units.md", "content": "# Generated"},
                         {"name": "learning-units.json", "content": '{"statements": []}'},
                     ]
                 },
@@ -77,8 +76,7 @@ class CompletedJobEndpointTests(TestCase):
         finally:
             connection.close()
 
-        self.assertEqual(body["result"]["outputs"][0]["content"], "# Generated")
-        self.assertEqual(body["result"]["outputs"][1]["content"], '{"statements": []}')
+        self.assertEqual(body["result"]["outputs"][0]["content"], '{"statements": []}')
         self.assertEqual(acknowledgment.status, 200)
         self.assertTrue(acknowledgment_body["ok"])
         with JOBS_LOCK:
@@ -567,7 +565,7 @@ class WorkerProgressTests(TestCase):
 
         try:
             with patch("local_service._run_worker", side_effect=worker):
-                local_service._generate(job_id, {"text": "Text.", "format": "both"})
+                local_service._generate(job_id, {"text": "Text."})
             self.assertEqual(JOBS[job_id]["state"], "complete")
         finally:
             JOBS.pop(job_id, None)

@@ -15,7 +15,7 @@
         <template #word="{ token }">
           <span
             v-if="answerIndex(token.wordIndex) < 0"
-            class="question-input-word text-[#202020] dark:text-gray-50"
+            class="question-input-word min-w-0 max-w-full rounded-[2px] border-b-2 border-solid border-b-transparent leading-none text-[#202020] dark:text-gray-50"
             data-testid="fixed-practice-word"
             >{{ token.text }}</span
           >

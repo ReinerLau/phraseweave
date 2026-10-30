@@ -20,7 +20,7 @@ class ContentFunctionPracticeTests(TestCase):
             "and soon enough another month had passed."
         )
         spans = utf16_spans(sentence, punctuation_practice_spans(sentence))
-        steps = build_practice_steps(sentence, spans, load_syntax_model())
+        steps = build_practice_steps(sentence, spans, load_syntax_model()(sentence))
         labels = [preview_step(sentence, step) for step in steps]
         self.assertEqual(labels[:4], [
             "实义词：TIME", "实义词：MARCHED", "实义词：ON",
@@ -32,7 +32,7 @@ class ContentFunctionPracticeTests(TestCase):
         nlp = model(("She", 0, "PRON"), ("put", 4, "VERB"), ("the", 8, "DET"),
                     ("book", 12, "NOUN"), ("on", 17, "ADP"), ("the", 20, "DET"),
                     ("table", 24, "NOUN"))
-        steps = build_practice_steps(sentence, [[0, len(sentence)]], nlp)
+        steps = build_practice_steps(sentence, [[0, len(sentence)]], nlp(sentence))
         self.assertEqual([step["kind"] for step in steps],
                          ["content-word"] * 3 + ["function-fill", "sentence"])
         self.assertEqual([preview_step(sentence, step) for step in steps[:4]], [
@@ -46,7 +46,7 @@ class ContentFunctionPracticeTests(TestCase):
         spans = utf16_spans(sentence, [(0, 10), (12, 18), (0, 18)])
         nlp = model(("Birds", 0, "NOUN"), ("sing", 6, "VERB"),
                     ("and", 12, "CCONJ"), ("I", 16, "PRON"))
-        steps = build_practice_steps(sentence, spans, nlp)
+        steps = build_practice_steps(sentence, spans, nlp(sentence))
         self.assertEqual([step["kind"] for step in steps],
                          ["content-word", "content-word", "segment", "segment", "sentence"])
 
@@ -56,7 +56,7 @@ class ContentFunctionPracticeTests(TestCase):
                     ("book", 9, "NOUN"), ("is", 14, "AUX"), ("n't", 16, "PART"),
                     ("here", 20, "ADV"))
         spans = utf16_spans(sentence, [(0, len(sentence))])
-        steps = build_practice_steps(sentence, spans, nlp)
+        steps = build_practice_steps(sentence, spans, nlp(sentence))
         self.assertEqual([preview_step(sentence, step) for step in steps[:3]],
                          ["实义词：John's", "实义词：book", "实义词：here"])
         self.assertEqual(steps[0]["span"], [3, 9])
@@ -68,7 +68,7 @@ class ContentFunctionPracticeTests(TestCase):
         nlp = model(("I", 0, "PRON"), ("think", 2, "VERB"),
                     ("that", 8, "SCONJ"), ("she", 13, "PRON"),
                     ("is", 17, "AUX"), ("right", 20, "ADJ"))
-        steps = build_practice_steps(sentence, spans, nlp)
+        steps = build_practice_steps(sentence, spans, nlp(sentence))
         self.assertEqual([step["kind"] for step in steps],
                          ["content-word", "function-fill", "segment", "content-word",
                           "function-fill", "segment", "sentence"])

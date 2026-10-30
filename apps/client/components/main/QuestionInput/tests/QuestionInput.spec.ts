@@ -80,7 +80,12 @@ describe("QuestionInput", () => {
     expect(
       wrapper.findAll('[data-testid="fixed-practice-word"]').map((word) => word.text()),
     ).toEqual(["put", "book"]);
-    expect(wrapper.findAll(".question-input-word.border-b-2")).toHaveLength(2);
+    for (const word of wrapper.findAll('[data-testid="fixed-practice-word"]')) {
+      expect(word.classes()).toContain("border-b-2");
+      expect(word.classes()).toContain("border-b-transparent");
+      expect(word.classes()).toContain("leading-none");
+    }
+    expect(wrapper.findAll(".question-input-word[data-word-index]")).toHaveLength(2);
     await submitAnswer(input, "She the");
     expect(store.passCurrentStatement).toHaveBeenCalledOnce();
   });

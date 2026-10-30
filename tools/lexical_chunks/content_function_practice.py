@@ -40,10 +40,9 @@ def _word_bounds(text: str) -> list[tuple[int, int]]:
 
 
 def build_practice_steps(
-    sentence: str, segment_spans: Sequence[tuple[int, int]], nlp: Any
+    sentence: str, segment_spans: Sequence[tuple[int, int]], document: Any
 ) -> list[dict[str, Any]]:
     """Return UTF-16 ranges in first-pass order; the whole sentence is last."""
-    document = nlp(sentence)
     whole = (0, len(sentence))
     offsets = [0]
     for character in sentence:
@@ -56,7 +55,7 @@ def build_practice_steps(
     steps: list[dict[str, Any]] = []
 
     for start, end in segments:
-        # Clause mode emits children before their enclosing parent. Drill only leaves.
+        # Drill only leaves before replaying their enclosing punctuation segment.
         if any(start <= left and right <= end and (left, right) != (start, end)
                for left, right in segments):
             steps.append({"kind": "segment", "span": [start, end]})

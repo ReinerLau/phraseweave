@@ -66,8 +66,6 @@ export function getGeneratorStatus() {
 
 export function startGeneratorJob(payload: {
   text: string;
-  format: string;
-  splitClauses?: boolean;
   translationProvider?: TranslationProvider;
 }) {
   return localRequest<{ id: string }>("/api/generate", {
