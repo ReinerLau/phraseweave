@@ -2,8 +2,9 @@ import json
 from datetime import datetime, timezone
 from unittest import TestCase
 from unittest import main as unittest_main
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from split_lexical_chunks import load_syntax_model
 from worker import _build_outputs, _generate, main
 
 
@@ -18,7 +19,7 @@ class InMemoryOutputTests(TestCase):
 
 
 class SentenceGenerationTests(TestCase):
-    def test_default_generation_saves_fronted_parts_and_parent_in_preview_order(self):
+    def test_default_generation_saves_syntax_children_and_parents_in_preview_order(self):
         sentence = "time marched on, indifferent to my concerns; and soon enough another month had passed."
         with patch("worker._emit") as emit:
             _generate({"text": sentence})
@@ -28,12 +29,43 @@ class SentenceGenerationTests(TestCase):
         segment_texts = [sentence.encode("utf-16-le")[step["span"][0] * 2:step["span"][1] * 2]
                          .decode("utf-16-le") for step in steps if step["kind"] in {"segment", "sentence"}]
         self.assertEqual(segment_texts, [
-            "time marched on", "indifferent to my concerns", "and soon enough",
+            "time", "marched on", "time marched on", "indifferent to my concerns",
+            "and soon enough", "another month", "had passed.",
             "another month had passed.", "and soon enough another month had passed.", sentence,
         ])
         self.assertEqual([label for label in result["preview"][0]["steps"]
                           if label.startswith(("组合片段：", "整句："))],
                          [f"组合片段：{text}" for text in segment_texts[:-1]] + [f"整句：{sentence}"])
+
+    def test_target_sentence_drills_each_leaf_before_replaying_the_whole(self):
+        sentence = "The Magic Armor Mark One was now complete."
+        with patch("worker._emit") as emit:
+            _generate({"text": sentence})
+        result = emit.call_args.args[0]
+        self.assertEqual(result["preview"][0]["steps"], [
+            "实义词：Magic", "实义词：Armor", "实义词：Mark", "实义词：One",
+            "功能词填空：___ Magic Armor Mark One",
+            "组合片段：The Magic Armor Mark One",
+            "实义词：now", "实义词：complete",
+            "功能词填空：___ now complete.", "组合片段：was now complete.",
+            f"整句：{sentence}",
+        ])
+        saved = json.loads(result["outputs"][0]["content"])
+        self.assertEqual(saved["schema_version"], 8)
+        self.assertEqual(saved["practice_sequence"], "lazy-content-function-v1")
+        self.assertEqual(saved["statements"][0]["practice_steps"][-1],
+                         {"kind": "sentence", "span": [0, len(sentence)]})
+
+    def test_each_original_sentence_is_parsed_once_for_both_kinds_of_questions(self):
+        parse = Mock(wraps=load_syntax_model())
+        with (
+            patch("worker.load_syntax_model", return_value=parse),
+            patch("worker._emit"),
+        ):
+            _generate({"text": "Birds sing. In the morning she left."})
+        self.assertEqual([call.args for call in parse.call_args_list], [
+            ("Birds sing.",), ("In the morning she left.",),
+        ])
 
     def test_clause_option_is_unavailable_for_new_generation(self):
         with patch("worker.load_syntax_model") as model:

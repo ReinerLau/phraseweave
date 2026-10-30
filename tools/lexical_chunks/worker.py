@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from content_function_practice import build_practice_steps, preview_step
-from fronted_practice import fronted_adjunct_practice_spans
+from fronted_practice import syntactic_practice_spans
 from model_runtime import TRANSLATION_PROVIDERS, install_model, model_status, translate_contextual_word, translate_sentences
 from sentence_review import split_sentences
 from split_lexical_chunks import load_syntax_model
@@ -48,13 +48,14 @@ def _generate(payload: Mapping[str, Any]) -> None:
         raise ValueError("Clause splitting is temporarily unavailable.")
     sentences = split_sentences(text)
     nlp = load_syntax_model()
+    documents = [nlp(sentence) for sentence in sentences]
     segment_spans = [
-        fronted_adjunct_practice_spans(sentence, nlp)
-        for sentence in sentences
+        syntactic_practice_spans(sentence, document)
+        for sentence, document in zip(sentences, documents, strict=True)
     ]
     practice_steps = [
-        build_practice_steps(sentence, spans, nlp)
-        for sentence, spans in zip(sentences, segment_spans, strict=True)
+        build_practice_steps(sentence, spans, document)
+        for sentence, spans, document in zip(sentences, segment_spans, documents, strict=True)
     ]
     phraseweave = json.dumps({
         "schema_version": 8,

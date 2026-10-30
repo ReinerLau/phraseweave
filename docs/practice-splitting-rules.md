@@ -1,6 +1,6 @@
 # 练习拆分规则索引
 
-这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果代码块每行展示一个片段或题目，完整序列按行顺序排列；除“分句”外，末尾的完整原句也是一道练习题。当前生成流程依次应用分句、标点分段、前置成分拆分及片段内题目规则。每节开头的实现路径适用于该节每一条规则。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
+这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果代码块每行展示一个片段或题目，完整序列按行顺序排列；除“分句”外，末尾的完整原句也是一道练习题。当前生成流程依次应用分句、标点分段、基于完整原句依存关系的句法拆分与组合，以及片段内题目规则。每节开头的实现路径适用于该节每一条规则。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
 
 ## 1. 分句
 
@@ -256,9 +256,9 @@ Birds sing.
 Birds sing.
 ```
 
-## 3. 前置成分二次拆分
+## 3. 前置成分与主谓核心拆分
 
-实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `fronted_adjunct_practice_spans`。在每个标点片段内寻找主谓核心；只有主语之前的文字完整由非从句前置状语及可选连接词组成，才在主语前拆开。多个连续前置成分合成一段，不设词数门槛。小片段先练，原标点片段随后复现。
+实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `syntactic_practice_spans`。每条原句只按完整原句解析，标点片段用于限定练习范围，不重新解析片段。只有主语之前的文字完整由非从句前置状语及可选连接词组成，才拆出前置成分；多个连续前置成分合成一段。主语范围完整且后接可靠谓语时，主语和谓语先分别练，再复现主谓核心；有前置成分时，最后复现原标点片段。组合关系决定题序，不生成“前置状语 + 主语”片段。拆分不设词数门槛。以下示例只列片段复现题，省略片段内的实义词与功能词题。
 
 ### F1 时间状语
 
@@ -274,6 +274,8 @@ and soon enough another month had passed.
 
 ```text
 and soon enough
+another month
+had passed.
 another month had passed.
 and soon enough another month had passed.
 ```
@@ -292,6 +294,8 @@ In the morning she left.
 
 ```text
 In the morning
+she
+left.
 she left.
 In the morning she left.
 ```
@@ -310,6 +314,8 @@ Yesterday in the morning we left.
 
 ```text
 Yesterday in the morning
+we
+left.
 we left.
 Yesterday in the morning we left.
 ```
@@ -330,7 +336,7 @@ And another month had passed.
 And another month had passed.
 ```
 
-### F5 句中修饰语不拆
+### F5 句中修饰语不作为前置成分拆
 
 - **条件：** 状语位于主语之后。
 
@@ -343,6 +349,8 @@ She quietly left.
 **片段题序：**
 
 ```text
+She
+quietly left.
 She quietly left.
 ```
 
@@ -362,6 +370,58 @@ She quietly left.
 😀 And then she left.
 ```
 
+### P1 主语与谓语
+
+- **条件：** 完整原句的依存关系确认片段以完整主语开头，后面是主谓核心的谓语；先练两侧，再复现核心。
+
+**输入：**
+
+```text
+The Magic Armor Mark One was now complete.
+```
+
+**片段题序：**
+
+```text
+The Magic Armor Mark One
+was now complete.
+The Magic Armor Mark One was now complete.
+```
+
+### P2 短句也拆
+
+- **条件：** 不设词数门槛，两侧各只有一个词也拆。
+
+**输入：**
+
+```text
+Birds sing.
+```
+
+**片段题序：**
+
+```text
+Birds
+sing.
+Birds sing.
+```
+
+### P3 无可靠主语不拆
+
+- **条件：** 祈使句、倒装句、无可定位的名词性主语或前缀无法归入完整前置成分时，不强行生成主谓片段；已有可靠的前置成分拆分仍可保留。
+
+**输入：**
+
+```text
+Open the door.
+```
+
+**片段题序：**
+
+```text
+Open the door.
+```
+
 ## 4. 片段内实义词与功能词题
 
 实现：[content_function_practice.py](../tools/lexical_chunks/content_function_practice.py) 的 `build_practice_steps`。本节的结果展示**题型顺序**，不改变前面确定的片段边界。
@@ -373,17 +433,17 @@ She quietly left.
 **输入：**
 
 ```text
-She put the book on the table.
+Put the book on the table.
 ```
 
 **题序示例：**
 
 ```text
-put
+Put
 book
 table
-___ put ___ book ___ ___ table.
-She put the book on the table.
+Put ___ book ___ ___ table.
+Put the book on the table.
 ```
 
 ### W2 功能词填空
@@ -393,13 +453,13 @@ She put the book on the table.
 **输入：**
 
 ```text
-She put the book on the table.
+Put the book on the table.
 ```
 
 **题序示例：**
 
 ```text
-___ put ___ book ___ ___ table.
+Put ___ book ___ ___ table.
 ```
 
 ### W3 无功能词
@@ -409,16 +469,15 @@ ___ put ___ book ___ ___ table.
 **输入：**
 
 ```text
-TIME MARCHED ON
+Run fast.
 ```
 
 **题序示例：**
 
 ```text
-TIME
-MARCHED
-ON
-TIME MARCHED ON
+Run
+fast
+Run fast.
 ```
 
 ### W4 无实义词
@@ -452,8 +511,10 @@ John's book isn't here.
 ```text
 John's
 book
+John's book
 here
-John's book ___ here.
+___ here.
+isn't here.
 John's book isn't here.
 ```
 
@@ -472,9 +533,13 @@ time marched on, indifferent to my concerns; and soon enough another month had p
 **片段复现题序：**
 
 ```text
+time
+marched on
 time marched on
 indifferent to my concerns
 and soon enough
+another month
+had passed.
 another month had passed.
 and soon enough another month had passed.
 time marched on, indifferent to my concerns; and soon enough another month had passed.
