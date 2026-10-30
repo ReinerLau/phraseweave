@@ -31,7 +31,10 @@ class DependencyPracticeTests(TestCase):
         ])
         step = next(step for step in build_dependency_steps(sentence, self.nlp(sentence))
                     if step.get("text") == "She finished")
-        self.assertEqual(step["source_spans"], [[0, 3], [12, 20]])
+        self.assertEqual(step, {"kind": "segment", "text": "She finished"})
+        self.assertTrue(all(set(step) == {"kind", "text"}
+                            for step in build_dependency_steps(sentence, self.nlp(sentence))
+                            if step["kind"] == "segment"))
 
     def test_double_object_and_embedded_clause(self):
         self.assertEqual(self.segments("She gave him the book."), [
@@ -58,5 +61,5 @@ class DependencyPracticeTests(TestCase):
             "kind": "sentence", "span": [0, len(sentence.encode("utf-16-le")) // 2],
         })
         self.assertIn("She left", self.segments(sentence))
-        self.assertEqual(next(step["source_spans"] for step in steps
-                              if step.get("text") == "She left"), [[7, 10], [19, 23]])
+        self.assertEqual(next(step for step in steps if step.get("text") == "She left"),
+                         {"kind": "segment", "text": "She left"})

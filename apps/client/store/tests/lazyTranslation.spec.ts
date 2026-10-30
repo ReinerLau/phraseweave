@@ -68,15 +68,7 @@ describe("lazy sentence practice", () => {
         ...course.statements[0],
         english: "She quietly finished.",
         practiceSteps: [
-          {
-            kind: "segment",
-            span: [0, 20],
-            source_spans: [
-              [0, 3],
-              [12, 20],
-            ],
-            text: "She finished",
-          },
+          { kind: "segment", text: "She finished" },
           { kind: "sentence", span: [0, 21] },
         ],
       },

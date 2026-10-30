@@ -1,4 +1,4 @@
-"""Compose practice steps from the dependency tree of the original sentence."""
+"""Compose practice text from the dependency tree of the original sentence."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ SUBJECTS = frozenset({"nsubj", "nsubjpass", "csubj", "csubjpass"})
 
 
 def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]:
-    """Return ordered schema 9 steps, including reconstructed intermediate text."""
+    """Return ordered schema 10 steps, including reconstructed intermediate text."""
     bounds = _word_bounds(sentence)
     token_words: dict[int, int] = {}
     for token in document:
@@ -156,12 +156,8 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
         text = " ".join(sentence[start:end] for start, end in runs)
         if not any(character.isalnum() for character in text):
             continue
-        synthetic = len(runs) > 1
-        base: dict[str, Any] = {"kind": "segment", "span": [runs[0][0], runs[-1][1]]}
-        if synthetic:
-            base["source_spans"] = [list(span) for span in runs]
-            base["text"] = text
-        if leaf and not synthetic:
+        base: dict[str, Any] = {"kind": "segment", "text": text}
+        if leaf and len(runs) == 1:
             local = _word_bounds(text)
             content = [index for index, (left, right) in enumerate(local)
                        if any(token.pos_ in CONTENT_POS and not token.is_space and not token.is_punct
@@ -172,29 +168,26 @@ def build_dependency_steps(sentence: str, document: Any) -> list[dict[str, Any]]
                 left, right = local[index]
                 steps.append({"kind": "content-word",
                               "span": [runs[0][0] + left, runs[0][0] + right],
-                              "context_span": base["span"][:]})
+                              "context_span": [runs[0][0], runs[0][1]]})
             functions = [index for index in range(len(local)) if index not in content]
             if content and functions:
-                steps.append({"kind": "function-fill", "span": base["span"][:],
+                steps.append({"kind": "function-fill", "span": [runs[0][0], runs[0][1]],
                               "answer_word_indices": functions})
         steps.append(base)
 
-    if steps and steps[-1]["kind"] == "segment" and steps[-1]["span"] == [0, len(sentence)]:
-        steps[-1]["kind"] = "sentence"
+    if steps and steps[-1]["kind"] == "segment" and steps[-1]["text"] == sentence:
+        steps[-1] = {"kind": "sentence", "span": [0, len(sentence)]}
     else:
         steps.append({"kind": "sentence", "span": [0, len(sentence)]})
-    ranges = [tuple(step["span"]) for step in steps]
+    ranges = [tuple(step["span"]) for step in steps if "span" in step]
     contexts = [tuple(step["context_span"]) for step in steps if "context_span" in step]
-    source_ranges = [tuple(span) for step in steps for span in step.get("source_spans", [])]
     encoded = iter(utf16_spans(sentence, ranges))
     context_encoded = iter(utf16_spans(sentence, contexts))
-    source_encoded = iter(utf16_spans(sentence, source_ranges))
     for step in steps:
-        step["span"] = list(next(encoded))
+        if "span" in step:
+            step["span"] = list(next(encoded))
         if "context_span" in step:
             step["context_span"] = list(next(context_encoded))
-        if "source_spans" in step:
-            step["source_spans"] = [list(next(source_encoded)) for _ in step["source_spans"]]
     return steps
 
 

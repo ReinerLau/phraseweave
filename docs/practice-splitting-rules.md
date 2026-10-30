@@ -273,7 +273,7 @@ in only three months
 we’d finished the project in only three months.
 ```
 
-### D2 句中状语与跨位置组合
+### D2 句中状语的逐步组合
 
 **输入：** `She quietly finished the project.`
 
@@ -287,7 +287,7 @@ the project
 She quietly finished the project.
 ```
 
-`She finished` 按原文词序组合两个来源范围，不把 `quietly` 写入该题。缩写仍作为一个可输入词元。
+`She finished` 按原文词序组合已练成分，之后再加入 `quietly`。缩写仍作为一个可输入词元。
 
 ### D3 双宾语与从句内部递归
 
@@ -463,7 +463,7 @@ Open the door.
 
 ## 4. 片段内实义词与功能词题
 
-实现：[dependency_practice.py](../tools/lexical_chunks/dependency_practice.py) 的 `build_dependency_steps`。最小连续片段先练词题，再复现片段；跨位置组合片段只复现。
+实现：[dependency_practice.py](../tools/lexical_chunks/dependency_practice.py) 的 `build_dependency_steps`。最小连续片段先练词题，再复现片段；较大的组合片段只复现。
 
 ### W1 实义词
 

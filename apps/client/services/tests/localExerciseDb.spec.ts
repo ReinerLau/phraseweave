@@ -16,6 +16,42 @@ const firstUnit = {
 };
 
 describe("normalizeExerciseImport", () => {
+  it("imports schema 10 text-only composition steps", () => {
+    const backup = {
+      schema_version: 10,
+      practice_sequence: "lazy-content-function-v1",
+      statements: [
+        {
+          english: "She quietly finished.",
+          context_before: "",
+          context_after: "",
+          unit_id: "0:whole",
+          source_unit_ids: [],
+          practice_steps: [
+            { kind: "segment", text: "She" },
+            { kind: "segment", text: "finished" },
+            { kind: "segment", text: "She finished" },
+            { kind: "sentence", span: [0, 21] },
+          ],
+        },
+      ],
+    };
+    expect(normalizeExerciseImport(backup)[0].courses[0].statements[0].practiceSteps).toEqual(
+      backup.statements[0].practice_steps,
+    );
+    expect(() =>
+      normalizeExerciseImport({
+        ...backup,
+        statements: [
+          {
+            ...backup.statements[0],
+            practice_steps: [{ kind: "segment", text: "" }, backup.statements[0].practice_steps[3]],
+          },
+        ],
+      }),
+    ).toThrow("备份文件包含无效练习");
+  });
+
   it("imports schema 9 reconstructed steps and rejects mismatched source text", () => {
     const backup = {
       schema_version: 9,

@@ -52,7 +52,7 @@ class SentenceGenerationTests(TestCase):
             f"整句：{sentence}",
         ])
         saved = json.loads(result["outputs"][0]["content"])
-        self.assertEqual(saved["schema_version"], 9)
+        self.assertEqual(saved["schema_version"], 10)
         self.assertEqual(saved["practice_sequence"], "lazy-content-function-v1")
         self.assertEqual(saved["statements"][0]["practice_steps"][-1],
                          {"kind": "sentence", "span": [0, len(sentence)]})
@@ -89,7 +89,7 @@ class SentenceGenerationTests(TestCase):
         self.assertEqual(len(outputs), 1)
         self.assertTrue(outputs[0]["name"].endswith(".json"))
         generated = json.loads(outputs[0]["content"])
-        self.assertEqual(generated["schema_version"], 9)
+        self.assertEqual(generated["schema_version"], 10)
         self.assertEqual(generated["practice_sequence"], "lazy-content-function-v1")
         rows = generated["statements"]
         self.assertEqual([row["english"] for row in rows], ["The cat sleeps.", "Birds sing!"])

@@ -67,17 +67,28 @@ def _practice_steps(course: dict[str, Any], statement: dict[str, Any]) -> list[A
     typed_steps = sequence in ("lazy-content-function-v1", "lazy-content-function-clause-v1")
     spans = statement.get("practiceSteps" if typed_steps else "practiceSpans")
     size = len(english.encode("utf-16-le")) // 2 if isinstance(english, str) else -1
-    if not isinstance(spans, list) or not spans or not all(
-        isinstance(span, dict) and isinstance(span.get("span"), list)
-        if typed_steps else isinstance(span, list) and len(span) == 2
-        for span in spans
-    ):
+    if not isinstance(spans, list) or not spans:
         raise ValueError("Saved practice steps are invalid.")
-    ranges = [step["span"] if isinstance(step, dict) else step for step in spans]
+    if typed_steps:
+        valid = all(
+            isinstance(step, dict) and (
+                isinstance(step.get("span"), list) or
+                (step.get("kind") == "segment" and "span" not in step
+                 and isinstance(step.get("text"), str) and bool(step["text"].strip()))
+            ) for step in spans
+        )
+    else:
+        valid = all(isinstance(span, list) and len(span) == 2 for span in spans)
+    if not valid:
+        raise ValueError("Saved practice steps are invalid.")
+    ranges = [step.get("span") if isinstance(step, dict) else step for step in spans]
     if not all(
-        isinstance(span, list) and len(span) == 2
-        and all(isinstance(offset, int) and not isinstance(offset, bool) and offset >= 0 for offset in span)
-        and span[0] < span[1] <= size
+        (span is None and typed_steps) or (
+            isinstance(span, list) and len(span) == 2
+            and all(isinstance(offset, int) and not isinstance(offset, bool) and offset >= 0
+                    for offset in span)
+            and span[0] < span[1] <= size
+        )
         for span in ranges
     ) or ranges[-1] != [0, size]:
         raise ValueError("Saved practice steps are invalid.")

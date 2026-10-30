@@ -53,7 +53,7 @@ def _generate(payload: Mapping[str, Any]) -> None:
         for sentence, document in zip(sentences, documents, strict=True)
     ]
     phraseweave = json.dumps({
-        "schema_version": 9,
+        "schema_version": 10,
         "practice_sequence": "lazy-content-function-v1",
         "statements": [{
             "english": sentence,
