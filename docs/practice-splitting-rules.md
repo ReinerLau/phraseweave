@@ -258,7 +258,7 @@ Birds sing.
 
 ## 3. 前置成分与主谓核心拆分
 
-实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `syntactic_practice_spans`。每条原句只按完整原句解析，标点片段用于限定练习范围，不重新解析片段。只有主语之前的文字完整由非从句前置状语及可选连接词组成，才拆出前置成分；多个连续前置成分合成一段。主语范围完整且后接可靠谓语时，主语和谓语先分别练，再复现主谓核心；有前置成分时，最后复现原标点片段。组合关系决定题序，不生成“前置状语 + 主语”片段。拆分不设词数门槛。以下示例只列片段复现题，省略片段内的实义词与功能词题。
+实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `syntactic_practice_spans`。每条原句只按完整原句解析，标点片段用于限定练习范围，不重新解析片段。只有主语之前的文字完整由非从句前置状语及可选连接词组成，才拆出前置成分；多个连续前置成分合成一段。主语范围完整且后接可靠谓语时，主语和谓语先分别练，再复现主谓核心；随后练单独拆出的前置成分，并复现包含它的原标点片段。组合关系决定题序，不生成“前置状语 + 主语”片段。拆分不设词数门槛。以下示例只列片段复现题，省略片段内的实义词与功能词题。
 
 ### F1 时间状语
 
@@ -273,10 +273,10 @@ and soon enough another month had passed.
 **片段题序：**
 
 ```text
-and soon enough
 another month
 had passed.
 another month had passed.
+and soon enough
 and soon enough another month had passed.
 ```
 
@@ -293,10 +293,10 @@ In the morning she left.
 **片段题序：**
 
 ```text
-In the morning
 she
 left.
 she left.
+In the morning
 In the morning she left.
 ```
 
@@ -313,10 +313,10 @@ Yesterday in the morning we left.
 **片段题序：**
 
 ```text
-Yesterday in the morning
 we
 left.
 we left.
+Yesterday in the morning
 Yesterday in the morning we left.
 ```
 
@@ -537,10 +537,10 @@ time
 marched on
 time marched on
 indifferent to my concerns
-and soon enough
 another month
 had passed.
 another month had passed.
+and soon enough
 and soon enough another month had passed.
 time marched on, indifferent to my concerns; and soon enough another month had passed.
 ```

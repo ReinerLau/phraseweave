@@ -30,8 +30,8 @@ class SentenceGenerationTests(TestCase):
                          .decode("utf-16-le") for step in steps if step["kind"] in {"segment", "sentence"}]
         self.assertEqual(segment_texts, [
             "time", "marched on", "time marched on", "indifferent to my concerns",
-            "and soon enough", "another month", "had passed.",
-            "another month had passed.", "and soon enough another month had passed.", sentence,
+            "another month", "had passed.", "another month had passed.",
+            "and soon enough", "and soon enough another month had passed.", sentence,
         ])
         self.assertEqual([label for label in result["preview"][0]["steps"]
                           if label.startswith(("组合片段：", "整句："))],

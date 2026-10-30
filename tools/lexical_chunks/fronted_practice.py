@@ -113,7 +113,7 @@ def _practice_spans(sentence: str, document: Any, split_subject_predicate: bool)
                 _PracticeNode((predicate_start, core[1])),
             ))
         parent_nodes.append(
-            _PracticeNode(parent, (_PracticeNode(fronted), core_node))
+            _PracticeNode(parent, (core_node, _PracticeNode(fronted)))
             if fronted is not None else core_node
         )
 
