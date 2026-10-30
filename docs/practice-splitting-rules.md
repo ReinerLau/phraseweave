@@ -1,6 +1,6 @@
 # 练习拆分规则索引
 
-这里记录**当前生成流程**和**保留备用的旧语块流程**。每条规则分别列出可复制的输入与实际结果；结果代码块每行展示一个片段或题目，完整序列按行顺序排列；除“分句”外，末尾的完整原句也是一道练习题。当前生成流程依次应用分句、标点分段、基于完整原句依存关系的句法拆分与组合，以及片段内题目规则。每节开头的实现路径适用于该节每一条规则。示例以固定版本 spaCy 的实际输出为准。历史上已被取代的算法见各 ADR，不作为当前规则。
+这里记录当前生成流程和旧题序示例。当前流程依次分句、按标点分段、依据完整原句的依存树递归组合，再生成最小片段的词题。示例以固定版本 spaCy 的实际输出为准；已保存的旧卡片不重算。
 
 ## 1. 分句
 
@@ -256,7 +256,46 @@ Birds sing.
 Birds sing.
 ```
 
-## 3. 前置成分与主谓核心拆分
+## 3. 依存关系递归组合
+
+实现：[dependency_practice.py](../tools/lexical_chunks/dependency_practice.py) 的 `build_dependency_steps`。以下只列片段复现题；最小连续片段还会先练实义词及功能词。每个成分先单独练，再接回当前核心。无法可靠定位的结构保留上层片段。
+
+### D1 宾语、介词宾语与后置状语
+
+**输入：** `we’d finished the project in only three months.`
+
+```text
+we’d finished
+the project
+we’d finished the project
+only three months
+in only three months
+we’d finished the project in only three months.
+```
+
+### D2 句中状语与跨位置组合
+
+**输入：** `She quietly finished the project.`
+
+```text
+She
+finished
+She finished
+quietly
+She quietly finished
+the project
+She quietly finished the project.
+```
+
+`She finished` 按原文词序组合两个来源范围，不把 `quietly` 写入该题。缩写仍作为一个可输入词元。
+
+### D3 双宾语与从句内部递归
+
+`She gave him the book.` 中先练 `She gave`，再分别练 `him`、`the book` 并逐个接回。`She took the project that we had finished in three months.` 中，在复现完整宾语前先练从句里的 `we had finished`、`that`、`three months` 和 `in three months`。
+
+## 历史规则：前置成分与主谓核心拆分
+
+以下是 schema 8 及更早卡片的历史题序，新卡片使用上面的递归规则。
 
 实现：[fronted_practice.py](../tools/lexical_chunks/fronted_practice.py) 的 `syntactic_practice_spans`。每条原句只按完整原句解析，标点片段用于限定练习范围，不重新解析片段。只有主语之前的文字完整由非从句前置状语及可选连接词组成，才拆出前置成分；多个连续前置成分合成一段。主语范围完整且后接可靠谓语时，主语和谓语先分别练，再复现主谓核心；随后练单独拆出的前置成分，并复现包含它的原标点片段。组合关系决定题序，不生成“前置状语 + 主语”片段。拆分不设词数门槛。以下示例只列片段复现题，省略片段内的实义词与功能词题。
 
@@ -424,7 +463,7 @@ Open the door.
 
 ## 4. 片段内实义词与功能词题
 
-实现：[content_function_practice.py](../tools/lexical_chunks/content_function_practice.py) 的 `build_practice_steps`。本节的结果展示**题型顺序**，不改变前面确定的片段边界。
+实现：[dependency_practice.py](../tools/lexical_chunks/dependency_practice.py) 的 `build_dependency_steps`。最小连续片段先练词题，再复现片段；跨位置组合片段只复现。
 
 ### W1 实义词
 
@@ -433,17 +472,15 @@ Open the door.
 **输入：**
 
 ```text
-Put the book on the table.
+She put the book.
 ```
 
-**题序示例：**
+**`the book` 片段的连续题序：**
 
 ```text
-Put
 book
-table
-Put ___ book ___ ___ table.
-Put the book on the table.
+___ book
+the book
 ```
 
 ### W2 功能词填空
@@ -453,13 +490,13 @@ Put the book on the table.
 **输入：**
 
 ```text
-Put the book on the table.
+She put the book.
 ```
 
-**题序示例：**
+**`the book` 片段中的填空题：**
 
 ```text
-Put ___ book ___ ___ table.
+___ book
 ```
 
 ### W3 无功能词
@@ -469,15 +506,15 @@ Put ___ book ___ ___ table.
 **输入：**
 
 ```text
-Run fast.
+Run.
 ```
 
 **题序示例：**
 
 ```text
 Run
-fast
-Run fast.
+Run
+Run.
 ```
 
 ### W4 无实义词
@@ -487,13 +524,13 @@ Run fast.
 **输入：**
 
 ```text
-and I.
+She runs.
 ```
 
-**题序示例：**
+**`She` 片段的题序：**
 
 ```text
-and I.
+She
 ```
 
 ### W5 缩写词元
@@ -512,13 +549,13 @@ John's book isn't here.
 John's
 book
 John's book
+isn't
+John's book isn't
 here
-___ here.
-isn't here.
 John's book isn't here.
 ```
 
-- **说明：** `isn't` 作为一个词元留在功能词填空中。
+- **说明：** `isn't` 保持为一个词元，不切成 `is` 和 `n't`。
 
 ### W6 组合与整句
 
@@ -527,22 +564,19 @@ John's book isn't here.
 **输入：**
 
 ```text
-time marched on, indifferent to my concerns; and soon enough another month had passed.
+She quietly finished the project.
 ```
 
 **片段复现题序：**
 
 ```text
-time
-marched on
-time marched on
-indifferent to my concerns
-another month
-had passed.
-another month had passed.
-and soon enough
-and soon enough another month had passed.
-time marched on, indifferent to my concerns; and soon enough another month had passed.
+She
+finished
+She finished
+quietly
+She quietly finished
+the project
+She quietly finished the project.
 ```
 
 - **说明：** 此处只列片段复现题；最小片段内的词题见 W1–W5。

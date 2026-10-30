@@ -59,9 +59,11 @@ export interface ContentFunctionStep {
   span: [number, number];
   context_span?: [number, number];
   answer_word_indices?: number[];
+  source_spans?: Array<[number, number]>;
+  text?: string;
 }
 interface ContentFunctionBackup {
-  schema_version: 8;
+  schema_version: 8 | 9;
   practice_sequence: "lazy-content-function-v1" | "lazy-content-function-clause-v1";
   statements: Array<
     LazySentenceBackup["statements"][number] & {
@@ -500,7 +502,7 @@ export function normalizeExerciseImport(
     throw new Error("旧版练习请重新生成后导入");
   if (
     !value.statements.every(
-      value.schema_version === 8
+      value.schema_version === 8 || value.schema_version === 9
         ? isContentFunctionStatement
         : value.schema_version === 6 || value.schema_version === 7
           ? isSavedSpanStatement
@@ -531,7 +533,7 @@ export function normalizeExerciseImport(
     ...((value.schema_version === 6 || value.schema_version === 7) && "practice_spans" in statement
       ? { practiceSpans: statement.practice_spans }
       : {}),
-    ...(value.schema_version === 8 && "practice_steps" in statement
+    ...((value.schema_version === 8 || value.schema_version === 9) && "practice_steps" in statement
       ? { practiceSteps: statement.practice_steps }
       : {}),
   }));
@@ -677,7 +679,7 @@ function isContentFunctionBackup(value: unknown): value is ContentFunctionBackup
   if (!value || typeof value !== "object") return false;
   const backup = value as Partial<ContentFunctionBackup>;
   return (
-    backup.schema_version === 8 &&
+    (backup.schema_version === 8 || backup.schema_version === 9) &&
     (backup.practice_sequence === "lazy-content-function-v1" ||
       backup.practice_sequence === "lazy-content-function-clause-v1") &&
     Array.isArray(backup.statements) &&
@@ -706,7 +708,25 @@ function validPracticeSteps(english: string, steps: unknown): steps is ContentFu
   return (
     steps.every((step, index) => {
       if (!step || typeof step !== "object" || !validRange(step.span)) return false;
-      const text = english.slice(step.span[0], step.span[1]);
+      const synthetic = step.source_spans !== undefined || step.text !== undefined;
+      const sourceSpans = Array.isArray(step.source_spans)
+        ? (step.source_spans as Array<[number, number]>)
+        : undefined;
+      if (synthetic) {
+        if (
+          step.kind !== "segment" ||
+          !sourceSpans ||
+          sourceSpans.length < 2 ||
+          typeof step.text !== "string" ||
+          !sourceSpans.every(validRange) ||
+          sourceSpans[0][0] !== step.span[0] ||
+          sourceSpans.at(-1)![1] !== step.span[1] ||
+          sourceSpans.some((range, part) => part > 0 && sourceSpans[part - 1][1] >= range[0]) ||
+          sourceSpans.map(([start, end]) => english.slice(start, end)).join(" ") !== step.text
+        )
+          return false;
+      }
+      const text = step.text ?? english.slice(step.span[0], step.span[1]);
       const count = getClozeWords(text).length;
       if (!count) return false;
       if (step.kind === "content-word")

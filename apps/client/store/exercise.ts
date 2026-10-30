@@ -236,9 +236,9 @@ export const useExerciseStore = defineStore("exercise", () => {
       currentStatement.value = {
         ...base,
         id: `${base.id}:step:${lazyStepIndex.value}`,
-        english: base.english.slice(start, end),
-        contextBefore: base.english.slice(0, start),
-        contextAfter: base.english.slice(end),
+        english: step?.text ?? base.english.slice(start, end),
+        contextBefore: step?.text ? "" : base.english.slice(0, start),
+        contextAfter: step?.text ? "" : base.english.slice(end),
         sentenceChinese: base.stepTranslations?.[lazyStepIndex.value] ?? "",
         answerWordIndices: step?.kind === "function-fill" ? step.answer_word_indices : undefined,
       };
@@ -672,7 +672,7 @@ export const useExerciseStore = defineStore("exercise", () => {
           practiceStep?.kind === "content-word" && practiceStep.context_span
             ? base.english.slice(...practiceStep.context_span)
             : undefined;
-        const text = base.english.slice(start, end);
+        const text = practiceStep?.text ?? base.english.slice(start, end);
         const result = context
           ? await translatePracticeStep(text, context)
           : await translatePracticeStep(text);
