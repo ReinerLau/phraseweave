@@ -32,9 +32,18 @@ class DependencyPracticeTests(TestCase):
         self.assertFalse(any(step.get("text", "").startswith("’d") for step in steps))
         self.assertEqual(self.labeled_segments(sentence), [
             "主谓：we’d finished", "宾语：the project",
-            "接入宾语：we’d finished the project", "介词宾语：only three months",
-            "介词短语：in only three months", f"整句：{sentence}",
+            "接入宾语：we’d finished the project", "片段：only three months",
+            "状语：in only three months", f"整句：{sentence}",
         ])
+
+    def test_preview_names_preposition_by_its_sentence_role(self):
+        sentence = "Somehow, we’d finished the project in only three months."
+        labels = self.labeled_segments(sentence)
+        self.assertIn("片段：only three months", labels)
+        self.assertIn("状语：in only three months", labels)
+        self.assertIn("接入状语：we’d finished the project in only three months", labels)
+        self.assertFalse(any(label.startswith(("介词宾语：", "介词短语："))
+                             for label in labels))
 
     def test_intervening_adjunct_builds_discontinuous_core(self):
         sentence = "She quietly finished the project."
@@ -70,8 +79,8 @@ class DependencyPracticeTests(TestCase):
                         segments.index(sentence))
         labeled = self.labeled_segments(sentence)
         self.assertIn("主谓：we had finished", labeled)
-        self.assertIn("介词宾语：three months", labeled)
-        self.assertIn("介词短语：in three months", labeled)
+        self.assertIn("片段：three months", labeled)
+        self.assertIn("状语：in three months", labeled)
         self.assertIn("定语：that we had finished in three months", labeled)
         self.assertIn("宾语：the project that we had finished in three months", labeled)
 

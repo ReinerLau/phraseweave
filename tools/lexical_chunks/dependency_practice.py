@@ -27,7 +27,7 @@ def _part_role(parent: Any, child: Any) -> str:
     if relation in SUBJECTS:
         return "主语"
     if parent.pos_ == "ADP" and relation in PREPOSITION_PARTS:
-        return "介词宾语"
+        return "片段"
     if relation in {"dobj", "obj"}:
         return "宾语"
     if relation in {"iobj", "dative"}:
@@ -146,7 +146,7 @@ def build_dependency_practice(sentence: str, document: Any) -> DependencyPractic
             child_words = drill(child, available, part_role)
             current = current | child_words
             if token.pos_ == "ADP":
-                combination_label = "介词短语"
+                combination_label = role or "片段"
             elif part_role == "片段":
                 combination_label = "片段"
             else:
@@ -155,7 +155,7 @@ def build_dependency_practice(sentence: str, document: Any) -> DependencyPractic
         if markers:
             current = current | frozenset().union(*(words_in(child, available) for child in markers))
             emit(current, label="接入连接词")
-        whole_label = "介词短语" if token.pos_ == "ADP" and parts else role or "片段"
+        whole_label = role or "片段"
         emit(whole, label=whole_label, replace_label=bool(role) and token.pos_ != "ADP")
         return whole
 
