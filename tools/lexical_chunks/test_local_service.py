@@ -230,7 +230,7 @@ class ExerciseProgressEndpointTests(TestCase):
         self.request("PUT", "/api/local-exercises/pack", {"coursePack": self.pack})
         self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
             "courseId": "course", "statementIndex": 0, "stepIndex": 1,
-            "chinese": "她是对的", "whole": False,
+            "chinese": "她是对的", "whole": False, "translationVersion": 1,
         })[0], 200)
         self.assertEqual(self.request("PUT", "/api/local-exercises/pack/translations", {
             "courseId": "course", "statementIndex": 0, "stepIndex": 1,
@@ -241,6 +241,7 @@ class ExerciseProgressEndpointTests(TestCase):
             "resumeStatementIndex": 0, "resumeStepIndex": 3,
         })[0], 400)
         self.assertEqual(self.stored_course()["statements"][0]["stepTranslations"], {"1": "她是对的"})
+        self.assertEqual(self.stored_course()["statements"][0]["stepTranslationVersions"], {"1": 1})
 
     def test_new_punctuation_steps_use_saved_spans_for_translation(self):
         course = self.pack["courses"][0]

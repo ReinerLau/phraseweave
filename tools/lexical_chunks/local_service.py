@@ -281,11 +281,17 @@ def _merge_progress(current: dict[str, Any], incoming: dict[str, Any]) -> dict[s
         if course.get("practiceSequence") in (
             "lazy-comma-segments-v1", "lazy-clause-segments-v1",
             "lazy-punctuation-segments-v1", "lazy-punctuation-clause-segments-v1",
+            "lazy-content-function-v1", "lazy-content-function-clause-v1",
         ):
             for statement, old_statement in zip(course.get("statements", []), previous.get("statements", [])):
                 statement["stepTranslations"] = {
                     **statement.get("stepTranslations", {}),
                     **old_statement.get("stepTranslations", {}),
+                }
+                statement["stepTranslationVersions"] = {
+                    **statement.get("stepTranslationVersions", {}),
+                    **{key: old_statement.get("stepTranslationVersions", {}).get(key, 0)
+                       for key in old_statement.get("stepTranslations", {})},
                 }
                 if old_statement.get("sentenceChinese"):
                     statement["sentenceChinese"] = old_statement["sentenceChinese"]
@@ -612,6 +618,11 @@ class Handler(BaseHTTPRequestHandler):
                         translations[str(step_index)] = chinese.strip()
                         if payload.get("whole") is True:
                             statements[statement_index]["sentenceChinese"] = chinese.strip()
+                        else:
+                            version = payload.get("translationVersion", 0)
+                            if not isinstance(version, int) or isinstance(version, bool) or version not in (0, 1):
+                                raise ValueError("Practice translation version is invalid.")
+                            statements[statement_index].setdefault("stepTranslationVersions", {})[str(step_index)] = version
                     elif tail[1] == "progress":
                         index = payload.get("statementIndex")
                         if not isinstance(index, int) or isinstance(index, bool) or index < 0:

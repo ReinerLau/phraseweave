@@ -36,6 +36,7 @@ export interface Statement {
   contextAfter?: string;
   sentenceChinese?: string;
   stepTranslations?: Record<string, string>;
+  stepTranslationVersions?: Record<string, number>;
   /** Generation-time UTF-16 ranges for saved step sequences. */
   practiceSpans?: Array<[number, number]>;
   practiceSteps?: ContentFunctionStep[];
@@ -239,7 +240,7 @@ export const useExerciseStore = defineStore("exercise", () => {
         english: step?.text ?? (range ? base.english.slice(...range) : ""),
         contextBefore: step?.text ? "" : range ? base.english.slice(0, range[0]) : "",
         contextAfter: step?.text ? "" : range ? base.english.slice(range[1]) : "",
-        sentenceChinese: base.stepTranslations?.[lazyStepIndex.value] ?? "",
+        sentenceChinese: cachedStepTranslation(base, lazyStepIndex.value, spans.length) ?? "",
         answerWordIndices: step?.kind === "function-fill" ? step.answer_word_indices : undefined,
       };
       return;
@@ -652,13 +653,18 @@ export const useExerciseStore = defineStore("exercise", () => {
     if (isLazy.value) void ensureCurrentTranslation();
   }
 
+  function cachedStepTranslation(base: Statement, step: number, count: number) {
+    if (step !== count - 1 && base.stepTranslationVersions?.[step] !== 1) return undefined;
+    return base.stepTranslations?.[step];
+  }
+
   function translationKey(course: Course, index: number, step: number) {
     return `${course.coursePackId}:${course.id}:${course.statements[index].id}:${step}`;
   }
 
   function loadStepTranslation(course: Course, index: number, step: number): Promise<string> {
     const base = course.statements[index];
-    const cached = base.stepTranslations?.[step];
+    const cached = cachedStepTranslation(base, step, lazySpans(index).length);
     if (cached) return Promise.resolve(cached);
     const key = translationKey(course, index, step);
     const pending = pendingTranslations.get(key);
@@ -668,14 +674,11 @@ export const useExerciseStore = defineStore("exercise", () => {
       if (!chinese) {
         const range = lazySpans(index)[step];
         const practiceStep = base.practiceSteps?.[step];
-        const context =
-          practiceStep?.kind === "content-word" && practiceStep.context_span
-            ? base.english.slice(...practiceStep.context_span)
-            : undefined;
         const text = practiceStep?.text ?? (range ? base.english.slice(...range) : "");
-        const result = context
-          ? await translatePracticeStep(text, context)
-          : await translatePracticeStep(text);
+        const whole = step === lazySpans(index).length - 1;
+        const result = whole
+          ? await translatePracticeStep(text)
+          : await translatePracticeStep(text, base.english);
         chinese = result.chinese.trim();
         if (!chinese) throw new Error("翻译服务返回空译文，请重试。");
         fetchedTranslations.set(key, chinese);
@@ -688,9 +691,11 @@ export const useExerciseStore = defineStore("exercise", () => {
         step,
         chinese,
         whole,
+        whole ? undefined : 1,
       );
       base.stepTranslations = { ...base.stepTranslations, [step]: chinese };
       if (whole) base.sentenceChinese = chinese;
+      else base.stepTranslationVersions = { ...base.stepTranslationVersions, [step]: 1 };
       return chinese;
     })();
     pendingTranslations.set(key, task);
@@ -739,7 +744,7 @@ export const useExerciseStore = defineStore("exercise", () => {
     const step = lazyStepIndex.value;
     const request = ++translationRequest;
     translationError.value = "";
-    const cached = base.stepTranslations?.[step];
+    const cached = cachedStepTranslation(base, step, lazySpans(index).length);
     if (cached) {
       translationLoading.value = false;
       currentStatement.value!.sentenceChinese = cached;
