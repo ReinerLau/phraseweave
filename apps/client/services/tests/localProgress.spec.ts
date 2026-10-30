@@ -84,7 +84,7 @@ describe("IndexedDB return position", () => {
     });
     await saveLocalExercise(pack);
     const courseId = pack.courses[0].id;
-    await saveLocalExerciseTranslation(pack.id, courseId, 0, 0, "读这个", false);
+    await saveLocalExerciseTranslation(pack.id, courseId, 0, 0, "读这个", false, 1);
     await saveLocalExerciseProgress(pack.id, courseId, 0, {
       learningMode: "sentence-first",
       sentenceFirstStartIndex: null,
@@ -100,5 +100,6 @@ describe("IndexedDB return position", () => {
       2: "读这个，然后写。",
     });
     expect(restored.statements[0].sentenceChinese).toBe("读这个，然后写。");
+    expect(restored.statements[0].stepTranslationVersions?.[0]).toBe(1);
   });
 });

@@ -102,8 +102,8 @@ def _translate_index(sentences: list[str], progress: Any = None, *, word_context
         if progress:
             progress(f"Index-Translate：正在翻译第 {index}/{len(sentences)} 句…")
         prompt = (
-            f"根据英文片段「{word_context}」，只翻译其中的单词「{sentence}」在此处的含义。"
-            "只输出简短中文词义，不要解释。"
+            f"参考完整英文原句「{word_context}」，只翻译当前练习内容「{sentence}」在原句中的含义。"
+            "只输出当前内容的简短中文译文，不要翻译其他部分，不要解释。"
             if word_context else
             "请将以下英语文本翻译为中文，直接输出翻译结果，不要进行任何解释。\n\n"
             f"{sentence}"

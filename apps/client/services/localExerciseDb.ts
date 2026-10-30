@@ -296,12 +296,23 @@ export function mergeLocalExerciseProgress(
           course.practiceSequence === "lazy-comma-segments-v1" ||
           course.practiceSequence === "lazy-clause-segments-v1" ||
           course.practiceSequence === "lazy-punctuation-segments-v1" ||
-          course.practiceSequence === "lazy-punctuation-clause-segments-v1"
+          course.practiceSequence === "lazy-punctuation-clause-segments-v1" ||
+          course.practiceSequence === "lazy-content-function-v1" ||
+          course.practiceSequence === "lazy-content-function-clause-v1"
             ? course.statements.map((statement, index) => ({
                 ...statement,
                 stepTranslations: {
                   ...statement.stepTranslations,
                   ...previous.statements[index]?.stepTranslations,
+                },
+                stepTranslationVersions: {
+                  ...statement.stepTranslationVersions,
+                  ...Object.fromEntries(
+                    Object.keys(previous.statements[index]?.stepTranslations ?? {}).map((key) => [
+                      key,
+                      previous.statements[index]?.stepTranslationVersions?.[key] ?? 0,
+                    ]),
+                  ),
                 },
                 sentenceChinese:
                   previous.statements[index]?.sentenceChinese || statement.sentenceChinese,
@@ -366,6 +377,7 @@ export async function saveLocalExerciseTranslation(
   stepIndex: number,
   chinese: string,
   whole: boolean,
+  translationVersion?: number,
 ) {
   if (typeof window === "undefined") return;
   if (!usesSharedStorage()) {
@@ -385,6 +397,11 @@ export async function saveLocalExerciseTranslation(
       }
       statement.stepTranslations = { ...statement.stepTranslations, [stepIndex]: chinese };
       if (whole) statement.sentenceChinese = chinese;
+      else
+        statement.stepTranslationVersions = {
+          ...statement.stepTranslationVersions,
+          [stepIndex]: translationVersion ?? 0,
+        };
       store.put(pack);
     };
     await done;
@@ -400,6 +417,7 @@ export async function saveLocalExerciseTranslation(
       stepIndex,
       chinese,
       whole,
+      translationVersion,
     },
   );
 }

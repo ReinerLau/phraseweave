@@ -78,7 +78,7 @@ describe("lazy sentence practice", () => {
     expect(store.currentPracticeText).toBe("She finished");
     expect(store.words).toEqual(["She", "finished"]);
     expect(store.checkCorrect("She finished")).toBe(true);
-    expect(translatePracticeStep).toHaveBeenCalledWith("She finished");
+    expect(translatePracticeStep).toHaveBeenCalledWith("She finished", "She quietly finished.");
     store.passCurrentStatement();
     store.advanceAfterCorrect();
     await flushPromises();
@@ -231,7 +231,7 @@ describe("lazy sentence practice", () => {
     finishCurrent({ chinese: "读这个" });
     await flushPromises();
     expect(store.translationReady).toBe(true);
-    expect(translatePracticeStep).toHaveBeenLastCalledWith("then write.");
+    expect(translatePracticeStep).toHaveBeenLastCalledWith("then write.", "Read this, then write.");
   });
 
   it("prefetches only the next step, resumes it and reviews whole sentences", async () => {
@@ -411,6 +411,7 @@ describe("lazy sentence practice", () => {
 
   it("uses a saved next-step translation without requesting it again", async () => {
     course.statements[0].stepTranslations = { 1: "然后写。" };
+    course.statements[0].stepTranslationVersions = { 1: 1 };
     const store = await setup();
     expect(store.currentStatement?.sentenceChinese).toBe("译：Read this");
     expect(vi.mocked(translatePracticeStep).mock.calls.map(([text]) => text)).toEqual([
@@ -424,6 +425,22 @@ describe("lazy sentence practice", () => {
       "Read this",
       "Read this, then write.",
     ]);
+  });
+
+  it("refreshes old split translations while retaining the whole sentence", async () => {
+    course.statements[0].stepTranslations = { 0: "旧片段", 1: "旧片段二", 2: "旧整句" };
+    const store = await setup();
+    expect(store.currentStatement?.sentenceChinese).toBe("译：Read this");
+    expect(translatePracticeStep).toHaveBeenCalledWith("Read this", "Read this, then write.");
+    expect(course.statements[0].stepTranslationVersions).toEqual({ 0: 1, 1: 1 });
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    store.passCurrentStatement();
+    store.advanceAfterCorrect();
+    await flushPromises();
+    expect(store.currentStatement?.sentenceChinese).toBe("旧整句");
+    expect(translatePracticeStep).not.toHaveBeenCalledWith("Read this, then write.");
   });
 
   it("does not prefetch translations for an old comma-segment course", async () => {
