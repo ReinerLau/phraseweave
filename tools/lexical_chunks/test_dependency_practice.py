@@ -64,6 +64,18 @@ class DependencyPracticeTests(TestCase):
     def test_other_noun_prepositions_remain_detachable(self):
         self.assertIn("on the table", self.segments("She opened the box on the table."))
 
+    def test_detaches_purpose_when_subtree_extends_past_comma(self):
+        sentence = ("I’d thrown a lot of money at it near the end, hiring additional "
+                    "workers to cover the more monotonous tasks, which had definitely "
+                    "sped things up.")
+        segments = self.segments(sentence)
+        hiring = segments.index("hiring additional workers")
+        cover = segments.index("to cover the more monotonous tasks")
+        combined = segments.index("hiring additional workers to cover the more monotonous tasks")
+        self.assertLess(hiring, cover)
+        self.assertLess(cover, combined)
+        self.assertNotIn("hiring to cover the more monotonous tasks", segments)
+
     def test_intervening_adjunct_builds_discontinuous_core(self):
         sentence = "She quietly finished the project."
         self.assertEqual(self.segments(sentence), [

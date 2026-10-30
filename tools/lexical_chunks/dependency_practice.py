@@ -111,7 +111,21 @@ def build_dependency_practice(sentence: str, document: Any) -> DependencyPractic
             markers = []
 
         def contained(child: Any) -> bool:
-            return all(part.i in available for part in child.subtree if not part.is_punct)
+            # A later punctuation segment can be attached below this child in the
+            # full-sentence parse. Clip that trailing branch only when every word
+            # retained in this segment still has a path to the child within it.
+            subtree = [part for part in child.subtree if not part.is_punct]
+            if any(part.i not in available and part.i <= max(available) for part in subtree):
+                return False
+            for part in subtree:
+                if part.i not in available:
+                    continue
+                node = part
+                while node.i != child.i:
+                    node = node.head
+                    if node.i not in available:
+                        return False
+            return True
 
         subjects = [child for child in subjects if contained(child)]
         parts = [child for child in parts if contained(child)]
