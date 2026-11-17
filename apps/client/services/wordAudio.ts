@@ -1,4 +1,4 @@
-import { localServiceFetch } from "~/services/generatorClient";
+import { localServiceFetch } from "~/services/localService";
 
 export function isSpeakableWord(text: string) {
   return text.length <= 100 && /^[A-Za-z]+(?:['‘’][A-Za-z]+)*$/.test(text);

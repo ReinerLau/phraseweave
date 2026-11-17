@@ -1,7 +1,7 @@
 import type { ExerciseResponse, ExercisesResponse } from "~/api/exercise";
 import type { PracticeView } from "~/store/exercise";
 import type { LearningMode } from "~/utils/learningDirection";
-import { isLocalPackage } from "~/services/generatorClient";
+import { isLocalPackage } from "~/services/localService";
 import { handleRemoteAuth } from "~/services/remoteSession";
 import { getClozeWords } from "~/utils/clozeText";
 import { scopedStorageName } from "~/utils/storageScope";
@@ -503,6 +503,50 @@ export function normalizeExerciseImport(
   value: unknown,
   options: ExerciseImportOptions = {},
 ): ExerciseResponse[] {
+  if (
+    value &&
+    typeof value === "object" &&
+    "schema_version" in value &&
+    value.schema_version === 11
+  ) {
+    const chain = value as {
+      schema_version: 11;
+      title?: string;
+      entries?: Array<{ english: string; chinese: string }>;
+    };
+    if (
+      (chain.title !== undefined && typeof chain.title !== "string") ||
+      !Array.isArray(chain.entries) ||
+      !chain.entries.length ||
+      !chain.entries.every(
+        (entry) =>
+          entry &&
+          typeof entry.english === "string" &&
+          entry.english.trim() &&
+          typeof entry.chinese === "string" &&
+          entry.chinese.trim(),
+      )
+    ) {
+      throw new Error("双语练习链包含无效条目");
+    }
+    const packs = normalizeExerciseImport(
+      {
+        schema_version: 4,
+        statements: chain.entries.map((entry, index) => ({
+          english: entry.english,
+          sentence_chinese: entry.chinese,
+          context_before: "",
+          context_after: "",
+          unit_id: `entry-${index}`,
+          source_unit_ids: [],
+        })),
+      },
+      { ...options, title: options.title ?? chain.title },
+    );
+    packs[0].courses[0].practiceSequence = "bilingual-chain-v1";
+    packs[0].courses[0].practiceView = "single";
+    return packs;
+  }
   if (Array.isArray(value)) {
     if (value.length !== 1) throw new Error("仅支持导入单个练习");
     const coursePacks = value.filter(isExerciseResponse);

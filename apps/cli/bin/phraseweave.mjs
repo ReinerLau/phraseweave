@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { importExercise } from "./import.mjs";
 import { promptPassword, savePassword } from "./remote-auth.mjs";
 import { startRemoteServer } from "./remote-server.mjs";
 import {
@@ -14,7 +15,7 @@ import {
 } from "./remote.mjs";
 import { GeneratorRuntime, snapshotRuntime } from "./runtime.mjs";
 import { startPageServer } from "./server.mjs";
-import { connectOrStart, startControlServer, WEB_UI_PORT } from "./shared.mjs";
+import { connectOrStart, connectShared, startControlServer, WEB_UI_PORT } from "./shared.mjs";
 
 const entry = fileURLToPath(import.meta.url);
 const packageRoot = path.resolve(path.dirname(entry), "..");
@@ -29,7 +30,11 @@ function options(argv) {
       if (value !== WEB_UI_PORT)
         throw new Error("Web UI 地址固定为 http://127.0.0.1:3000，不能更换端口。");
       parsed.port = value;
-    } else if (arg === "--json-ready") parsed.jsonReady = true;
+    } else if (arg === "import") {
+      parsed.importArgs = argv.slice(index + 1);
+      break;
+    } else if (arg === "stop") parsed.stop = true;
+    else if (arg === "--json-ready") parsed.jsonReady = true;
     else if (arg === "--launcher-client") parsed.launcherClient = true;
     else if (arg === "--serve-daemon") parsed.serveDaemon = true;
     else if (arg === "--version") parsed.version = true;
@@ -195,11 +200,31 @@ async function main() {
   if (flags.version) return process.stdout.write(`${metadata.version}\n`);
   if (flags.help) {
     return process.stdout.write(
-      "Usage: phraseweave [--json-ready] [--version] | remote configure|password|status|disable\n",
+      "Usage: phraseweave [--json-ready] [--version] | import --file PATH|- [--title TITLE] --request-id UUID [--json] | stop | remote configure|password|status|disable\n",
     );
   }
   if (process.platform !== "darwin" || process.arch !== "arm64") {
     throw new Error("PhraseWeave currently supports Apple Silicon macOS only.");
+  }
+  if (flags.importArgs) return importExercise(flags.importArgs, { entry });
+  if (flags.stop) {
+    try {
+      const { socket } = await connectShared();
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          socket.destroy();
+          reject(new Error("本地服务未确认停止，请检查是否仍在运行旧版本。"));
+        }, 3000);
+        socket.once("end", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        socket.write("stop\n");
+      });
+    } catch (error) {
+      if (!["ENOENT", "ECONNREFUSED"].includes(error.code)) throw error;
+    }
+    return;
   }
   if (flags.remote) return handleRemote(flags.remote, flags.remoteArgs);
   if (flags.serveDaemon) return serveDaemon(WEB_UI_PORT);

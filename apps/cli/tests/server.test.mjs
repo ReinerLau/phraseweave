@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { consumeCapture, startPageServer } from "../bin/server.mjs";
+import { startPageServer } from "../bin/server.mjs";
 
 let root;
 let server;
@@ -47,14 +47,14 @@ test("serves the generated page and client routes", async () => {
   assert.match(await (await fetch(new URL("/some/client/route", url))).text(), /Fallback/);
 });
 
-test("proxies generator requests from the local page", async () => {
-  const response = await fetch(new URL("/api/generate", url), {
+test("proxies import requests from the local page", async () => {
+  const response = await fetch(new URL("/api/local-exercises/import", url), {
     method: "POST",
     headers: { Origin: new URL(url).origin, "Content-Type": "application/json" },
     body: JSON.stringify({ text: "Example" }),
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(requests.at(-1), ["/api/generate", "POST", '{"text":"Example"}']);
+  assert.deepEqual(requests.at(-1), ["/api/local-exercises/import", "POST", '{"text":"Example"}']);
 });
 
 test("proxies on-demand translation and translation cache writes", async () => {
@@ -80,7 +80,7 @@ test("proxies on-demand translation and translation cache writes", async () => {
 
 test("preserves UTF-8 characters split across request chunks", { timeout: 10_000 }, async (t) => {
   for (const [pathname, method] of [
-    ["/api/generate", "POST"],
+    ["/api/local-exercises/import", "POST"],
     ["/api/local-exercises/pack", "PUT"],
   ]) {
     await t.test(pathname, async () => {
@@ -158,7 +158,7 @@ test("proxies sentence audio with its kind and full source text", async () => {
 });
 
 test("rejects cross-origin mutation and DNS rebinding hosts", async () => {
-  const api = new URL("/api/generate", url);
+  const api = new URL("/api/local-exercises/import", url);
   const crossOrigin = await fetch(api, {
     method: "POST",
     headers: { Origin: "https://example.com" },
@@ -186,7 +186,7 @@ test("accepts only the configured remote origin for API mutations", async () => 
     remoteOrigin: "https://phraseweave.example.com",
   });
   try {
-    const api = new URL("/api/generate", remote.url);
+    const api = new URL("/api/local-exercises/import", remote.url);
     const allowed = await fetch(api, {
       method: "POST",
       headers: { Origin: "https://phraseweave.example.com" },
@@ -219,33 +219,18 @@ test("refuses an occupied page port instead of switching ports", async () => {
   }
 });
 
-test("reports a stopped generator so the page can offer retry", async () => {
+test("reports a stopped local service so the page can offer retry", async () => {
   runtimeFails = true;
   try {
     const response = await fetch(new URL("/api/status", url));
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()).initialization, {
       state: "error",
-      message: "生成引擎已停止",
+      message: "本地服务已停止",
       error: "Generator exited.",
     });
   } finally {
     runtimeFails = false;
-  }
-});
-
-test("consumes a native-host capture exactly once", async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "phraseweave-capture-test-"));
-  const id = "0123456789abcdef0123456789abcdef";
-  try {
-    await fs.writeFile(
-      path.join(directory, `${id}.json`),
-      JSON.stringify({ text: "The cat sleeps." }),
-    );
-    assert.equal(await consumeCapture(id, directory), "The cat sleeps.");
-    await assert.rejects(consumeCapture(id, directory), { code: "ENOENT" });
-  } finally {
-    await fs.rm(directory, { recursive: true, force: true });
   }
 });
 

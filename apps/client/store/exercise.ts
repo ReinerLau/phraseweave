@@ -6,7 +6,6 @@ import type { RecoverySources } from "./reviewRecovery";
 import type { ContentFunctionStep } from "~/services/localExerciseDb";
 import type { LearningMode } from "~/utils/learningDirection";
 import { useActiveCourseMap } from "~/composables/courses/activeCourse";
-import { translatePracticeStep } from "~/services/generatorClient";
 import {
   getLocalExercise,
   saveLocalExercise,
@@ -14,6 +13,7 @@ import {
   saveLocalExerciseTranslation,
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
+import { translatePracticeStep } from "~/services/translation";
 import { checkClozeAnswer, getClozeWords, tokenizeClozeText } from "~/utils/clozeText";
 import {
   findRecoveryOccurrence,
@@ -61,6 +61,7 @@ export interface Course {
   completionCount: number;
   /** Identifies the generated step sequence and its translation timing. */
   practiceSequence?:
+    | "bilingual-chain-v1"
     | "comma-segments-v1"
     | "lazy-comma-segments-v1"
     | "lazy-clause-segments-v1"
@@ -94,6 +95,9 @@ function hasFinishedFirstPass(course: Course) {
 
 export const useExerciseStore = defineStore("exercise", () => {
   const currentCourse = ref<Course>();
+  const isBilingualChain = computed(
+    () => currentCourse.value?.practiceSequence === "bilingual-chain-v1",
+  );
   const currentStatement = ref<Statement>();
   const recoveryUnitId = ref<string>();
   const currentAnswerAccepted = ref(false);
@@ -372,7 +376,8 @@ export const useExerciseStore = defineStore("exercise", () => {
 
   function switchPracticeView(view: PracticeView) {
     const course = currentCourse.value;
-    if (view === "single" && !practiceModeAvailability.single) return false;
+    if (view === "single" && !practiceModeAvailability.single && !isBilingualChain.value)
+      return false;
     if (!course || view === practiceView.value || (view === "fulltext" && !canUseFulltext.value))
       return false;
     course.practiceView = view;
@@ -566,7 +571,12 @@ export const useExerciseStore = defineStore("exercise", () => {
       course.learningMode = "sentence-first";
       course.sentenceFirstStartIndex = undefined;
     }
-    if (!practiceModeAvailability.single) course.practiceView = "fulltext";
+    if (!practiceModeAvailability.single && course.practiceSequence !== "bilingual-chain-v1")
+      course.practiceView = "fulltext";
+    if (course.practiceSequence === "bilingual-chain-v1" && course.resumeStatementIndex === null) {
+      course.statementIndex = 0;
+      course.resumeStatementIndex = 0;
+    }
 
     const lastIndex = Math.max(0, course.statements.length - 1);
     course.statementIndex = Number.isFinite(course.statementIndex)
@@ -767,6 +777,7 @@ export const useExerciseStore = defineStore("exercise", () => {
   }
 
   return {
+    isBilingualChain,
     statementIndex,
     currentCourse,
     currentStatement,

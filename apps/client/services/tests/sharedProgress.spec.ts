@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { saveLocalExerciseProgress } from "~/services/localExerciseDb";
 import { scopedStorageName } from "~/utils/storageScope";
 
-vi.mock("~/services/generatorClient", () => ({ isLocalPackage: () => true }));
+vi.mock("~/services/localService", () => ({ isLocalPackage: () => true }));
 
 describe("shared exercise progress", () => {
   afterEach(() => {

@@ -35,6 +35,7 @@ describe("ExerciseList bulk management", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});
     useExerciseCatalogStore().exercises = [...exercises];
+    vi.mocked(listLocalExercises).mockResolvedValue([...exercises]);
   });
 
   afterEach(() => {
@@ -55,10 +56,21 @@ describe("ExerciseList bulk management", () => {
   const selectionBoxes = () => wrapper.findAll<HTMLInputElement>('input[aria-label^="选择练习"]');
   const selectAll = () => wrapper.get<HTMLInputElement>('label input[type="checkbox"]');
 
+  it("loads newly imported exercises when the window regains focus", async () => {
+    render();
+    await flushPromises();
+    vi.mocked(listLocalExercises).mockResolvedValue([
+      ...exercises,
+      { ...exercises[0], id: "imported", title: "Skill 练习" },
+    ]);
+    window.dispatchEvent(new Event("focus"));
+    await flushPromises();
+    expect(wrapper.text()).toContain("Skill 练习");
+  });
+
   it("enters with no selection, supports partial/all selection, and clears on cancel", async () => {
     render();
     await button("批量管理").trigger("click");
-    expect(wrapper.text()).not.toContain("生成练习");
     expect(wrapper.text()).not.toContain("添加练习");
     expect(button("删除").attributes("disabled")).toBeDefined();
     await wrapper.get(".card").trigger("click");
@@ -72,7 +84,7 @@ describe("ExerciseList bulk management", () => {
     expect(wrapper.text()).toContain("已选 0 项");
     await selectionBoxes()[0].setValue(true);
     await button("取消").trigger("click");
-    expect(wrapper.text()).toContain("生成练习");
+    expect(wrapper.text()).toContain("添加练习");
     expect(selectionBoxes()).toHaveLength(0);
     await button("批量管理").trigger("click");
     expect(wrapper.text()).toContain("已选 0 项");

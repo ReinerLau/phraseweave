@@ -12,11 +12,17 @@
         <IconsExpand class="h-7 w-7" />
       </NuxtLink>
       <div
-        v-if="practiceModeAvailability.progressive || practiceModeAvailability.single"
+        v-if="
+          practiceModeAvailability.progressive ||
+          practiceModeAvailability.single ||
+          courseStore.isBilingualChain
+        "
         class="flex min-w-0 flex-1 gap-2 sm:max-w-md"
       >
         <LearningModeSwitch v-if="practiceModeAvailability.progressive" />
-        <PracticeViewSwitch v-if="practiceModeAvailability.single" />
+        <PracticeViewSwitch
+          v-if="practiceModeAvailability.single || courseStore.isBilingualChain"
+        />
       </div>
     </div>
 

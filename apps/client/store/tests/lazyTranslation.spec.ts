@@ -3,11 +3,11 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Course } from "../exercise";
-import { translatePracticeStep } from "~/services/generatorClient";
+import { translatePracticeStep } from "~/services/translation";
 import { getLocalExercise, saveLocalExerciseTranslation } from "~/services/localExerciseDb";
 import { useExerciseStore } from "../exercise";
 
-vi.mock("~/services/generatorClient", () => ({ translatePracticeStep: vi.fn() }));
+vi.mock("~/services/translation", () => ({ translatePracticeStep: vi.fn() }));
 vi.mock("~/services/localExerciseDb", () => ({
   getLocalExercise: vi.fn(),
   saveLocalExercise: vi.fn().mockResolvedValue(undefined),

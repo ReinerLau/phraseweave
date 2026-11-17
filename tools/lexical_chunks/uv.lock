@@ -1247,7 +1247,6 @@ dependencies = [
     { name = "kokoro" },
     { name = "lameenc" },
     { name = "misaki", extra = ["en"] },
-    { name = "spacy" },
     { name = "torch" },
     { name = "transformers" },
 ]
@@ -1260,7 +1259,6 @@ requires-dist = [
     { name = "kokoro", specifier = "==0.9.4" },
     { name = "lameenc", specifier = "==1.8.4" },
     { name = "misaki", extras = ["en"], specifier = "==0.9.4" },
-    { name = "spacy", specifier = "==3.8.7" },
     { name = "torch", specifier = "==2.8.0" },
     { name = "transformers", specifier = "==5.18.0" },
 ]

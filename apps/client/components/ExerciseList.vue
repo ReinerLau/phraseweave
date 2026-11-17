@@ -14,12 +14,6 @@
         >
           批量管理
         </button>
-        <NuxtLink
-          class="btn btn-sm"
-          to="/generator"
-        >
-          生成练习
-        </NuxtLink>
         <button
           class="btn btn-sm"
           type="button"
@@ -185,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef } from "vue";
 
 import type { ExerciseResponse } from "~/api/exercise";
 import ExerciseCard from "~/components/exercises/ExerciseCard.vue";
@@ -218,16 +212,21 @@ const readingImport = ref(false);
 const savingImport = ref(false);
 let synchronizeCourseTitle = false;
 
-setup();
-
-async function setup() {
-  // 练习清单不会自动更新，所以初始化时只读取一次本地数据。
-  if (exerciseCatalogStore.exercises.length === 0) {
-    isLoading.value = true;
+async function refresh() {
+  isLoading.value = exerciseCatalogStore.exercises.length === 0;
+  try {
     await exerciseCatalogStore.setupExercises();
+  } catch (error) {
+    console.error("刷新练习清单失败", error);
+  } finally {
     isLoading.value = false;
   }
 }
+onMounted(() => {
+  void refresh();
+  window.addEventListener("focus", refresh);
+});
+onUnmounted(() => window.removeEventListener("focus", refresh));
 
 function openImport() {
   if (readingImport.value || savingImport.value || pendingExercise.value) return;

@@ -69,20 +69,12 @@ jobs:
             cd apps/cli
             npm publish --registry=https://npm.pkg.github.com
           fi
-      - name: Package Chrome extension
-        shell: bash
-        run: |
-          cd apps/browser-extension
-          zip -q "$GITHUB_WORKSPACE/PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" \
-            manifest.json service-worker.js icon.png README.md
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "PhraseWeave-Chrome-extension-${PHRASEWEAVE_VERSION}.zip" \
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
               --verify-tag --title "PhraseWeave ${PHRASEWEAVE_VERSION}" --generate-notes
           fi
