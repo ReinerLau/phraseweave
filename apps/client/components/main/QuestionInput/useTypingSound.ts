@@ -1,6 +1,6 @@
 import { ref } from "vue";
 
-import typingSoundPath from "~/assets/sounds/typing.mp3";
+import typingSoundPath from "~/assets/sounds/typing.wav";
 
 const PLAY_INTERVAL_MS = 60;
 let audioContext: AudioContext | undefined;
