@@ -3,11 +3,8 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 
-import { DATA_DIR, WEB_UI_PORT } from "./shared.mjs";
+import { WEB_UI_PORT } from "./shared.mjs";
 
-const CAPTURE_ID = /^[a-f0-9]{32}$/;
-const JOB_ID = /^[a-f0-9]{32}$/;
-const MAX_CAPTURE_AGE_MS = 10 * 60 * 1000;
 const MAX_BODY_BYTES = 120_000;
 const MAX_LOCAL_DATA_BODY_BYTES = 50 * 1024 * 1024;
 const MIME = {
@@ -47,25 +44,6 @@ async function readBody(request, maxBytes = MAX_BODY_BYTES) {
   }
   // A UTF-8 character may span network chunks; decode only after reassembly.
   return Buffer.concat(chunks, length).toString("utf8");
-}
-
-export async function consumeCapture(id, directory = path.join(DATA_DIR, "captures")) {
-  if (!CAPTURE_ID.test(id)) throw new Error("无效的选中文本请求。");
-  const file = path.join(directory, `${id}.json`);
-  const stat = await fs.stat(file);
-  if (Date.now() - stat.mtimeMs > MAX_CAPTURE_AGE_MS || stat.size > MAX_BODY_BYTES) {
-    await fs.rm(file, { force: true });
-    throw new Error("选中文本已过期，请重新从浏览器导入。");
-  }
-  try {
-    const record = JSON.parse(await fs.readFile(file, "utf8"));
-    if (typeof record.text !== "string" || !record.text.trim() || record.text.length > 30_000) {
-      throw new Error("选中文本无效。");
-    }
-    return record.text;
-  } finally {
-    await fs.rm(file, { force: true });
-  }
 }
 
 async function staticFile(root, pathname, response) {
@@ -132,14 +110,6 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
           json(response, 403, { error: "Invalid origin." });
           return;
         }
-        if (request.method === "GET" && url.pathname.startsWith("/api/captures/")) {
-          try {
-            json(response, 200, { text: await consumeCapture(url.pathname.slice(14)) });
-          } catch (error) {
-            json(response, 400, { error: error.message });
-          }
-          return;
-        }
         if (request.method === "POST" && url.pathname === "/api/retry") {
           await runtime.restart();
           json(response, 200, { ok: true });
@@ -151,9 +121,14 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
               url.pathname === "/api/local-exercise-catalog" ||
               /^\/api\/local-exercises\/[^/]+$/.test(url.pathname))) ||
           (request.method === "PUT" &&
-            (/^\/api\/local-exercises\/[^/]+(?:\/progress|\/passed-units|\/translations)?$/.test(url.pathname) ||
+            (/^\/api\/local-exercises\/[^/]+(?:\/progress|\/passed-units|\/translations)?$/.test(
+              url.pathname,
+            ) ||
               url.pathname === "/api/local-exercise-catalog")) ||
-          (request.method === "POST" && url.pathname === "/api/local-exercises/migrate") ||
+          (request.method === "POST" &&
+            ["/api/local-exercises/migrate", "/api/local-exercises/import"].includes(
+              url.pathname,
+            )) ||
           (request.method === "DELETE" && /^\/api\/local-exercises\/[^/]+$/.test(url.pathname));
         const valid =
           (request.method === "POST" && url.pathname === "/api/tts") ||
@@ -161,11 +136,7 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
           (request.method === "POST" && url.pathname === "/api/tts/retry") ||
           (request.method === "DELETE" && url.pathname === "/api/tts/cache") ||
           (request.method === "GET" && url.pathname === "/api/status") ||
-          (request.method === "POST" && url.pathname === "/api/generate") ||
           (request.method === "POST" && url.pathname === "/api/translate") ||
-          ((request.method === "GET" || request.method === "DELETE") &&
-            url.pathname.startsWith("/api/jobs/") &&
-            JOB_ID.test(url.pathname.slice(10))) ||
           localDataRoute;
         if (!valid) {
           json(response, 404, { error: "Not found." });
@@ -184,7 +155,7 @@ export async function startPageServer({ clientRoot, runtime, port = WEB_UI_PORT,
             json(response, 200, {
               runtimeReady: false,
               modelDownloaded: false,
-              initialization: { state: "error", message: "生成引擎已停止", error: error.message },
+              initialization: { state: "error", message: "本地服务已停止", error: error.message },
             });
             return;
           }

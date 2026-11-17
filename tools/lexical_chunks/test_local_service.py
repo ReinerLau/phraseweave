@@ -12,10 +12,10 @@ from unittest.mock import patch
 
 import local_service
 import model_runtime
-from local_service import Handler, JOBS, JOBS_LOCK
+from local_service import Handler
 
 
-class CompletedJobEndpointTests(TestCase):
+class TranslationEndpointTests(TestCase):
     @classmethod
     def setUpClass(cls):
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -28,59 +28,6 @@ class CompletedJobEndpointTests(TestCase):
         cls.server.shutdown()
         cls.server.server_close()
         cls.server_thread.join()
-
-    def test_completed_job_retains_contents_until_client_acknowledges_receipt(self):
-        job_id = "memoryonlyjob"
-        with JOBS_LOCK:
-            JOBS[job_id] = {
-                "id": job_id,
-                "state": "complete",
-                "result": {
-                    "outputs": [
-                        {"name": "learning-units.json", "content": '{"statements": []}'},
-                    ]
-                },
-            }
-
-        connection = HTTPConnection("127.0.0.1", self.port)
-        try:
-            connection.request(
-                "OPTIONS",
-                f"/api/jobs/{job_id}",
-                headers={
-                    "Origin": "https://reinerlau.github.io",
-                    "Access-Control-Request-Method": "DELETE",
-                    "Access-Control-Request-Headers": "content-type",
-                },
-            )
-            preflight = connection.getresponse()
-            allowed_methods = preflight.getheader("Access-Control-Allow-Methods", "")
-            preflight.read()
-            self.assertEqual(preflight.status, 204)
-            self.assertIn("DELETE", {method.strip() for method in allowed_methods.split(",")})
-
-            connection.request("GET", f"/api/jobs/{job_id}")
-            response = connection.getresponse()
-            body = json.loads(response.read())
-            self.assertEqual(response.status, 200)
-            with JOBS_LOCK:
-                self.assertIn(job_id, JOBS)
-
-            connection.request(
-                "DELETE",
-                f"/api/jobs/{job_id}",
-                headers={"Origin": "http://localhost:3000"},
-            )
-            acknowledgment = connection.getresponse()
-            acknowledgment_body = json.loads(acknowledgment.read())
-        finally:
-            connection.close()
-
-        self.assertEqual(body["result"]["outputs"][0]["content"], '{"statements": []}')
-        self.assertEqual(acknowledgment.status, 200)
-        self.assertTrue(acknowledgment_body["ok"])
-        with JOBS_LOCK:
-            self.assertNotIn(job_id, JOBS)
 
     def test_status_advertises_both_translation_providers(self):
         connection = HTTPConnection("127.0.0.1", self.port)
@@ -579,22 +526,6 @@ class WorkerProgressTests(TestCase):
                 result = local_service._run_worker({"action": "generate"}, progress)
             self.assertTrue(result["ok"])
             self.assertEqual(messages, ["Downloading model"])
-
-    def test_generation_publishes_worker_progress_to_the_job(self):
-        job_id = "downloadprogress"
-        JOBS[job_id] = {"state": "running"}
-
-        def worker(_payload, on_progress):
-            on_progress("Downloading model")
-            self.assertEqual(JOBS[job_id]["message"], "Downloading model")
-            return {"ok": True, "outputs": []}
-
-        try:
-            with patch("local_service._run_worker", side_effect=worker):
-                local_service._generate(job_id, {"text": "Text."})
-            self.assertEqual(JOBS[job_id]["state"], "complete")
-        finally:
-            JOBS.pop(job_id, None)
 
 
 if __name__ == "__main__":

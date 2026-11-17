@@ -10,7 +10,7 @@ import {
   saveLocalExerciseUnitPassed,
 } from "~/services/localExerciseDb";
 
-vi.mock("~/services/generatorClient", () => ({ isLocalPackage: () => false }));
+vi.mock("~/services/localService", () => ({ isLocalPackage: () => false }));
 
 describe("IndexedDB return position", () => {
   afterEach(() => {

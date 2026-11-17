@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import os
 import shutil
@@ -17,6 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
+
+from bilingual_import import parse_chain, build_pack
 
 from model_runtime import CACHE_DIR, MODEL_FILES, SOURCE_MODEL_DIR, TRANSLATION_PROVIDERS
 from sentence_review import practice_spans
@@ -43,16 +46,14 @@ DATA_DIR = Path(os.environ.get(
     str(Path.home() / "Library" / "Application Support" / "PhraseWeave"),
 ))
 DATABASE_PATH = DATA_DIR / "phraseweave.sqlite3"
+DATABASE_SETUP_LOCK = threading.Lock()
 TTS_RUNTIME = KokoroRuntime(PYTHON)
 TTS_CACHE = AudioCache(
     DATA_DIR / "tts",
     lambda word: TTS_RUNTIME.synthesize(word),
     lambda sentence: TTS_RUNTIME.synthesize(sentence, kind="sentence"),
 )
-JOBS: dict[str, dict[str, Any]] = {}
-JOBS_LOCK = threading.Lock()
-ACTIVE_JOB: str | None = None
-INITIALIZATION: dict[str, str] = {"state": "starting", "message": "Starting local generator"}
+INITIALIZATION: dict[str, str] = {"state": "starting", "message": "Starting local service"}
 
 
 def _practice_steps(course: dict[str, Any], statement: dict[str, Any]) -> list[Any]:
@@ -138,50 +139,26 @@ def _run_worker(payload: dict[str, Any], on_progress: Any = None) -> dict[str, A
     return parsed
 
 
-def _generate(job_id: str, payload: dict[str, Any]) -> None:
-    global ACTIVE_JOB
-    try:
-        result = _run_worker(
-            {**payload, "action": "generate"},
-            lambda message: _update_job(job_id, message=str(message)),
-        )
-        _finish_job(job_id, result)
-    except Exception as error:
-        _finish_job(job_id, error=str(error))
-    finally:
-        ACTIVE_JOB = None
-
-
-def _update_job(job_id: str, **changes: Any) -> None:
-    with JOBS_LOCK:
-        if job_id in JOBS:
-            JOBS[job_id].update(changes)
-
-
-def _finish_job(job_id: str, result: dict[str, Any] | None = None, error: str | None = None) -> None:
-    with JOBS_LOCK:
-        job = JOBS.get(job_id)
-        if not job:
-            return
-        if error:
-            job.update({"state": "failed", "error": error})
-        else:
-            job.update({"state": "complete", "result": result})
-
-
 @contextmanager
 def _database():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     database = sqlite3.connect(DATABASE_PATH, timeout=30)
     try:
         database.execute("PRAGMA busy_timeout = 30000")
-        database.execute("PRAGMA journal_mode = WAL")
-        database.execute(
-            "CREATE TABLE IF NOT EXISTS course_packs (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
-        )
-        database.execute(
-            "CREATE TABLE IF NOT EXISTS course_pack_catalog (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
-        )
+        with DATABASE_SETUP_LOCK:
+            # Only one request may switch a newly created database to WAL mode.
+            if database.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
+                database.execute("PRAGMA journal_mode = WAL")
+            database.execute(
+                "CREATE TABLE IF NOT EXISTS course_packs (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+            )
+            database.execute(
+                "CREATE TABLE IF NOT EXISTS course_pack_catalog (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+            )
+            database.execute(
+                "CREATE TABLE IF NOT EXISTS exercise_imports "
+                "(request_id TEXT PRIMARY KEY, digest TEXT NOT NULL, result TEXT NOT NULL)"
+            )
         yield database
         database.commit()
     except Exception:
@@ -189,6 +166,40 @@ def _database():
         raise
     finally:
         database.close()
+
+
+class ImportConflict(ValueError):
+    pass
+
+
+def import_chain(payload: dict[str, Any]) -> dict[str, Any]:
+    request_id = payload.get("requestId")
+    try:
+        request_id = str(uuid.UUID(request_id))
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("requestId 必须为 UUID。") from None
+    title = payload.get("title", "")
+    if not isinstance(title, str):
+        raise ValueError("标题必须是文本。")
+    entries = parse_chain(payload.get("text"))
+    digest = hashlib.sha256(_json_data([title, entries]).encode("utf-8")).hexdigest()
+    with _database() as database:
+        database.execute("BEGIN IMMEDIATE")
+        previous = database.execute("SELECT digest, result FROM exercise_imports WHERE request_id = ?", (request_id,)).fetchone()
+        if previous:
+            if previous[0] != digest:
+                raise ImportConflict("该请求 ID 已用于不同内容。")
+            result = json.loads(previous[1])
+            if not database.execute("SELECT 1 FROM course_packs WHERE id = ?", (result["exerciseId"],)).fetchone():
+                raise ImportConflict("此前导入的练习已删除；重新导入请使用新的请求 ID。")
+            return result
+        pack = build_pack(entries, title)
+        _save_course_pack(database, pack)
+        course_id = pack["courses"][0]["id"]
+        result = {"exerciseId": pack["id"], "courseId": course_id, "title": pack["title"],
+                  "count": len(entries), "path": f"/game/{pack['id']}/{course_id}"}
+        database.execute("INSERT INTO exercise_imports VALUES (?, ?, ?)", (request_id, digest, _json_data(result)))
+    return result
 
 
 def _route_id(route: str, prefix: str) -> str | None:
@@ -405,18 +416,8 @@ class Handler(BaseHTTPRequestHandler):
                 "runtimeReady": getattr(sys, "frozen", False) or PYTHON.is_file(),
                 "modelDownloaded": all((SOURCE_MODEL_DIR / name).is_file() for name in MODEL_FILES),
                 "translationProviders": list(TRANSLATION_PROVIDERS),
-                "activeJob": ACTIVE_JOB,
                 "initialization": INITIALIZATION,
             })
-            return
-        if parsed.path.startswith("/api/jobs/"):
-            job_id = parsed.path.removeprefix("/api/jobs/")
-            with JOBS_LOCK:
-                job = dict(JOBS.get(job_id, {}))
-            if not job:
-                self._json({"error": "Job not found."}, 404)
-            else:
-                self._json(job)
             return
         self.send_error(404)
 
@@ -439,29 +440,22 @@ class Handler(BaseHTTPRequestHandler):
                 database.execute("DELETE FROM course_pack_catalog WHERE id = ?", (exercise_id,))
             self._json({"ok": True})
             return
-        prefix = "/api/jobs/"
-        if not path.startswith(prefix):
-            self.send_error(404)
-            return
-        job_id = path.removeprefix(prefix)
-        if not job_id.isalnum():
-            self.send_error(404)
-            return
-        with JOBS_LOCK:
-            job = JOBS.get(job_id)
-            if not job:
-                self._json({"error": "Job not found."}, 404)
-                return
-            if job.get("state") not in {"complete", "failed"}:
-                self._json({"error": "Job is still running."}, 409)
-                return
-            JOBS.pop(job_id, None)
-        self._json({"ok": True})
+        self.send_error(404)
 
     def do_POST(self) -> None:
-        global ACTIVE_JOB
         if not self._desktop_authorized() or (not DESKTOP_TOKEN and not self._valid_origin()):
             self._json({"error": "Origin is not allowed."}, 403)
+            return
+        if urlparse(self.path).path == "/api/local-exercises/import":
+            try:
+                result = import_chain(self._body(MAX_LOCAL_DATA_BODY_BYTES))
+            except ImportConflict as error:
+                self._json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self._json({"error": str(error)}, 400)
+                return
+            self._json(result, 200)
             return
         if urlparse(self.path).path == "/api/tts/retry":
             if INITIALIZATION["state"] != "ready":
@@ -517,30 +511,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json({"chinese": result["chinese"]})
             return
-        if INITIALIZATION["state"] != "ready":
-            self._json({"error": INITIALIZATION.get("error") or "Generator is initializing."}, 503)
-            return
-        if urlparse(self.path).path != "/api/generate":
-            self.send_error(404)
-            return
-        try:
-            payload = self._body()
-        except (ValueError, json.JSONDecodeError) as error:
-            self._json({"error": str(error)}, 400)
-            return
-        with JOBS_LOCK:
-            if ACTIVE_JOB:
-                self._json({"error": "Another local generation task is already running."}, 409)
-                return
-            for previous_id, previous_job in tuple(JOBS.items()):
-                if previous_job.get("state") in {"complete", "failed"}:
-                    JOBS.pop(previous_id, None)
-            job_id = uuid.uuid4().hex
-            ACTIVE_JOB = job_id
-            JOBS[job_id] = {"id": job_id, "state": "running", "message": "Starting"}
-        thread = threading.Thread(target=_generate, args=(job_id, payload), daemon=True)
-        thread.start()
-        self._json({"id": job_id}, 202)
+        self.send_error(404)
 
     def do_PUT(self) -> None:
         if not self._desktop_authorized() or (not DESKTOP_TOKEN and not self._valid_origin()):
@@ -716,10 +687,10 @@ def _initialize_in_background() -> None:
     try:
         _set_initialization("downloading", "Preparing the local Python environment…")
         _initialize_runtime()
-        _set_initialization("ready", "Local generator is ready")
+        _set_initialization("ready", "Local service is ready")
         TTS_RUNTIME.start()
     except Exception as error:
-        _set_initialization("error", "Local generator setup failed", str(error))
+        _set_initialization("error", "Local service setup failed", str(error))
         TTS_RUNTIME.environment_failed()
 
 
@@ -748,9 +719,9 @@ if __name__ == "__main__":
     except Exception as error:
         print(f"Local service setup failed: {error}", file=sys.stderr, flush=True)
         raise SystemExit(1) from error
-    _set_initialization("ready", "Local generator is ready")
-    print(f"PhraseWeave generator service: http://{HOST}:{PORT}", flush=True)
-    print("Keep this terminal open while using the /generator route.", flush=True)
+    _set_initialization("ready", "Local service is ready")
+    print(f"PhraseWeave local service: http://{HOST}:{PORT}", flush=True)
+    print("Keep this terminal open while practicing.", flush=True)
     TTS_RUNTIME.start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     try:

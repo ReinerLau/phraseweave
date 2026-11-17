@@ -122,40 +122,9 @@ describe("exercise names", () => {
     });
   });
 
-  it("uses a custom generated name with phone and desktop layouts", () => {
-    const title = "生成器自定义练习";
-    cy.viewport(375, 812);
-    cy.intercept("GET", "**/api/status", {
-      runtimeReady: true,
-      modelDownloaded: true,
-      initialization: { state: "ready", message: "Ready" },
-    });
-    cy.intercept("POST", "**/api/generate", { id: "name-test" });
-    cy.intercept("GET", "**/api/jobs/name-test", {
-      id: "name-test",
-      state: "complete",
-      result: { outputs: [{ name: "units.json", content: JSON.stringify(exerciseBackup) }] },
-    });
-    cy.intercept("DELETE", "**/api/jobs/name-test", { ok: true });
+  it("redirects the retired generator to the exercise list", () => {
     cy.visit("/generator");
-    cy.get("textarea").type("The cat sleeps.");
-    cy.contains("button", "生成学习单元").should("be.enabled").click();
-    cy.contains("生成文件").should("be.visible");
-    cy.get('input[type="text"]')
-      .should("have.value", "The cat sleeps.")
-      .clear()
-      .type(`  ${title}  `);
-    assertNoOverflow();
-    cy.viewport(1280, 800);
-    assertNoOverflow();
-    cy.contains("button", "保存并进入练习").click();
-    cy.location("pathname").should("match", /^\/game\//);
-    readSavedExercises().then((packs) => {
-      const pack = packs.find((item) => item.title === title);
-      expect(pack).to.exist;
-      expect(pack.courses[0].title).to.equal(title);
-    });
-    cy.visit("/");
-    cy.contains(".card-title", title).should("be.visible");
+    cy.location("pathname").should("equal", "/course-pack");
+    cy.contains("练习清单").should("be.visible");
   });
 });

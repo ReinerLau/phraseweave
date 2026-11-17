@@ -1,3 +1,5 @@
+> 本文记录历史生成方式。当前入口为 phraseweave Skill，见根目录 README 和 ADR 0042。
+
 # 标点分段生成与旧语块工具
 
 `/generator` 在本机按原文分句及标点分段，再按完整原句的依存关系递归练主谓、宾语、补语、状语和从句内部成分。成分单练后逐个接回核心，组合题可跳过尚未加入的词。生成器导出不含译文的 schema 10 英文原句及 `practice_steps`；题序预览默认收起。最小连续片段先练实义词与功能词，随后复现片段；较大的组合片段只完整复现，最后复现整句，完成后只练整句。规则及示例见[练习拆分规则索引](practice-splitting-rules.md)、[ADR 0040](adr/0040-dependency-composition.md) 和 [ADR 0041](adr/0041-text-only-composition-steps.md)。旧 spaCy 依存语块组合实现保留备用。

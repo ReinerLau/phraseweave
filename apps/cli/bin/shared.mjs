@@ -151,13 +151,31 @@ export async function startControlServer(onIdle, socketPath = SOCKET_PATH) {
   const clients = new Set();
   let ready;
   let idleTimer;
+  let background = false;
   const server = net.createServer((socket) => {
     clearTimeout(idleTimer);
     clients.add(socket);
+    let input = "";
+    socket.on("data", (chunk) => {
+      input += chunk;
+      let end;
+      while ((end = input.indexOf("\n")) >= 0) {
+        const command = input.slice(0, end);
+        input = input.slice(end + 1);
+        if (command === "background") {
+          background = true;
+          clearTimeout(idleTimer);
+          socket.write('{"type":"background"}\n');
+        } else if (command === "stop") {
+          background = false;
+          socket.end();
+        }
+      }
+    });
     if (ready) socket.write(`${JSON.stringify(ready)}\n`);
     socket.once("close", () => {
       clients.delete(socket);
-      if (clients.size === 0) idleTimer = setTimeout(onIdle, 1000);
+      if (clients.size === 0 && !background) idleTimer = setTimeout(onIdle, 1000);
     });
   });
   await new Promise((resolve, reject) => {
@@ -169,7 +187,7 @@ export async function startControlServer(onIdle, socketPath = SOCKET_PATH) {
     setReady(value) {
       ready = value;
       for (const socket of clients) socket.write(`${JSON.stringify(value)}\n`);
-      if (clients.size === 0) idleTimer = setTimeout(onIdle, 1000);
+      if (clients.size === 0 && !background) idleTimer = setTimeout(onIdle, 1000);
     },
     async close() {
       clearTimeout(idleTimer);

@@ -114,13 +114,13 @@ test("login issues a session cookie and proxies routes, audio, and shared data t
   const asset = await get("/app.js", { headers });
   assert.equal(asset.headers.get("cache-control"), "no-store");
   assert.equal(await asset.text(), "private-script");
-  const generated = await get("/api/generate", {
+  const generated = await get("/api/local-exercises/import", {
     method: "POST",
     headers: { ...headers, Origin: config.origin, "Content-Type": "application/json" },
     body: '{"text":"Example"}',
   });
   assert.equal(generated.status, 200);
-  assert.deepEqual(calls.at(-1), ["/api/generate", "POST", '{"text":"Example"}']);
+  assert.deepEqual(calls.at(-1), ["/api/local-exercises/import", "POST", '{"text":"Example"}']);
   const progress = await get("/api/local-exercises/pack/progress", {
     method: "PUT",
     headers: { ...headers, Origin: config.origin, "Content-Type": "application/json" },
@@ -186,7 +186,7 @@ test("rejects forged Hosts and cross-origin login, logout, and API requests", as
   );
   assert.equal(
     (
-      await get("/api/generate", {
+      await get("/api/local-exercises/import", {
         method: "POST",
         headers: { ...headers, Origin: "https://evil.example" },
         body: "{}",
